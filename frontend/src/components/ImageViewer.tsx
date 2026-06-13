@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "../store";
+import { useGpuPreview } from "../gpu/useGpuPreview";
 import { defaultLocalAdjust, type LocalAdjust } from "../types";
 
 interface Props {
   src: string | null;
   interactive?: boolean; // outils de développement (masques, crop)
+  gpu?: boolean;         // affiche le canvas WebGL (aperçu GPU) au lieu du <img> serveur
 }
 
 interface Box { left: number; top: number; w: number; h: number }
@@ -14,11 +16,12 @@ function isTyping(): boolean {
   return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT");
 }
 
-export function ImageViewer({ src, interactive = false }: Props) {
+export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const glCanvasRef = useRef<HTMLCanvasElement>(null);
   const [natural, setNatural] = useState({ w: 0, h: 0 });
   const [cont, setCont] = useState({ w: 0, h: 0 });
-  const [zoom, setZoom] = useState<"fit" | "100">("fit");
+  const [zoomScale, setZoomScale] = useState(1); // 1 = ajusté ; >1 = agrandi (molette)
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [tempShape, setTempShape] = useState<{ type: "linear" | "radial"; x0: number; y0: number; x1: number; y1: number } | null>(null);
@@ -32,6 +35,11 @@ export function ImageViewer({ src, interactive = false }: Props) {
   const locals = useStore((s) => s.edits?.locals);
   const updateEdits = useStore((s) => s.updateEdits);
   const setUI = useStore((s) => s.setUI);
+  const beforeAfter = useStore((s) => s.beforeAfter);
+
+  // Aperçu GPU : rend dans glCanvasRef ; outil crop actif → image entière (le cadre se dessine par-dessus)
+  const gpuState = useGpuPreview(glCanvasRef, gpu, activeTool === "crop", beforeAfter, showClipping);
+  const nat = gpu ? gpuState.dims : natural;
 
   const lastPointer = useRef({ x: 0, y: 0 });
   const mode = useRef<"none" | "pan" | "shape" | "brush">("none");
@@ -48,19 +56,19 @@ export function ImageViewer({ src, interactive = false }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // Dimensions naturelles du rendu courant
+  // Dimensions naturelles du rendu courant (côté serveur ; en GPU elles viennent du canvas)
   useEffect(() => {
-    if (!src) return;
+    if (gpu || !src) return;
     const img = new Image();
     img.onload = () => setNatural((n) => (n.w !== img.width || n.h !== img.height ? { w: img.width, h: img.height } : n));
     img.src = src;
-  }, [src]);
+  }, [src, gpu]);
 
-  const fitScale = natural.w && cont.w
-    ? Math.min(cont.w / natural.w, cont.h / natural.h, 3)
+  const fitScale = nat.w && cont.w
+    ? Math.min(cont.w / nat.w, cont.h / nat.h, 3)
     : 1;
-  const s = zoom === "fit" ? fitScale : 1;
-  const dispW = natural.w * s, dispH = natural.h * s;
+  const s = fitScale * zoomScale;
+  const dispW = nat.w * s, dispH = nat.h * s;
   const maxPanX = Math.max(0, (dispW - cont.w) / 2);
   const maxPanY = Math.max(0, (dispH - cont.h) / 2);
   const px = Math.min(Math.max(pan.x, -maxPanX), maxPanX);
@@ -75,25 +83,34 @@ export function ImageViewer({ src, interactive = false }: Props) {
     ];
   }, [box.left, box.top, box.w, box.h]);
 
-  const toggleZoom = useCallback((clientX?: number, clientY?: number) => {
-    if (zoom === "100") { setZoom("fit"); setPan({ x: 0, y: 0 }); return; }
-    if (!natural.w) return;
+  // Zoom centré sur un point écran (cx,cy). targetZoom = facteur relatif à l'ajusté.
+  const zoomAt = useCallback((targetZoom: number, clientX?: number, clientY?: number) => {
+    if (!nat.w || !cont.w) return;
+    const nz = Math.min(Math.max(targetZoom, 1), 16);
     const r = containerRef.current!.getBoundingClientRect();
     const cx = clientX ?? r.left + r.width / 2;
     const cy = clientY ?? r.top + r.height / 2;
     const [nx, ny] = toImg(cx, cy);
-    const relX = cx - r.left, relY = cy - r.top;
-    setZoom("100");
+    const newS = fitScale * nz;
+    const dW = nat.w * newS, dH = nat.h * newS;
+    setZoomScale(nz);
     setPan({
-      x: relX - nx * natural.w - (cont.w - natural.w) / 2,
-      y: relY - ny * natural.h - (cont.h - natural.h) / 2,
+      x: (cx - r.left) - nx * dW - (cont.w - dW) / 2,
+      y: (cy - r.top) - ny * dH - (cont.h - dH) / 2,
     });
-  }, [zoom, natural, cont, toImg]);
+  }, [nat, cont, fitScale, toImg]);
+
+  // Espace / Z / double-clic : bascule ajusté ↔ 100 %
+  const toggleZoom = useCallback((clientX?: number, clientY?: number) => {
+    const target = zoomScale > 1.001 ? 1 : 1 / Math.max(fitScale, 1e-3);
+    zoomAt(target, clientX, clientY);
+  }, [zoomScale, fitScale, zoomAt]);
 
   // Espace / Z : bascule de zoom (navigation dans l'image)
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
       if (isTyping()) return;
+      if (ev.ctrlKey || ev.metaKey || ev.altKey) return; // laisse passer Ctrl+Z, etc.
       if (ev.key === " " || ev.key.toLowerCase() === "z") {
         ev.preventDefault();
         toggleZoom(lastPointer.current.x, lastPointer.current.y);
@@ -102,6 +119,19 @@ export function ImageViewer({ src, interactive = false }: Props) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [toggleZoom]);
+
+  // Molette : zoom continu centré sur le curseur (listener natif non-passif)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (ev: WheelEvent) => {
+      if (activeTool === "crop") return; // ne pas gêner le recadrage
+      ev.preventDefault();
+      zoomAt(zoomScale * Math.exp(-ev.deltaY * 0.0015), ev.clientX, ev.clientY);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [zoomScale, activeTool, zoomAt]);
 
   const createLocal = (local: LocalAdjust) => {
     updateEdits((e) => { e.locals.push(local); });
@@ -192,10 +222,12 @@ export function ImageViewer({ src, interactive = false }: Props) {
       onPointerLeave={() => { setCursor(null); onPointerUp(); }}
       onDoubleClick={(ev) => activeTool === "none" && toggleZoom(ev.clientX, ev.clientY)}
     >
-      {src && natural.w > 0 && (
+      {(gpu || (src && natural.w > 0)) && (
         <div className="viewer-box" style={{ left: box.left, top: box.top, width: box.w, height: box.h }}>
-          <img src={src} alt="" draggable={false} style={{ width: "100%", height: "100%" }} />
-          {showClipping && <ClippingOverlay src={src} />}
+          {gpu
+            ? <canvas ref={glCanvasRef} className="gl-canvas" style={{ width: "100%", height: "100%", display: "block" }} />
+            : <img src={src!} alt="" draggable={false} style={{ width: "100%", height: "100%" }} />}
+          {!gpu && showClipping && src && <ClippingOverlay src={src} />}
           <svg className="viewer-overlay" viewBox={`0 0 ${box.w} ${box.h}`} preserveAspectRatio="none">
             <ShapeOutline shape={tempShape} w={box.w} h={box.h} />
             {!tempShape && selectedLocal && selectedLocal.type !== "brush" && (
@@ -234,8 +266,10 @@ export function ImageViewer({ src, interactive = false }: Props) {
           )}
         </div>
       )}
-      {!src && <div className="viewer-empty">Chargement…</div>}
-      <div className="zoom-indicator">{zoom === "fit" ? "Ajusté" : "100 %"}</div>
+      {gpu && gpuState.error && <div className="viewer-empty">Aperçu GPU indisponible : {gpuState.error}</div>}
+      {gpu && !gpuState.error && !gpuState.ready && <div className="viewer-empty">Chargement de la base…</div>}
+      {!gpu && !src && <div className="viewer-empty">Chargement…</div>}
+      <div className="zoom-indicator">{zoomScale <= 1.001 ? "Ajusté" : Math.round(s * 100) + " %"}</div>
     </div>
   );
 }

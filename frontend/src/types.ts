@@ -16,6 +16,7 @@ export interface Photo {
   rating: number;
   flag: "none" | "pick" | "reject";
   color: string;
+  edited: boolean;
 }
 
 export const HSL_BANDS = [

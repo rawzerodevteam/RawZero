@@ -4,6 +4,7 @@ import { Filmstrip } from "../components/Filmstrip";
 import { Histogram } from "../components/Histogram";
 import { ImageViewer } from "../components/ImageViewer";
 import { StarRating } from "../components/StarRating";
+import { GpuDiffDialog } from "../components/GpuDiffDialog";
 import { useStore } from "../store";
 import { BasicPanel } from "../panels/BasicPanel";
 import { CurvePanel } from "../panels/CurvePanel";
@@ -29,6 +30,7 @@ function useRenderedImage(): string | null {
   const showMaskOverlay = useStore((s) => s.showMaskOverlay);
   const selectedLocalId = useStore((s) => s.selectedLocalId);
   const isDragging = useStore((s) => s.dragBaseline !== null);
+  const cropEdit = useStore((s) => s.activeTool === "crop");
   const [src, setSrc] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<number>();
@@ -46,13 +48,14 @@ function useRenderedImage(): string | null {
         maxSize,
         before: beforeAfter,
         showMask: showMaskOverlay && selectedLocalId ? selectedLocalId : undefined,
+        cropEdit, // en mode recadrage : on affiche l'image entière, l'overlay dessine le cadre
         signal: ctrl.signal,
       })
         .then((url) => setSrc((old) => { if (old) URL.revokeObjectURL(old); return url; }))
         .catch((e) => { if ((e as Error).name !== "AbortError") console.error(e); });
     }, delay);
     return () => window.clearTimeout(timerRef.current);
-  }, [currentId, edits, beforeAfter, showMaskOverlay, selectedLocalId, isDragging]);
+  }, [currentId, edits, beforeAfter, showMaskOverlay, selectedLocalId, isDragging, cropEdit]);
 
   // libération de la dernière URL au démontage
   useEffect(() => () => {
@@ -76,6 +79,8 @@ export function DevelopView() {
   const copyEdits = useStore((s) => s.copyEdits);
   const pasteEdits = useStore((s) => s.pasteEdits);
   const resetEdits = useStore((s) => s.resetEdits);
+  const [gpuPreview, setGpuPreview] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
   const src = useRenderedImage();
 
   if (!photo) return <div className="empty-state"><p>Aucune photo sélectionnée.</p></div>;
@@ -87,6 +92,7 @@ export function DevelopView() {
           <button className="btn" onClick={() => setView("grid")}>← Bibliothèque (G)</button>
           <span className="name">{photo.filename}</span>
           {dirty && <span className="dim" title="Sauvegarde automatique en cours">●</span>}
+          {(photo.edited || dirty) && <span className="edited-chip" title="Photo retouchée">Modifiée</span>}
           <span className="spacer" />
           <StarRating small value={photo.rating} onChange={setRating} />
           <button className={"btn small" + (beforeAfter ? " active" : "")}
@@ -100,15 +106,22 @@ export function DevelopView() {
           <button className="btn small" title="Copier les réglages (Ctrl+Maj+C)" onClick={copyEdits}>⧉ Copier</button>
           <button className="btn small" title="Coller les réglages (Ctrl+Maj+V)" onClick={pasteEdits}>⧉ Coller</button>
           <button className="btn small" title="Tout réinitialiser" onClick={resetEdits}>↺</button>
+          <button className={"btn small" + (gpuPreview ? " active" : "")}
+            title="Aperçu GPU temps réel (WB, expo, HL/ombres, blancs/noirs, contraste, courbe, HSL, vibrance/sat, clarté, dehaze, réduction de bruit, netteté, vignette)"
+            onClick={() => setGpuPreview((v) => !v)}>⚡ GPU</button>
+          <button className="btn small" title="Mesurer l'écart aperçu GPU ↔ rendu Python"
+            onClick={() => setShowDiff(true)}>Δ</button>
           <button className="btn small" title="Exporter (Ctrl+E)" onClick={() => setUI({ showExport: true })}>⤒</button>
         </div>
         <div className="develop-viewer">
-          {edits ? <ImageViewer src={src} interactive /> : <div className="viewer-empty">Chargement…</div>}
+          {edits ? <ImageViewer src={src} interactive gpu={gpuPreview} /> : <div className="viewer-empty">Chargement…</div>}
           {beforeAfter && <div className="before-badge">AVANT</div>}
           {showInfo && <ExifOverlay />}
+          <CropBar />
         </div>
         <Filmstrip />
       </div>
+      {showDiff && <GpuDiffDialog onClose={() => setShowDiff(false)} />}
       <aside className="develop-panels">
         <Histogram src={src} />
         <BasicPanel />
@@ -121,6 +134,34 @@ export function DevelopView() {
         <PresetsPanel />
         <MetaPanel />
       </aside>
+    </div>
+  );
+}
+
+const CROP_ASPECTS: [string, number | null][] = [
+  ["Libre", null], ["1:1", 1], ["3:2", 3 / 2], ["4:3", 4 / 3], ["16:9", 16 / 9], ["9:16", 9 / 16],
+];
+
+/** Barre flottante de ratios de recadrage, visible uniquement quand l'outil crop est actif. */
+function CropBar() {
+  const activeTool = useStore((s) => s.activeTool);
+  const cropAspect = useStore((s) => s.cropAspect);
+  const setCropAspect = useStore((s) => s.setCropAspect);
+  const setUI = useStore((s) => s.setUI);
+  if (activeTool !== "crop") return null;
+  return (
+    <div className="crop-toolbar">
+      <span className="dim">Ratio</span>
+      {CROP_ASPECTS.map(([label, ratio]) => (
+        <button
+          key={label}
+          className={"btn small" + (cropAspect === ratio ? " active" : "")}
+          onClick={() => setCropAspect(ratio)}
+        >
+          {label}
+        </button>
+      ))}
+      <button className="btn small primary" onClick={() => setUI({ activeTool: "none" })}>Terminer</button>
     </div>
   );
 }

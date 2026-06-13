@@ -11,8 +11,35 @@ export function LibraryView() {
   return (
     <div className="library">
       <Toolbar />
-      {view === "grid" ? <Grid /> : <Loupe />}
+      <div className="library-body">
+        <LeftRail />
+        <div className="library-content">
+          {view === "grid" ? <Grid /> : <Loupe />}
+        </div>
+      </div>
     </div>
+  );
+}
+
+function LeftRail() {
+  const view = useStore((s) => s.view);
+  const currentId = useStore((s) => s.currentId);
+  const setView = useStore((s) => s.setView);
+  const openDevelop = useStore((s) => s.openDevelop);
+  const setUI = useStore((s) => s.setUI);
+  return (
+    <nav className="left-rail">
+      <button className={"rail-btn" + (view === "grid" ? " active" : "")}
+        onClick={() => setView("grid")} title="Grille (G)">▦<span>Grille</span></button>
+      <button className={"rail-btn" + (view === "loupe" ? " active" : "")} disabled={currentId === null}
+        onClick={() => setView("loupe")} title="Loupe (E)">⊙<span>Loupe</span></button>
+      <button className="rail-btn" disabled={currentId === null}
+        onClick={() => currentId !== null && void openDevelop(currentId)} title="Développer (D)">✎<span>Développer</span></button>
+      <span className="rail-spacer" />
+      <button className="rail-btn" onClick={() => setUI({ showImport: true })} title="Importer">⤓<span>Importer</span></button>
+      <button className="rail-btn export" onClick={() => setUI({ showExport: true })}
+        title="Exporter (Ctrl+E)">⤒<span>Exporter</span></button>
+    </nav>
   );
 }
 
@@ -105,9 +132,13 @@ function Grid() {
             {p.flag === "reject" && <span className="badge reject">✕</span>}
             {p.color && <span className="badge color" style={{ background: COLOR_HEX[p.color] }} />}
             {!!p.is_raw && <span className="badge raw">RAW</span>}
+            {p.edited && <span className="badge edited" title="Photo retouchée">✎</span>}
           </div>
           <div className="cell-meta">
-            <span className="name" title={p.filename}>{p.filename}</span>
+            <span className="name" title={p.filename}>
+              {p.edited && <span className="edited-dot" title="Photo retouchée" />}
+              {p.filename}
+            </span>
             <StarRating small value={p.rating}
               onChange={(v) => { selectPhoto(p.id); setRating(v); }} />
           </div>
@@ -134,6 +165,7 @@ function Loupe() {
         {showInfo && <ExifOverlay />}
         <div className="loupe-bar">
           <span className="name">{photo.filename}</span>
+          {photo.edited && <span className="edited-chip" title="Photo retouchée">Modifiée</span>}
           <StarRating value={photo.rating} onChange={setRating} />
           <span className="flag-state">{FLAG_LABELS[photo.flag]}</span>
           <button className="btn small" onClick={() => setFlag("pick")}>⚑ P</button>

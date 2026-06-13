@@ -67,11 +67,17 @@ def get_conn() -> sqlite3.Connection:
 
 
 def query(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
-    return get_conn().execute(sql, params).fetchall()
+    # La connexion est partagée entre threads (endpoints sync dans le threadpool) :
+    # on sérialise AUSSI les lectures, sinon des execute() concurrents entremêlent
+    # les curseurs et un fetch peut renvoyer None (→ faux 404). Le verrou n'est tenu
+    # que le temps de la requête, jamais pendant le calcul du pipeline.
+    with _lock:
+        return get_conn().execute(sql, params).fetchall()
 
 
 def query_one(sql: str, params: tuple = ()) -> Optional[sqlite3.Row]:
-    return get_conn().execute(sql, params).fetchone()
+    with _lock:
+        return get_conn().execute(sql, params).fetchone()
 
 
 def execute(sql: str, params: tuple = ()) -> int:
@@ -90,12 +96,15 @@ def executemany(sql: str, seq: list[tuple]) -> None:
 
 
 def photo_to_dict(row: sqlite3.Row, with_edits: bool = False) -> dict[str, Any]:
+    from . import pipeline  # import tardif : évite tout cycle au chargement
     d = {k: row[k] for k in row.keys()}
+    try:
+        parsed = json.loads(d.get("edits") or "{}")
+    except json.JSONDecodeError:
+        parsed = {}
+    d["edited"] = pipeline.edits_meaningful(parsed)
     if with_edits:
-        try:
-            d["edits"] = json.loads(d.get("edits") or "{}")
-        except json.JSONDecodeError:
-            d["edits"] = {}
+        d["edits"] = parsed
     else:
         d.pop("edits", None)
     d.pop("relpath", None)

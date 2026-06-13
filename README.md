@@ -1,78 +1,75 @@
 # RawStudio
 
-Éditeur photo **RAW** local, non destructif, dans le navigateur — façon Lightroom / Darktable.
-Une seule dépendance : **Docker**.
+A local, non-destructive **RAW photo editor** in the browser — inspired by Lightroom / Darktable.  
+No Docker required. Everything runs via a single PowerShell script.
 
-## Démarrage rapide
+## Quick start
 
-```bash
-docker compose up -d --build
+```powershell
+.\start.ps1
 ```
 
-Puis ouvrir **http://localhost:8000**.
+Then open **http://localhost:8000**.
 
-- Le catalogue, les originaux importés, les caches et les exports sont persistés dans `./data`.
-- Pour importer de gros dossiers sans passer par le navigateur : déposez vos fichiers dans
-  `./import` (monté en lecture seule), puis dans l'app **Importer → Dossier /import**.
-  Le chemin est surchargeable : `IMPORT_PATH=/mes/photos docker compose up -d`.
+- The catalog, imported originals, caches, and exports are stored in `./data`.
+- To import large folders without going through the browser: drop your files into `./import`,
+  then use **Import → /import folder** in the app.
 
-## Fonctionnalités
+### Options
 
-**Bibliothèque / tri**
-- Grille et loupe rapides (previews JPEG pré-générés — jamais de décodage RAW à la volée)
-- Notes ★, drapeaux retenue/rejet, labels couleur, filtres et tris
-- Import par glisser-déposer (déduplication par hash) ; formats RAW courants
-  (CR2/CR3, NEF, ARW, RAF, ORF, RW2, DNG…) et JPEG/PNG/TIFF
+| Flag | Effect |
+|---|---|
+| `-Dev` | Backend with `--reload` + Vite hot reload on `:5173` |
+| `-Rebuild` | Force a frontend rebuild before serving |
 
-**Développement (non destructif)**
-- Balance des blancs, exposition, contraste, hautes lumières/ombres, blancs/noirs
-- Courbe de tonalité, HSL 8 bandes, vibrance/saturation, clarté, dehaze
-- Netteté, réduction de bruit, vignettage, grain
-- Recadrage, redressement, rotation, miroirs
-- **Retouches locales** : dégradé linéaire, filtre radial, pinceau (inversibles, contour progressif)
-- Histogramme temps réel, alertes d'écrêtage, avant/après, copier/coller de réglages,
-  undo/redo, presets intégrés et personnels, auto-réglages
+## Features
+
+**Library / culling**
+- Grid and loupe views (pre-generated JPEG previews — RAW is never decoded on the fly)
+- Star ratings, pick/reject flags, color labels, filters, and sort orders
+- Drag-and-drop import with hash-based deduplication; supports CR2/CR3, NEF, ARW, RAF, ORF, RW2, DNG and JPEG/PNG/TIFF
+
+**Development (non-destructive)**
+- White balance, exposure, contrast, highlights/shadows, whites/blacks
+- Tone curve, 8-band HSL, vibrance/saturation, clarity, dehaze
+- Sharpening, noise reduction, vignette, grain
+- Crop, straighten, rotation, flip
+- **Local adjustments**: linear gradient, radial filter, brush (with invert and feather)
+- Real-time histogram, clipping warnings, before/after toggle, copy/paste settings,
+  undo/redo, built-in and custom presets, auto adjustments
 
 **Export**
-- JPEG / PNG / TIFF, pleine résolution ou redimensionné, par lot
-- Les fichiers exportés sont aussi écrits dans `./data/exports`
+- JPEG / PNG / TIFF, full resolution or resized, batch export
+- Exported files are written to `./data/exports`
 
-## Raccourcis clavier (principaux)
+## Keyboard shortcuts
 
-| Touche | Action |
+| Key | Action |
 |---|---|
-| G / E / D | Grille / Loupe / Développement |
-| ← / → | Photo précédente / suivante |
-| 0–5 · P/X/U · 6–9 | Note · drapeau · label couleur |
-| Espace ou Z | Zoom ajusté ↔ 100 % |
-| \\ | Avant / après |
-| R · O · J | Recadrage · masque · écrêtage |
-| Ctrl+Z / Ctrl+Shift+Z | Annuler / rétablir |
-| Ctrl+E | Exporter |
-| ? | Aide complète |
+| G / E / D | Grid / Loupe / Develop |
+| ← / → | Previous / next photo |
+| 0–5 · P/X/U · 6–9 | Rating · flag · color label |
+| Space or Z | Fit ↔ 100 % zoom |
+| `\` | Before / after |
+| R · O · J | Crop tool · mask overlay · clipping |
+| Ctrl+Z / Ctrl+Shift+Z | Undo / redo |
+| Ctrl+E | Export |
+| ? | Full shortcut help |
 
-## Développement (sans Docker)
+## Architecture
 
-```bash
-# backend
-cd backend
-pip install -r requirements-dev.txt
-uvicorn app.main:app --reload --port 8000
+- **FastAPI + SQLite**: catalog and REST API; FastAPI also serves the built frontend (single port).
+- **rawpy (LibRaw) + NumPy/OpenCV**: RAW is decoded at full resolution only on import
+  (embedded JPEG extracted for thumbnails) and on export. During development, the pipeline
+  replays adjustments on a cached 2560 px base (~100–300 ms per slider move).
+- **React + Zustand**: non-destructive editing — settings are stored as JSON per photo in the database.
 
-# frontend (autre terminal)
-cd frontend
-npm install
-npm run dev          # http://localhost:5173, proxy API vers :8000
+## Running tests
+
+```powershell
+# Backend (49 tests)
+.\.tools\python\python.exe -m pytest backend/tests
+
+# Frontend (43 tests)
+cd frontend && node ..\\.tools\node\node.exe ..\\.tools\node_modules\.bin\vitest run
 ```
-
-Tests backend : `cd backend && pytest`.
-
-## Architecture (résumé)
-
-- **FastAPI + SQLite** : catalogue et API ; le conteneur sert aussi le frontend buildé (un seul port).
-- **rawpy (LibRaw) + NumPy/OpenCV** : le RAW n'est décodé en pleine résolution qu'à l'import
-  (extraction du JPEG embarqué pour les vignettes) et à l'export. En développement, le pipeline
-  rejoue les réglages sur une base 2560 px mise en cache (~100–300 ms par mouvement de slider).
-- **React + Zustand** : édition non destructive, les réglages sont un JSON par photo en base.
-
-Détails complets dans [CLAUDE.md](CLAUDE.md).

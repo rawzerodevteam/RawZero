@@ -68,11 +68,12 @@ export const api = {
 
   /** Rendu interactif : renvoie un object URL de JPEG (à révoquer par l'appelant). */
   async render(id: number, edits: EditState, opts: {
-    maxSize?: number; before?: boolean; showMask?: string; signal?: AbortSignal;
+    maxSize?: number; before?: boolean; showMask?: string; cropEdit?: boolean; signal?: AbortSignal;
   } = {}): Promise<string> {
     const q = new URLSearchParams({ max_size: String(opts.maxSize ?? 2048) });
     if (opts.before) q.set("before", "1");
     if (opts.showMask) q.set("show_mask", opts.showMask);
+    if (opts.cropEdit) q.set("crop_edit", "1");
     const res = await fetch(`/api/photos/${id}/render?${q}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

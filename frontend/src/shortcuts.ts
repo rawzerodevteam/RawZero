@@ -31,6 +31,7 @@ function isTyping(): boolean {
 
 /** Handler global exporté pour être testable sans monter de composant React. */
 export function handleGlobalKey(ev: KeyboardEvent) {
+  if (ev.repeat) return;
   const s = useStore.getState();
   if (isTyping()) return;
   const k = ev.key;

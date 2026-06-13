@@ -21,7 +21,7 @@ function photo(id: number): Photo {
   return {
     id, filename: `p${id}.cr2`, ext: "cr2", is_raw: 1, width: 6000, height: 4000,
     captured_at: "", imported_at: "", camera: "", lens: "", iso: 100,
-    aperture: 2.8, shutter: "1/100", focal: 50, rating: 0, flag: "none", color: "",
+    aperture: 2.8, shutter: "1/100", focal: 50, rating: 0, flag: "none", color: "", edited: false,
   };
 }
 

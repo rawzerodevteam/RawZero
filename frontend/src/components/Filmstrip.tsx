@@ -31,6 +31,7 @@ export function Filmstrip() {
           <img src={api.thumbUrl(p.id, versions[p.id] ?? 0)} alt={p.filename} loading="lazy" draggable={false} />
           {p.rating > 0 && <span className="film-rating">{"★".repeat(p.rating)}</span>}
           {p.flag === "pick" && <span className="film-flag">⚑</span>}
+          {p.edited && <span className="film-edited" title="Photo retouchée">✎</span>}
         </div>
       ))}
     </div>

@@ -12,6 +12,7 @@ export function GeometryPanel() {
   const updateEdits = useStore((s) => s.updateEdits);
   const activeTool = useStore((s) => s.activeTool);
   const cropAspect = useStore((s) => s.cropAspect);
+  const setCropAspect = useStore((s) => s.setCropAspect);
   const setUI = useStore((s) => s.setUI);
   if (!edits) return null;
   const g = edits.geometry;
@@ -64,7 +65,7 @@ export function GeometryPanel() {
             <button
               key={label}
               className={"btn small" + (cropAspect === ratio ? " active" : "")}
-              onClick={() => setUI({ cropAspect: ratio })}
+              onClick={() => setCropAspect(ratio)}
             >
               {label}
             </button>

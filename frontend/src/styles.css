@@ -330,6 +330,22 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
   pointer-events: none;
 }
 
+/* Barre de ratios de recadrage (flottante, en haut du visualiseur) */
+.crop-toolbar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(20, 21, 25, 0.92);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  z-index: 5;
+}
+
 .develop-panels {
   width: 308px;
   flex: none;
@@ -663,8 +679,112 @@ kbd {
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
+/* ---------- Aperçu GPU (prototype WebGL2) ---------- */
+.gl-preview {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+.gl-preview canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.gl-perf {
+  position: absolute;
+  bottom: 10px;
+  left: 12px;
+  background: rgba(20, 21, 25, 0.85);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.gl-perf strong { color: var(--accent); }
+
+/* ---------- Rail de navigation (gauche) ---------- */
+.library-body { flex: 1; display: flex; min-height: 0; }
+.library-content { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.left-rail {
+  flex: none;
+  width: 66px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 6px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+}
+.rail-spacer { flex: 1; }
+.rail-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 8px 2px;
+  font-size: 18px;
+  line-height: 1;
+}
+.rail-btn span { font-size: 10px; }
+.rail-btn:hover:not(:disabled) { background: var(--bg-raised); color: var(--text); }
+.rail-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.rail-btn:disabled { opacity: 0.4; cursor: default; }
+.rail-btn.export { color: var(--accent); }
+.rail-btn.export:hover:not(:disabled) { background: var(--accent-soft); }
+
+/* ---------- Indicateurs « photo retouchée » ---------- */
+.badge.edited { right: 6px; top: 28px; color: var(--accent); }
+.edited-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+.edited-chip {
+  font-size: 10.5px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 0 7px;
+  white-space: nowrap;
+}
+.film-edited {
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  font-size: 10px;
+  color: var(--accent);
+  text-shadow: 0 0 3px #000;
+}
+
 /* ---------- Scrollbars ---------- */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #3a3c44; border-radius: 5px; }
 ::-webkit-scrollbar-thumb:hover { background: #4a4c55; }
+
+/* Diagnostic écart GPU/Python */
+.diff-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.diff-table td { padding: 4px 6px; border-bottom: 1px solid #2a2c33; font-size: 13px; }
+.diff-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; color: #e6e7ea; }
+.diff-table td:first-child { color: #9a9ca3; }
+.diff-verdict { margin: 10px 0 0; padding: 8px 10px; border-radius: 6px; font-size: 13px; }
+.diff-verdict.ok { background: #16351f; color: #7fd699; }
+.diff-verdict.warn { background: #3a3216; color: #d9c47f; }
+.diff-verdict.bad { background: #3a1d1d; color: #e08c8c; }
+.error-text { color: #e08c8c; }

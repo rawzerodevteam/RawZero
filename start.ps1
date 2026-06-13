@@ -62,16 +62,35 @@ $env:DATA_DIR   = Join-Path $root "data"
 $env:IMPORT_DIR = Join-Path $root "import"
 New-Item -ItemType Directory -Force -Path $env:DATA_DIR, $env:IMPORT_DIR | Out-Null
 
+# ---- Le build du frontend est-il périmé par rapport aux sources ? ----
+function Test-FrontendStale([string]$front, [string]$dist) {
+  $index = Join-Path $dist "index.html"
+  if (-not (Test-Path $index)) { return $true }
+  $builtAt = (Get-Item $index).LastWriteTimeUtc
+  $watch = @("src", "index.html", "package.json", "vite.config.ts", "tsconfig.json") |
+    ForEach-Object { Join-Path $front $_ } | Where-Object { Test-Path $_ }
+  foreach ($p in $watch) {
+    $newest = Get-ChildItem -Path $p -Recurse -File -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    if ($newest -and $newest.LastWriteTimeUtc -gt $builtAt) { return $true }
+  }
+  return $false
+}
+
 # ---- Ouverture du navigateur quand le serveur répond ----
 function Open-WhenReady([string]$url, [string]$healthUrl) {
   if ($NoBrowser) { return }
-  Start-Job -ArgumentList $url, $healthUrl -ScriptBlock {
+  # Supprime tout job d'ouverture resté d'un lancement précédent : sinon ces
+  # « pollers » fantômes ouvrent chacun un onglet dès que le serveur répond.
+  Get-Job -Name "rawstudio-open" -ErrorAction SilentlyContinue | Remove-Job -Force
+  Start-Job -Name "rawstudio-open" -ArgumentList $url, $healthUrl -ScriptBlock {
     param($u, $h)
+    $ok = $false
     foreach ($i in 1..40) {
-      try { Invoke-WebRequest -Uri $h -UseBasicParsing -TimeoutSec 1 | Out-Null; break }
+      try { Invoke-WebRequest -Uri $h -UseBasicParsing -TimeoutSec 1 | Out-Null; $ok = $true; break }
       catch { Start-Sleep -Milliseconds 500 }
     }
-    Start-Process $u
+    if ($ok) { Start-Process $u }
   } | Out-Null
 }
 
@@ -91,8 +110,8 @@ if ($Dev) {
   }
 } else {
   # ---- Mode normal : un seul serveur, comme dans Docker ----
-  if ($Rebuild -or -not (Test-Path (Join-Path $dist "index.html"))) {
-    Write-Host "Build du frontend…" -ForegroundColor Cyan
+  if ($Rebuild -or (Test-FrontendStale $front $dist)) {
+    Write-Host "Build du frontend (sources modifiées)…" -ForegroundColor Cyan
     Push-Location $front
     & (Join-Path $nodeDir "npm.cmd") run build
     if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }

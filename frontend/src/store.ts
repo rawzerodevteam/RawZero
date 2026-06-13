@@ -55,6 +55,7 @@ interface Store {
   applyPartial(settings: Partial<EditState>): void;
   copyEdits(): void;
   pasteEdits(): void;
+  setCropAspect(ratio: number | null): void;
   saveNow(): Promise<void>;
   bumpVersion(id: number): void;
 
@@ -253,14 +254,42 @@ export const useStore = create<Store>((set, get) => ({
     get().notify("Réglages collés");
   },
 
+  setCropAspect(ratio) {
+    set({ cropAspect: ratio });
+    if (ratio === null) return;
+    const { currentId, photos } = get();
+    const photo = photos.find((p) => p.id === currentId);
+    if (!photo || !photo.width || !photo.height) return;
+    get().updateEdits((e) => {
+      const rot = ((e.geometry.rotate % 360) + 360) % 360;
+      let iw = photo.width, ih = photo.height;
+      if (rot === 90 || rot === 270) [iw, ih] = [ih, iw];
+      const a = iw / ih; // ratio en pixels de l'image affichée
+      const c = e.geometry.crop;
+      const ccx = c.x + c.w / 2, ccy = c.y + c.h / 2;
+      // ratio = (cw·iw)/(ch·ih) ⇒ ch = cw·a/ratio
+      let cw = c.w, ch = (cw * a) / ratio;
+      if (ch > 1) { ch = 1; cw = (ratio / a); }
+      if (cw > 1) { cw = 1; ch = (a / ratio); }
+      e.geometry.crop = {
+        x: Math.min(Math.max(ccx - cw / 2, 0), 1 - cw),
+        y: Math.min(Math.max(ccy - ch / 2, 0), 1 - ch),
+        w: cw, h: ch,
+      };
+    });
+  },
+
   async saveNow() {
     if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = undefined; }
     const { dirty, edits, currentId } = get();
     if (!dirty || !edits || currentId === null) return;
     try {
       await api.saveEdits(currentId, edits);
-      set({ dirty: false });
       const id = currentId;
+      set({
+        dirty: false,
+        photos: get().photos.map((p) => (p.id === id ? { ...p, edited: true } : p)),
+      });
       window.setTimeout(() => get().bumpVersion(id), 2500); // les previews regénèrent en fond
     } catch (e) {
       get().notify(`Sauvegarde impossible : ${e}`);

@@ -62,6 +62,13 @@ def merge_edits(edits: Optional[dict]) -> dict:
     return out
 
 
+def edits_meaningful(edits: Optional[dict]) -> bool:
+    """True si l'état de développement diffère des valeurs par défaut (photo retouchée)."""
+    if not edits:
+        return False
+    return merge_edits(edits) != DEFAULT_EDITS
+
+
 # ---------------------------------------------------------------- utilitaires
 
 _LUT_N = 4096
@@ -117,7 +124,7 @@ def _largest_rotated_rect(w: int, h: int, angle_rad: float) -> tuple[float, floa
     return w * k, h * k
 
 
-def apply_geometry(img: np.ndarray, geo: dict) -> np.ndarray:
+def apply_geometry(img: np.ndarray, geo: dict, skip_crop: bool = False) -> np.ndarray:
     rot = int(geo.get("rotate", 0)) % 360
     if rot:
         img = np.rot90(img, k=rot // 90)
@@ -137,7 +144,7 @@ def apply_geometry(img: np.ndarray, geo: dict) -> np.ndarray:
     crop = geo.get("crop") or {}
     cx, cy = float(crop.get("x", 0)), float(crop.get("y", 0))
     cw, ch = float(crop.get("w", 1)), float(crop.get("h", 1))
-    if cw < 0.999 or ch < 0.999 or cx > 0.001 or cy > 0.001:
+    if not skip_crop and (cw < 0.999 or ch < 0.999 or cx > 0.001 or cy > 0.001):
         h, w = img.shape[:2]
         x0 = int(np.clip(cx, 0, 0.98) * w)
         y0 = int(np.clip(cy, 0, 0.98) * h)
@@ -391,10 +398,11 @@ def _apply_local(img: np.ndarray, local: dict, scale: float) -> np.ndarray:
 
 # ---------------------------------------------------------------- pipeline complet
 
-def apply_pipeline(base: np.ndarray, edits: dict, scale: float = 1.0) -> np.ndarray:
+def apply_pipeline(base: np.ndarray, edits: dict, scale: float = 1.0,
+                   skip_crop: bool = False) -> np.ndarray:
     """base : float32 RGB 0..1 pleine image (avant géométrie). Renvoie float32 0..1."""
     e = merge_edits(edits)
-    img = apply_geometry(base.astype(np.float32, copy=True), e["geometry"])
+    img = apply_geometry(base.astype(np.float32, copy=True), e["geometry"], skip_crop=skip_crop)
 
     wb, tone, pres, det, fx = e["wb"], e["tone"], e["presence"], e["detail"], e["effects"]
     img = _apply_linear_stage(img, float(wb["temp"]), float(wb["tint"]), float(tone["exposure"]))
@@ -415,7 +423,7 @@ def apply_pipeline(base: np.ndarray, edits: dict, scale: float = 1.0) -> np.ndar
 
 
 def render_array(base: np.ndarray, edits: dict, max_size: int, full_long_edge: int,
-                 show_mask: str = "") -> np.ndarray:
+                 show_mask: str = "", skip_crop: bool = False) -> np.ndarray:
     """Pipeline + redimensionnement final ; renvoie uint8 RGB."""
     h, w = base.shape[:2]
     long_edge = max(h, w)
@@ -429,7 +437,7 @@ def render_array(base: np.ndarray, edits: dict, max_size: int, full_long_edge: i
         working = base
 
     scale = max(working.shape[:2]) / max(full_long_edge, 1)
-    out = apply_pipeline(working, edits, scale=scale)
+    out = apply_pipeline(working, edits, scale=scale, skip_crop=skip_crop)
     if show_mask:
         out = _overlay_mask(out, edits, show_mask)
 

@@ -19,13 +19,14 @@ class RenderRequest(BaseModel):
 
 @router.post("/photos/{photo_id}/render")
 def render(photo_id: int, req: RenderRequest, max_size: int = config.PREVIEW_SIZE,
-           show_mask: str = "", before: bool = False):
+           show_mask: str = "", before: bool = False, crop_edit: bool = False):
     row = get_photo_row(photo_id)
     original = config.ORIGINALS_DIR / row["relpath"]
     base = previews.get_base(photo_id, original)
     edits = {} if before else req.edits
     arr = pipeline.render_array(base, edits, min(max_size, config.BASE_SIZE),
-                                previews.full_long_edge(dict(row)), show_mask=show_mask)
+                                previews.full_long_edge(dict(row)), show_mask=show_mask,
+                                skip_crop=crop_edit)
     return Response(content=pipeline.encode_jpeg(arr, 90), media_type="image/jpeg",
                     headers={"Cache-Control": "no-store"})
 
