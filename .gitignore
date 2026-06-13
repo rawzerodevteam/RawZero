@@ -1,0 +1,16 @@
+# outillage portable de dev (uv, python, node) — jetable
+.tools/
+
+# données de l'application (volume Docker)
+data/
+import/
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

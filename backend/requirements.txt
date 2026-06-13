@@ -1,0 +1,8 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+rawpy>=0.21
+numpy>=1.26
+opencv-python-headless>=4.9
+Pillow>=10.3
+exifread>=3.0
+python-multipart>=0.0.9

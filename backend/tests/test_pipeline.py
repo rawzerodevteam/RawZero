@@ -1,0 +1,252 @@
+"""Tests unitaires du pipeline de développement et des masques."""
+import numpy as np
+import pytest
+
+from app import pipeline
+from app.masks import build_mask
+from app.pipeline import DEFAULT_EDITS, apply_pipeline, merge_edits, render_array
+
+
+def gradient_image(h: int = 120, w: int = 160) -> np.ndarray:
+    """Dégradé lisse coloré, float32 0..1."""
+    x = np.linspace(0.05, 0.95, w, dtype=np.float32)
+    y = np.linspace(0.1, 0.9, h, dtype=np.float32)
+    gx, gy = np.meshgrid(x, y)
+    return np.stack([gx, (gx + gy) / 2.0, gy], axis=-1)
+
+
+def edits(**sections) -> dict:
+    """État d'edits avec netteté neutralisée (pour comparer à l'identité)."""
+    e: dict = {"detail": {"sharpen_amount": 0.0}}
+    for k, v in sections.items():
+        e.setdefault(k, {}).update(v) if isinstance(v, dict) else e.__setitem__(k, v)
+    return e
+
+
+def mean_luma(img: np.ndarray) -> float:
+    return float(pipeline.luma(img).mean())
+
+
+class TestMergeEdits:
+    def test_empty_gives_defaults(self):
+        m = merge_edits({})
+        assert m["tone"]["exposure"] == 0.0
+        assert m["detail"]["sharpen_amount"] == DEFAULT_EDITS["detail"]["sharpen_amount"]
+        assert m["locals"] == []
+
+    def test_partial_state(self):
+        m = merge_edits({"tone": {"exposure": 1.5}})
+        assert m["tone"]["exposure"] == 1.5
+        assert m["tone"]["contrast"] == 0.0
+
+    def test_local_defaults(self):
+        m = merge_edits({"locals": [{"id": "a", "type": "radial",
+                                     "adjust": {"exposure": 1.0}}]})
+        assert m["locals"][0]["adjust"]["saturation"] == 0.0
+        assert m["locals"][0]["adjust"]["exposure"] == 1.0
+
+
+class TestTonal:
+    def test_neutral_is_identity(self):
+        img = gradient_image()
+        out = apply_pipeline(img, edits())
+        assert np.abs(out - img).max() < 0.02
+
+    def test_exposure_brightens(self):
+        img = gradient_image()
+        out = apply_pipeline(img, edits(tone={"exposure": 1.0}))
+        assert mean_luma(out) > mean_luma(img) + 0.1
+
+    def test_exposure_darkens(self):
+        img = gradient_image()
+        out = apply_pipeline(img, edits(tone={"exposure": -1.0}))
+        assert mean_luma(out) < mean_luma(img) - 0.08
+
+    def test_contrast_spreads_histogram(self):
+        img = gradient_image()
+        out = apply_pipeline(img, edits(tone={"contrast": 60.0}))
+        assert out.std() > img.std()
+
+    def test_shadows_lift(self):
+        img = gradient_image() * 0.3
+        out = apply_pipeline(img, edits(tone={"shadows": 80.0}))
+        assert mean_luma(out) > mean_luma(img)
+
+    def test_highlights_recover(self):
+        img = np.clip(gradient_image() + 0.5, 0, 1)
+        out = apply_pipeline(img, edits(tone={"highlights": -80.0}))
+        assert mean_luma(out) < mean_luma(img)
+
+    def test_blacks_lift(self):
+        img = gradient_image()
+        out = apply_pipeline(img, edits(tone={"blacks": 60.0}))
+        assert float(out.min()) > float(img.min())
+
+    def test_temperature_warms(self):
+        img = gradient_image()
+        out = apply_pipeline(img, edits(wb={"temp": 60.0}))
+        assert out[..., 0].mean() > img[..., 0].mean()
+        assert out[..., 2].mean() < img[..., 2].mean()
+
+
+class TestCurveAndColor:
+    def test_curve_lut_monotone(self):
+        lut = pipeline._curve_lut([[0, 0], [0.25, 0.15], [0.75, 0.9], [1, 1]])
+        assert lut is not None
+        assert np.all(np.diff(lut) >= -1e-6)
+        assert abs(lut[0]) < 1e-3 and abs(lut[-1] - 1.0) < 1e-3
+
+    def test_identity_curve_is_none(self):
+        assert pipeline._curve_lut([[0.0, 0.0], [1.0, 1.0]]) is None
+
+    def test_desaturation_gives_gray(self):
+        img = gradient_image()
+        out = apply_pipeline(img, edits(presence={"saturation": -100.0}))
+        assert np.abs(out[..., 0] - out[..., 1]).max() < 0.02
+        assert np.abs(out[..., 1] - out[..., 2]).max() < 0.02
+
+    def test_vibrance_increases_saturation(self):
+        img = gradient_image()
+        out = apply_pipeline(img, edits(presence={"vibrance": 80.0}))
+        spread = lambda a: (a.max(axis=-1) - a.min(axis=-1)).mean()
+        assert spread(out) > spread(img)
+
+    def test_hsl_targets_band(self):
+        img = np.zeros((40, 40, 3), np.float32)
+        img[:20] = [0.8, 0.1, 0.1]   # rouge
+        img[20:] = [0.1, 0.1, 0.8]   # bleu
+        e = edits()
+        e["hsl"] = {"red": {"h": 0, "s": -100, "l": 0}}
+        out = apply_pipeline(img, e)
+        red_sat = float(out[:20].max(axis=-1).mean() - out[:20].min(axis=-1).mean())
+        blue_sat = float(out[20:].max(axis=-1).mean() - out[20:].min(axis=-1).mean())
+        assert red_sat < 0.25
+        assert blue_sat > 0.5
+
+
+class TestDetailEffects:
+    def test_sharpen_amplifies_edges(self):
+        img = gradient_image()
+        img[:, 80:] += 0.2  # bord franc
+        img = np.clip(img, 0, 1)
+        out = apply_pipeline(img, {"detail": {"sharpen_amount": 120.0, "sharpen_radius": 1.5}})
+        edge_in = float(np.abs(np.diff(pipeline.luma(img), axis=1)).max())
+        edge_out = float(np.abs(np.diff(pipeline.luma(out), axis=1)).max())
+        assert edge_out > edge_in
+
+    def test_nr_smooths_noise(self):
+        rng = np.random.default_rng(0)
+        img = np.clip(gradient_image() + rng.normal(0, 0.06, (120, 160, 3)).astype(np.float32), 0, 1)
+        out = apply_pipeline(img, edits(detail={"nr_luma": 80.0, "sharpen_amount": 0.0}))
+        hp = lambda a: float(np.abs(np.diff(pipeline.luma(a), axis=0)).mean())
+        assert hp(out) < hp(img)
+
+    def test_vignette_darkens_corners(self):
+        img = np.full((100, 150, 3), 0.6, np.float32)
+        out = apply_pipeline(img, edits(effects={"vignette": -80.0}))
+        assert out[0, 0].mean() < out[50, 75].mean() - 0.05
+
+    def test_grain_adds_noise(self):
+        img = np.full((80, 80, 3), 0.5, np.float32)
+        out = apply_pipeline(img, edits(effects={"grain": 60.0}))
+        assert out.std() > 0.005
+
+
+class TestGeometry:
+    def test_rotate_swaps_dims(self):
+        img = gradient_image(100, 160)
+        out = apply_pipeline(img, edits(geometry={"rotate": 90}))
+        assert out.shape[:2] == (160, 100)
+
+    def test_crop(self):
+        img = gradient_image(100, 160)
+        out = apply_pipeline(img, edits(geometry={"crop": {"x": 0.25, "y": 0.25, "w": 0.5, "h": 0.5}}))
+        assert out.shape[0] == pytest.approx(50, abs=2)
+        assert out.shape[1] == pytest.approx(80, abs=2)
+
+    def test_straighten_keeps_aspect(self):
+        img = gradient_image(120, 180)
+        out = apply_pipeline(img, edits(geometry={"straighten": 5.0}))
+        assert 0 < out.shape[0] < 120
+        assert out.shape[1] / out.shape[0] == pytest.approx(1.5, rel=0.05)
+
+    def test_flip(self):
+        img = gradient_image()
+        out = apply_pipeline(img, edits(geometry={"flip_h": True}, detail={"sharpen_amount": 0.0}))
+        assert np.abs(out - img[:, ::-1]).max() < 0.02
+
+
+class TestMasks:
+    def test_radial_center_vs_corner(self):
+        m = build_mask({"type": "radial", "params": {"cx": 0.5, "cy": 0.5, "rx": 0.2, "ry": 0.2},
+                        "invert": False}, 100, 100)
+        assert m[50, 50] > 0.9
+        assert m[2, 2] < 0.05
+
+    def test_radial_invert(self):
+        m = build_mask({"type": "radial", "params": {"cx": 0.5, "cy": 0.5, "rx": 0.2, "ry": 0.2},
+                        "invert": True}, 100, 100)
+        assert m[50, 50] < 0.1
+        assert m[2, 2] > 0.95
+
+    def test_linear_gradient_direction(self):
+        m = build_mask({"type": "linear",
+                        "params": {"x0": 0.5, "y0": 0.0, "x1": 0.5, "y1": 1.0}}, 100, 100)
+        assert m[2, 50] > 0.95   # côté départ
+        assert m[97, 50] < 0.05  # côté arrivée
+        assert m[2, 50] > m[50, 50] > m[97, 50]
+
+    def test_brush_paints_where_stroked(self):
+        m = build_mask({"type": "brush", "params": {
+            "feather": 0.3,
+            "strokes": [{"points": [[0.2, 0.5], [0.8, 0.5]], "size": 0.1}]}}, 100, 200)
+        assert m[50, 100] > 0.8
+        assert m[5, 100] < 0.05
+
+    def test_unknown_type(self):
+        assert build_mask({"type": "nope", "params": {}}, 10, 10) is None
+
+
+class TestLocals:
+    def test_radial_exposure_only_affects_inside(self):
+        img = np.full((100, 100, 3), 0.3, np.float32)
+        e = edits()
+        e["locals"] = [{"id": "x", "type": "radial",
+                        "params": {"cx": 0.5, "cy": 0.5, "rx": 0.25, "ry": 0.25, "feather": 0.2},
+                        "adjust": {"exposure": 1.5}}]
+        out = apply_pipeline(img, e)
+        assert out[50, 50].mean() > 0.45
+        assert abs(out[2, 2].mean() - 0.3) < 0.03
+
+
+class TestRenderAndAuto:
+    def test_render_array_resizes(self):
+        img = gradient_image(400, 600)
+        out = render_array(img, {}, max_size=200, full_long_edge=600)
+        assert out.dtype == np.uint8
+        assert max(out.shape[:2]) == 200
+
+    def test_render_with_mask_overlay(self):
+        img = gradient_image(100, 100)
+        e = {"locals": [{"id": "m1", "type": "radial",
+                         "params": {"cx": 0.5, "cy": 0.5, "rx": 0.3, "ry": 0.3},
+                         "adjust": {"exposure": 0.5}}]}
+        out = render_array(img, e, max_size=100, full_long_edge=100, show_mask="m1")
+        center = out[50, 50].astype(int)
+        assert center[0] > center[2]  # surimpression rouge
+
+    def test_encode_jpeg(self):
+        data = pipeline.encode_jpeg(np.zeros((10, 10, 3), np.uint8))
+        assert data[:2] == b"\xff\xd8"
+
+    def test_auto_adjust_bounded(self):
+        img = gradient_image() * 0.2  # sous-exposé
+        e = pipeline.auto_adjust(img, {})
+        assert 0 < e["tone"]["exposure"] <= 2.5
+        assert -100 <= e["wb"]["temp"] <= 100
+
+    def test_dehaze_runs(self):
+        img = np.clip(gradient_image() * 0.5 + 0.4, 0, 1)
+        out = apply_pipeline(img, edits(presence={"dehaze": 60.0}))
+        assert out.shape == img.shape
+        assert np.isfinite(out).all()
