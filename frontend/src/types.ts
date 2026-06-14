@@ -3,7 +3,11 @@ export interface Project {
   name: string;
   created_at?: string;
   count?: number;
+  cover?: number | null;   // id de la photo de couverture (vignette)
 }
+
+/** Id du « projet » virtuel regroupant toutes les photos importées. */
+export const ALL_PHOTOS_ID = 0;
 
 export interface Photo {
   id: number;

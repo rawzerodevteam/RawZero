@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { Filmstrip } from "../components/Filmstrip";
 import { ImageViewer } from "../components/ImageViewer";
@@ -110,12 +110,52 @@ function Grid() {
   const selection = useStore((s) => s.selection);
   const versions = useStore((s) => s.editsVersion);
   const selectPhoto = useStore((s) => s.selectPhoto);
+  const setSelection = useStore((s) => s.setSelection);
   const setView = useStore((s) => s.setView);
   const setRating = useStore((s) => s.setRating);
   const setUI = useStore((s) => s.setUI);
   const gridSize = useStore((s) => s.gridSize);
   const { onClick, onContextMenu } = useThumbSelection();
   const ref = useRef<HTMLDivElement>(null);
+
+  // Rectangle de sélection (marquee), comme l'explorateur de fichiers : glisser sur le fond
+  // de la grille dessine un cadre qui sélectionne toutes les vignettes qu'il recouvre.
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const drag = useRef<{ x: number; y: number; base: number[]; additive: boolean; moved: boolean } | null>(null);
+
+  const onPointerDown = (ev: React.PointerEvent) => {
+    if (ev.button !== 0) return;
+    if ((ev.target as HTMLElement).closest(".cell")) return; // démarré sur une vignette → clic normal
+    const additive = ev.ctrlKey || ev.metaKey || ev.shiftKey;
+    drag.current = { x: ev.clientX, y: ev.clientY, base: additive ? [...selection] : [], additive, moved: false };
+    (ev.currentTarget as Element).setPointerCapture(ev.pointerId);
+  };
+
+  const onPointerMove = (ev: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    const x = Math.min(d.x, ev.clientX), y = Math.min(d.y, ev.clientY);
+    const w = Math.abs(ev.clientX - d.x), h = Math.abs(ev.clientY - d.y);
+    if (!d.moved && w < 5 && h < 5) return; // sous le seuil : pas encore un glissement
+    d.moved = true;
+    setMarquee({ x, y, w, h });
+    const hit: number[] = [];
+    ref.current?.querySelectorAll<HTMLElement>(".cell").forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.left < x + w && r.right > x && r.top < y + h && r.bottom > y) {
+        const id = Number(el.dataset.id);
+        if (!Number.isNaN(id)) hit.push(id);
+      }
+    });
+    setSelection(d.additive ? Array.from(new Set([...d.base, ...hit])) : hit);
+  };
+
+  const onPointerUp = () => {
+    const d = drag.current;
+    drag.current = null;
+    setMarquee(null);
+    if (d && !d.moved && !d.additive) setSelection([]); // clic dans le vide → tout désélectionner
+  };
 
   // garde la photo courante visible quand on navigue au clavier
   useEffect(() => {
@@ -136,7 +176,12 @@ function Grid() {
 
   return (
     <div className="grid" ref={ref}
-      style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${gridSize}px, 1fr))` }}>
+      style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${gridSize}px, 1fr))` }}
+      onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp} onPointerLeave={onPointerUp}>
+      {marquee && (
+        <div className="marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />
+      )}
       {photos.map((p) => (
         <div
           key={p.id}
@@ -149,6 +194,7 @@ function Grid() {
         >
           <div className="cell-img">
             <img src={api.thumbUrl(p.id, versions[p.id] ?? 0)} alt={p.filename} loading="lazy" draggable={false} />
+            {selection.includes(p.id) && <span className="badge select">✓</span>}
             {p.flag === "pick" && <span className="badge pick">⚑</span>}
             {p.flag === "reject" && <span className="badge reject">✕</span>}
             {p.color && <span className="badge color" style={{ background: COLOR_HEX[p.color] }} />}

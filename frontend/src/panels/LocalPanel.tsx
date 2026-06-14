@@ -78,7 +78,11 @@ export function LocalPanel() {
         </div>
       )}
       {activeTool === "pointmask" && (
-        <p className="hint">Cliquez sur l'élément à sélectionner dans l'image.</p>
+        <p className="hint">
+          {selected?.type === "ai"
+            ? "Cliquez d'autres éléments pour les ajouter à ce masque. Échap pour terminer."
+            : "Cliquez sur l'élément à sélectionner. Un masque déjà sélectionné reçoit les clics suivants."}
+        </p>
       )}
       {activeTool === "brush" && (
         <>

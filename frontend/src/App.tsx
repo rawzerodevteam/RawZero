@@ -6,6 +6,7 @@ import { ShortcutsOverlay } from "./components/ShortcutsOverlay";
 import { useGlobalShortcuts } from "./shortcuts";
 import { useStore } from "./store";
 import { DevelopView } from "./views/DevelopView";
+import { HomeView } from "./views/HomeView";
 import { LibraryView } from "./views/LibraryView";
 
 export function App() {
@@ -21,7 +22,7 @@ export function App() {
 
   return (
     <div className="app">
-      {view === "develop" ? <DevelopView /> : <LibraryView />}
+      {view === "home" ? <HomeView /> : view === "develop" ? <DevelopView /> : <LibraryView />}
       {showImport && <ImportPanel />}
       {showExport && <ExportDialog />}
       {showHelp && <ShortcutsOverlay />}

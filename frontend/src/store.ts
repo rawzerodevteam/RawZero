@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import { api, type PhotoFilters } from "./api";
-import { defaultEdits, mergeEdits, type EditState, type Photo, type Project } from "./types";
+import { ALL_PHOTOS_ID, defaultEdits, mergeEdits, type EditState, type Photo, type Project } from "./types";
 
-export type View = "grid" | "loupe" | "develop";
+export type View = "home" | "grid" | "loupe" | "develop";
 export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "wb" | "pointmask";
 
 let saveTimer: number | undefined;
@@ -79,6 +79,7 @@ interface Store {
   selectPhoto(id: number | null): void;
   toggleSelect(id: number): void;
   selectRange(id: number): void;
+  setSelection(ids: number[]): void;
   openContextMenu(id: number, x: number, y: number): void;
   closeContextMenu(): void;
   setExportIds(ids: number[] | null): void;
@@ -151,7 +152,7 @@ export const useStore = create<Store>((set, get) => ({
   aiMaskBusy: false,
   toast: "",
 
-  // Au démarrage : restaure la dernière session (projet/photo/vue), puis charge projets et photos.
+  // Au démarrage : page d'accueil (projets) par défaut, ou reprise de la dernière session.
   async init() {
     const saved = readSession();
     if (saved.projectId !== null) set({ currentProjectId: saved.projectId });
@@ -162,17 +163,25 @@ export const useStore = create<Store>((set, get) => ({
       if (saved.view === "develop") {
         await get().openDevelop(saved.photoId);
       } else {
-        set({ currentId: saved.photoId, selection: [saved.photoId], view: saved.view });
+        set({ currentId: saved.photoId, selection: [saved.photoId], view: saved.view === "home" ? "grid" : saved.view });
       }
+    } else {
+      // Pas de photo à rouvrir → écran d'accueil listant les projets.
+      set({ view: "home" });
     }
     void api.autoMaskAvailable().then((a) =>
       set({ aiSubjectAvailable: a.subject, aiPointAvailable: a.point, aiDenoiseAvailable: a.denoise }));
   },
 
   async loadProjects() {
-    const projects = await api.listProjects();
+    const real = await api.listProjects();
+    // Projet virtuel « Toutes les photos » : regroupe tout le catalogue (project_id = 0 côté API).
+    const total = real.reduce((n, p) => n + (p.count ?? 0), 0);
+    const cover = real.find((p) => p.cover)?.cover ?? null;
+    const all: Project = { id: ALL_PHOTOS_ID, name: "Toutes les photos", count: total, cover };
+    const projects = [all, ...real];
     let cur = get().currentProjectId;
-    if (cur === null || !projects.some((p) => p.id === cur)) cur = projects[0]?.id ?? null;
+    if (cur === null || !projects.some((p) => p.id === cur)) cur = ALL_PHOTOS_ID;
     set({ projects, currentProjectId: cur });
   },
 
@@ -232,6 +241,11 @@ export const useStore = create<Store>((set, get) => ({
   toggleSelect(id) {
     const sel = get().selection;
     set({ selection: sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id] });
+  },
+
+  // Sélection directe d'un ensemble d'ids (rectangle de sélection de la grille).
+  setSelection(ids) {
+    set({ selection: ids });
   },
 
   // Maj+clic : plage de la photo active jusqu'à la cliquée (dans l'ordre affiché)
@@ -352,15 +366,29 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   // Segmentation au clic : segmente l'élément pointé (x, y normalisés) via EdgeSAM.
+  // Si un masque IA est déjà sélectionné, l'élément cliqué y est ajouté (union) au lieu
+  // d'en créer un nouveau — on peut ainsi sélectionner plusieurs éléments dans un masque.
   async createPointMask(x, y) {
-    const { currentId, edits, aiMaskBusy } = get();
+    const { currentId, edits, aiMaskBusy, selectedLocalId } = get();
     if (currentId === null || !edits || aiMaskBusy) return;
+    const target = edits.locals.find((l) => l.id === selectedLocalId && l.type === "ai");
     set({ aiMaskBusy: true });
     try {
-      const local = await api.clickMask(currentId, edits, x, y);
-      get().updateEdits((e) => { e.locals.push(local); });
-      set({ selectedLocalId: local.id, activeTool: "none", showMaskOverlay: true });
-      get().notify("Masque créé (clic)");
+      const addRef = target ? String(target.params.ref ?? "") : "";
+      const local = await api.clickMask(currentId, edits, x, y, addRef);
+      if (target) {
+        // Fusion : on garde le masque sélectionné (id, réglages) et on bascule sur le nouveau bitmap.
+        get().updateEdits((e) => {
+          const loc = e.locals.find((l) => l.id === target.id);
+          if (loc) loc.params = { ...loc.params, ref: local.params.ref };
+        });
+        get().notify("Élément ajouté au masque");
+      } else {
+        get().updateEdits((e) => { e.locals.push(local); });
+        set({ selectedLocalId: local.id, showMaskOverlay: true });
+        get().notify("Masque créé (clic)");
+      }
+      set({ activeTool: "pointmask" }); // reste actif pour enchaîner les ajouts
     } catch (err) {
       get().notify(`Segmentation impossible : ${err}`);
     } finally {

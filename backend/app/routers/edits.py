@@ -94,11 +94,15 @@ class ClickMaskBody(EditsBody):
     x: float
     y: float
     kind: str = "point"
+    add_ref: str = ""   # si défini : fusionne l'élément cliqué dans ce masque existant
 
 
 @router.post("/photos/{photo_id}/clickmask")
 def clickmask(photo_id: int, body: ClickMaskBody):
-    """Segmentation au clic (EdgeSAM) : segmente l'élément sous le point (x, y) normalisé."""
+    """Segmentation au clic (EdgeSAM) : segmente l'élément sous le point (x, y) normalisé.
+
+    Si `add_ref` pointe vers un masque existant, l'élément cliqué y est fusionné (union),
+    ce qui permet de sélectionner plusieurs éléments dans un seul masque."""
     if not segment.point_available():
         raise HTTPException(503, "Segmentation au clic indisponible (modèle EdgeSAM absent)")
     row = get_photo_row(photo_id)
@@ -112,7 +116,23 @@ def clickmask(photo_id: int, body: ClickMaskBody):
         raise HTTPException(503, str(ex))
     if float(mask.max()) < 1e-3:
         raise HTTPException(422, "Rien à segmenter à cet endroit")
+    prev = _load_mask_ref(photo_id, body.add_ref)
+    if prev is not None:
+        if prev.shape != mask.shape:
+            prev = cv2.resize(prev, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_LINEAR)
+        mask = np.maximum(mask, prev)
     return _store_mask(photo_id, mask, body.kind)
+
+
+def _load_mask_ref(photo_id: int, ref: str):
+    """Recharge le bitmap d'un masque (0..1) à partir de sa référence, ou None si invalide."""
+    if not ref:
+        return None
+    path = (config.MASKS_DIR / ref).resolve()
+    if config.MASKS_DIR.resolve() not in path.parents or not path.exists():
+        return None
+    raw = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    return None if raw is None else raw.astype(np.float32) / 255.0
 
 
 def _store_mask(photo_id: int, mask: np.ndarray, kind: str) -> dict:

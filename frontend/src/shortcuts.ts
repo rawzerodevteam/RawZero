@@ -30,12 +30,43 @@ function isTyping(): boolean {
     (el as HTMLElement).isContentEditable);
 }
 
+// Auto-répétition des flèches : maintenir une flèche fait défiler les photos, puis accélère
+// après 1 s. Cadencé par les événements « repeat » de l'OS (pas de timer en arrière-plan)
+// et throttlé : ~220 ms au début, ~55 ms passé 1 s (défilement rapide).
+let arrowKey = "";
+let arrowStart = 0;
+let arrowLastNav = 0;
+
+function handleArrow(k: string): void {
+  const dir = k === "ArrowRight" ? 1 : -1;
+  const now = performance.now();
+  if (arrowKey !== k) {            // premier appui : on navigue tout de suite
+    arrowKey = k;
+    arrowStart = now;
+    arrowLastNav = now;
+    useStore.getState().navigate(dir);
+    return;
+  }
+  const interval = now - arrowStart > 1000 ? 55 : 220;
+  if (now - arrowLastNav >= interval) {
+    arrowLastNav = now;
+    useStore.getState().navigate(dir);
+  }
+}
+
 /** Handler global exporté pour être testable sans monter de composant React. */
 export function handleGlobalKey(ev: KeyboardEvent) {
-  if (ev.repeat) return;
   const s = useStore.getState();
   if (isTyping()) return;
   const k = ev.key;
+
+  // Flèches : auto-répétition throttlée (on traite aussi les événements « repeat »).
+  if ((k === "ArrowRight" || k === "ArrowLeft") && !ev.ctrlKey && !ev.metaKey) {
+    ev.preventDefault();
+    handleArrow(k);
+    return;
+  }
+  if (ev.repeat) return;
 
   if (ev.ctrlKey || ev.metaKey) {
     const lower = k.toLowerCase();
@@ -48,8 +79,6 @@ export function handleGlobalKey(ev: KeyboardEvent) {
   }
 
   switch (k) {
-    case "ArrowRight": ev.preventDefault(); s.navigate(1); return;
-    case "ArrowLeft": ev.preventDefault(); s.navigate(-1); return;
     case "Escape":
       if (s.showHelp || s.showImport || s.showExport) {
         s.setUI({ showHelp: false, showImport: false, showExport: false });
@@ -106,9 +135,22 @@ export function handleGlobalKey(ev: KeyboardEvent) {
   // Espace et Z sont gérés par le visualiseur (zoom), via les événements du composant.
 }
 
+function resetArrowRepeat() { arrowKey = ""; }
+
+function handleGlobalKeyUp(ev: KeyboardEvent) {
+  if (ev.key === "ArrowRight" || ev.key === "ArrowLeft") resetArrowRepeat();
+}
+
 export function useGlobalShortcuts() {
   useEffect(() => {
     window.addEventListener("keydown", handleGlobalKey);
-    return () => window.removeEventListener("keydown", handleGlobalKey);
+    window.addEventListener("keyup", handleGlobalKeyUp);
+    // Sécurité : si l'onglet perd le focus, on coupe l'auto-répétition (pas de keyup reçu).
+    window.addEventListener("blur", resetArrowRepeat);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKey);
+      window.removeEventListener("keyup", handleGlobalKeyUp);
+      window.removeEventListener("blur", resetArrowRepeat);
+    };
   }, []);
 }

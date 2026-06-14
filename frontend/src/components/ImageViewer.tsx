@@ -36,6 +36,8 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
   const showMaskOverlay = useStore((s) => interactive && s.showMaskOverlay);
   const locals = useStore((s) => s.edits?.locals);
   const updateEdits = useStore((s) => s.updateEdits);
+  const startDrag = useStore((s) => s.startDrag);
+  const endDrag = useStore((s) => s.endDrag);
   const setUI = useStore((s) => s.setUI);
   const beforeAfter = useStore((s) => s.beforeAfter);
   // Pendant le drag d'un slider, on masque l'overlay rouge pour voir l'effet du réglage.
@@ -267,6 +269,21 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
                 h={box.h}
               />
             )}
+            {/* Poignées d'édition du masque sélectionné (déplacer / redimensionner) */}
+            {!tempShape && activeTool === "none" && selectedLocal &&
+              (selectedLocal.type === "linear" || selectedLocal.type === "radial") && (
+              <MaskHandles
+                key={selectedLocal.id}
+                localId={selectedLocal.id}
+                kind={selectedLocal.type}
+                params={selectedLocal.params}
+                w={box.w} h={box.h}
+                toImg={toImg}
+                updateEdits={updateEdits}
+                startDrag={startDrag}
+                endDrag={endDrag}
+              />
+            )}
             {mode.current === "brush" && stroke.current.length > 1 && (
               <polyline
                 className="stroke-preview"
@@ -318,6 +335,86 @@ function ShapeOutline({ shape, params, w, h }: {
       <line className="mask-outline" x1={x0 - px} y1={y0 - py} x2={x0 + px} y2={y0 + py} />
       <line className="mask-outline dashed" x1={x1 - px} y1={y1 - py} x2={x1 + px} y2={y1 + py} />
       <line className="mask-outline thin" x1={x0} y1={y0} x2={x1} y2={y1} />
+    </g>
+  );
+}
+
+/** Poignées interactives pour déplacer / redimensionner un masque linéaire ou radial.
+ *  Rendu dans le <svg> d'overlay (pointer-events réactivés par .mask-handle en CSS). */
+function MaskHandles({ localId, kind, params, w, h, toImg, updateEdits, startDrag, endDrag }: {
+  localId: string;
+  kind: "linear" | "radial";
+  params: Record<string, any>;
+  w: number; h: number;
+  toImg: (cx: number, cy: number) => [number, number];
+  updateEdits: (fn: (e: any) => void, commit?: boolean) => void;
+  startDrag: () => void;
+  endDrag: () => void;
+}) {
+  const dragKind = useRef<string | null>(null);
+
+  const apply = (part: string, nx: number, ny: number) => {
+    updateEdits((e: any) => {
+      const loc = e.locals.find((l: any) => l.id === localId);
+      if (!loc) return;
+      const p = loc.params;
+      if (kind === "linear") {
+        if (part === "p0") { p.x0 = nx; p.y0 = ny; }
+        else { p.x1 = nx; p.y1 = ny; }
+      } else {
+        const cx = p.cx ?? 0.5, cy = p.cy ?? 0.5;
+        if (part === "center") { p.cx = nx; p.cy = ny; }
+        else if (part === "rx") p.rx = Math.max(Math.abs(nx - cx), 0.02);
+        else if (part === "ry") p.ry = Math.max(Math.abs(ny - cy), 0.02);
+      }
+    }, false);
+  };
+
+  const onDown = (part: string) => (ev: React.PointerEvent) => {
+    ev.stopPropagation();
+    (ev.currentTarget as Element).setPointerCapture(ev.pointerId);
+    dragKind.current = part;
+    startDrag();
+  };
+  const onMove = (ev: React.PointerEvent) => {
+    if (!dragKind.current) return;
+    ev.stopPropagation();
+    const [nx, ny] = toImg(ev.clientX, ev.clientY);
+    apply(dragKind.current, nx, ny);
+  };
+  const onUp = (ev: React.PointerEvent) => {
+    if (!dragKind.current) return;
+    ev.stopPropagation();
+    dragKind.current = null;
+    endDrag();
+  };
+
+  // Points de manipulation en coordonnées écran.
+  let handles: { part: string; x: number; y: number }[];
+  if (kind === "linear") {
+    const x0 = (params.x0 ?? 0.5) * w, y0 = (params.y0 ?? 0.2) * h;
+    const x1 = (params.x1 ?? 0.5) * w, y1 = (params.y1 ?? 0.8) * h;
+    handles = [{ part: "p0", x: x0, y: y0 }, { part: "p1", x: x1, y: y1 }];
+  } else {
+    const cx = (params.cx ?? 0.5), cy = (params.cy ?? 0.5);
+    const rx = params.rx ?? 0.25, ry = params.ry ?? 0.25;
+    handles = [
+      { part: "center", x: cx * w, y: cy * h },
+      { part: "rx", x: (cx + rx) * w, y: cy * h },
+      { part: "ry", x: cx * w, y: (cy + ry) * h },
+    ];
+  }
+
+  return (
+    <g onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
+      {handles.map((hd) => (
+        <circle
+          key={hd.part}
+          className={"mask-handle" + (hd.part === "center" || hd.part.startsWith("p") ? " move" : "")}
+          cx={hd.x} cy={hd.y} r={7}
+          onPointerDown={onDown(hd.part)}
+        />
+      ))}
     </g>
   );
 }

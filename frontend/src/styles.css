@@ -117,6 +117,15 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
   padding: 14px;
   align-content: start;
   background: var(--bg-deep);
+  user-select: none;          /* pas de sélection de texte pendant le rectangle de sélection */
+}
+.marquee {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 2px;
 }
 .cell {
   background: var(--bg-panel);
@@ -251,6 +260,16 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
 }
 .mask-outline.dashed { stroke-dasharray: 5 4; }
 .mask-outline.thin { stroke-width: 1; opacity: 0.7; }
+.mask-handle {
+  fill: #fff;
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.mask-handle.move { cursor: move; }
+.mask-handle:hover { fill: var(--accent); }
 .stroke-preview {
   fill: none;
   stroke: rgba(122, 162, 255, 0.45);
@@ -686,6 +705,11 @@ kbd {
 
 .export-result { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
 .export-result ul { margin: 6px 0; padding-left: 18px; }
+.export-progress { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.progress-track { flex: 1; height: 8px; border-radius: 4px; background: var(--bg-raised); overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.15s ease; }
+.export-done { margin-top: 12px; color: var(--accent); }
+.folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
 
 /* ---------- Toast ---------- */
 .toast {
@@ -831,8 +855,14 @@ kbd {
 .rail-subtabs { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; margin-top: 4px; border-top: 1px solid var(--border); }
 
 /* Sélection multiple */
-.cell.selected { background: var(--accent-soft); }
+.cell.selected { border-color: var(--accent); background: var(--accent-soft); }
 .cell.selected.current { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cell .badge.select {
+  top: 6px; left: 6px; right: auto;
+  background: var(--accent); color: #fff;
+  width: 20px; height: 20px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700;
+}
 .film-thumb.selected { box-shadow: inset 0 0 0 2px var(--accent-soft); }
 .film-thumb.selected.current { box-shadow: none; }
 
@@ -854,7 +884,41 @@ kbd {
 .ctx-sep { height: 1px; background: var(--border); margin: 4px 6px; }
 
 /* Sélecteur de projet (toolbar) */
-.project-menu { position: relative; }
+.project-menu { position: relative; display: inline-flex; align-items: center; gap: 6px; }
+.project-home {
+  background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); cursor: pointer; padding: 5px 8px; font-size: 14px; line-height: 1;
+}
+.project-home:hover { border-color: var(--accent); }
+
+/* Écran d'accueil : grille de projets */
+.home { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.home-header {
+  display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+  border-bottom: 1px solid var(--border); background: var(--bg-panel);
+}
+.home-body { flex: 1; overflow: auto; padding: 26px 32px; }
+.home-title { font-size: 22px; margin: 0 0 20px; font-weight: 600; }
+.project-grid {
+  display: grid; gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.project-card {
+  display: flex; flex-direction: column; text-align: left; padding: 0; cursor: pointer;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  color: var(--text); transition: border-color 0.12s, transform 0.12s;
+}
+.project-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.project-cover {
+  aspect-ratio: 4 / 3; background: var(--bg); display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.project-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.project-cover-empty { font-size: 48px; opacity: 0.5; }
+.project-card.new .project-cover { background: var(--bg-raised); }
+.project-card-meta { padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.project-card-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-card-count { font-size: 12px; color: var(--text-dim); }
 .project-trigger {
   display: inline-flex; align-items: center; gap: 5px;
   background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius);

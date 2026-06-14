@@ -157,11 +157,11 @@ export const api = {
     }));
   },
 
-  async clickMask(id: number, edits: EditState, x: number, y: number): Promise<LocalAdjust> {
+  async clickMask(id: number, edits: EditState, x: number, y: number, addRef = ""): Promise<LocalAdjust> {
     return json(await fetch(`/api/photos/${id}/clickmask`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ edits, x, y }),
+      body: JSON.stringify({ edits, x, y, add_ref: addRef }),
     }));
   },
 

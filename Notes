@@ -10,3 +10,8 @@ TO DO :
 - rester appuyé sur flèche directionnel pour parcourir les images plus vite au bout d'une seconde
 - On peut pas edit les masques (déplacer les bords pour radiale par exemple
 - Impossibilité de sélectionner manuellement plusieurs éléments sur un même masque via ia, ce serait pourtant pratique
+- On peut toujours pas exporter en bulk en sélectionnant manuellement
+- La page d'accueil devrait pas être sur le projet par défaut mais sur un affichage via icones de tous les projets 
+- Il faut une barre de progression poru l'export qu'on sache où on en est quyand on clique dessus
+- Ajouter un projet de base "Toutes les photos" où on voit tout ce qu'on a importé depuis le début
+- Exporter devrait juste export et download en un direct 

@@ -12,7 +12,9 @@ router = APIRouter()
 @router.get("/projects")
 def list_projects():
     rows = db.query(
-        """SELECT p.id, p.name, p.created_at, COUNT(ph.id) AS count
+        """SELECT p.id, p.name, p.created_at, COUNT(ph.id) AS count,
+                  (SELECT id FROM photos WHERE project_id = p.id
+                   ORDER BY imported_at DESC, id DESC LIMIT 1) AS cover
            FROM projects p LEFT JOIN photos ph ON ph.project_id = p.id
            GROUP BY p.id ORDER BY p.created_at ASC, p.id ASC""")
     return {"projects": [dict(r) for r in rows]}
