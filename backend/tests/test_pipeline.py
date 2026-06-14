@@ -91,13 +91,29 @@ class TestTonal:
 
 class TestCurveAndColor:
     def test_curve_lut_monotone(self):
-        lut = pipeline._curve_lut([[0, 0], [0.25, 0.15], [0.75, 0.9], [1, 1]])
+        lut = pipeline._curve_lut(((0, 0), (0.25, 0.15), (0.75, 0.9), (1, 1)))
         assert lut is not None
         assert np.all(np.diff(lut) >= -1e-6)
         assert abs(lut[0]) < 1e-3 and abs(lut[-1] - 1.0) < 1e-3
 
     def test_identity_curve_is_none(self):
-        assert pipeline._curve_lut([[0.0, 0.0], [1.0, 1.0]]) is None
+        assert pipeline._curve_lut(((0.0, 0.0), (1.0, 1.0))) is None
+
+    def test_wb_pick_neutralizes_cast(self):
+        # zone uniforme avec un voile bleuté : la pipette doit renvoyer un temp/teinte
+        # qui ramène le point cliqué vers le neutre (R≈V≈B).
+        img = np.empty((20, 20, 3), np.float32)
+        img[..., 0], img[..., 1], img[..., 2] = 0.48, 0.50, 0.55
+        res = pipeline.wb_from_point(img, {}, 0.5, 0.5)
+        assert -100.0 <= res["temp"] <= 100.0 and -100.0 <= res["tint"] <= 100.0
+        out = apply_pipeline(img, merge_edits({"wb": res, "detail": {"sharpen_amount": 0.0}}))
+        c = out[10, 10]
+        assert float(c.max() - c.min()) < 0.01
+
+    def test_wb_pick_neutral_is_zero(self):
+        img = np.full((20, 20, 3), 0.5, np.float32)
+        res = pipeline.wb_from_point(img, {}, 0.5, 0.5)
+        assert abs(res["temp"]) < 1e-6 and abs(res["tint"]) < 1e-6
 
     def test_desaturation_gives_gray(self):
         img = gradient_image()

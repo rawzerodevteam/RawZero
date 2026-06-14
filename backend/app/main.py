@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import config, db
-from .routers import edits, export, imports, photos, render
+from .routers import edits, export, imports, photos, projects, render
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (photos.router, imports.router, render.router, edits.router, export.router):
+for r in (photos.router, imports.router, render.router, edits.router, export.router, projects.router):
     app.include_router(r, prefix="/api")
 
 

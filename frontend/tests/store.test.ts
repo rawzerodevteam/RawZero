@@ -215,6 +215,6 @@ describe("filtres", () => {
     useStore.getState().setFilters({ minRating: 3 });
     expect(useStore.getState().filters.minRating).toBe(3);
     expect(useStore.getState().filters.sort).toBe("captured_asc"); // inchangé
-    expect(api.listPhotos).toHaveBeenCalledWith(expect.objectContaining({ minRating: 3 }));
+    expect(api.listPhotos).toHaveBeenCalledWith(expect.objectContaining({ minRating: 3 }), null);
   });
 });

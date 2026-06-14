@@ -1,15 +1,15 @@
 import { useEffect, useRef } from "react";
 import { api } from "../api";
 import { useStore } from "../store";
+import { useThumbSelection } from "./useThumbSelection";
 import { COLOR_HEX } from "../types";
 
 export function Filmstrip() {
   const photos = useStore((s) => s.photos);
   const currentId = useStore((s) => s.currentId);
-  const view = useStore((s) => s.view);
+  const selection = useStore((s) => s.selection);
   const versions = useStore((s) => s.editsVersion);
-  const openDevelop = useStore((s) => s.openDevelop);
-  const selectPhoto = useStore((s) => s.selectPhoto);
+  const { onClick, onContextMenu } = useThumbSelection();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -23,9 +23,11 @@ export function Filmstrip() {
         <div
           key={p.id}
           data-id={p.id}
-          className={"film-thumb" + (p.id === currentId ? " current" : "") + (p.flag === "reject" ? " rejected" : "")}
+          className={"film-thumb" + (p.id === currentId ? " current" : "") +
+            (selection.includes(p.id) ? " selected" : "") + (p.flag === "reject" ? " rejected" : "")}
           style={p.color ? { borderColor: COLOR_HEX[p.color] } : undefined}
-          onClick={() => (view === "develop" ? void openDevelop(p.id) : selectPhoto(p.id))}
+          onClick={(ev) => onClick(ev, p.id)}
+          onContextMenu={(ev) => onContextMenu(ev, p.id)}
           title={p.filename}
         >
           <img src={api.thumbUrl(p.id, versions[p.id] ?? 0)} alt={p.filename} loading="lazy" draggable={false} />

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { ContextMenu } from "./components/ContextMenu";
 import { ExportDialog } from "./components/ExportDialog";
 import { ImportPanel } from "./components/ImportPanel";
 import { ShortcutsOverlay } from "./components/ShortcutsOverlay";
@@ -13,10 +14,10 @@ export function App() {
   const showImport = useStore((s) => s.showImport);
   const showExport = useStore((s) => s.showExport);
   const toast = useStore((s) => s.toast);
-  const loadPhotos = useStore((s) => s.loadPhotos);
+  const init = useStore((s) => s.init);
   useGlobalShortcuts();
 
-  useEffect(() => { void loadPhotos(); }, [loadPhotos]);
+  useEffect(() => { void init(); }, [init]);
 
   return (
     <div className="app">
@@ -24,6 +25,7 @@ export function App() {
       {showImport && <ImportPanel />}
       {showExport && <ExportDialog />}
       {showHelp && <ShortcutsOverlay />}
+      <ContextMenu />
       {toast && <div className="toast">{toast}</div>}
     </div>
   );

@@ -1,17 +1,23 @@
 import { create } from "zustand";
 import { api, type PhotoFilters } from "./api";
-import { defaultEdits, mergeEdits, type EditState, type Photo } from "./types";
+import { defaultEdits, mergeEdits, type EditState, type Photo, type Project } from "./types";
 
 export type View = "grid" | "loupe" | "develop";
-export type Tool = "none" | "crop" | "linear" | "radial" | "brush";
+export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "wb";
 
 let saveTimer: number | undefined;
 
 interface Store {
+  projects: Project[];
+  currentProjectId: number | null;
   photos: Photo[];
   filters: PhotoFilters;
   currentId: number | null;
   view: View;
+
+  selection: number[];            // multi-sélection (Ctrl/Maj+clic) pour les actions par lot
+  exportIds: number[] | null;     // si défini, l'export porte sur ces ids (sinon courante/toutes)
+  contextMenu: { x: number; y: number } | null;
 
   edits: EditState | null;        // état de développement de la photo courante
   dirty: boolean;
@@ -21,6 +27,7 @@ interface Store {
   clipboard: EditState | null;
   editsVersion: Record<number, number>; // cache-busting des thumbs/previews
 
+  gridSize: number;               // taille des vignettes de la grille (px), réglable
   beforeAfter: boolean;
   showClipping: boolean;
   showInfo: boolean;
@@ -35,16 +42,29 @@ interface Store {
   cropAspect: number | null;
   toast: string;
 
+  init(): Promise<void>;
+  loadProjects(): Promise<void>;
+  setProject(id: number): Promise<void>;
+  createProject(name: string): Promise<void>;
+  renameProject(id: number, name: string): Promise<void>;
+  deleteProject(id: number): Promise<void>;
   loadPhotos(): Promise<void>;
   setFilters(p: Partial<PhotoFilters>): void;
   setView(v: View): void;
   selectPhoto(id: number | null): void;
+  toggleSelect(id: number): void;
+  selectRange(id: number): void;
+  openContextMenu(id: number, x: number, y: number): void;
+  closeContextMenu(): void;
+  setExportIds(ids: number[] | null): void;
   openDevelop(id: number): Promise<void>;
   navigate(delta: number): void;
   setRating(rating: number): void;
   setFlag(flag: "none" | "pick" | "reject"): void;
   setColor(color: string): void;
+  patchSelection(patch: Partial<Pick<Photo, "rating" | "flag" | "color">>): void;
   removeCurrent(deleteFile: boolean): Promise<void>;
+  removeSelection(deleteFile: boolean): Promise<void>;
 
   updateEdits(fn: (e: EditState) => void, commit?: boolean): void;
   startDrag(): void;
@@ -61,15 +81,21 @@ interface Store {
 
   setUI(p: Partial<Pick<Store, "beforeAfter" | "showClipping" | "showInfo" | "showHelp" |
     "showImport" | "showExport" | "activeTool" | "selectedLocalId" | "showMaskOverlay" |
-    "brushSize" | "brushErase" | "cropAspect">>): void;
+    "brushSize" | "brushErase" | "cropAspect" | "gridSize">>): void;
   notify(msg: string): void;
 }
 
 export const useStore = create<Store>((set, get) => ({
+  projects: [],
+  currentProjectId: null,
   photos: [],
   filters: { minRating: 0, flag: "", color: "", sort: "captured_asc" },
   currentId: null,
   view: "grid",
+
+  selection: [],
+  exportIds: null,
+  contextMenu: null,
 
   edits: null,
   dirty: false,
@@ -79,6 +105,7 @@ export const useStore = create<Store>((set, get) => ({
   clipboard: null,
   editsVersion: {},
 
+  gridSize: (() => { const v = Number(localStorage.getItem("rs.gridSize")); return v >= 120 && v <= 520 ? v : 260; })(),
   beforeAfter: false,
   showClipping: false,
   showInfo: false,
@@ -93,11 +120,53 @@ export const useStore = create<Store>((set, get) => ({
   cropAspect: null,
   toast: "",
 
+  // Au démarrage : charge les projets puis les photos du projet courant.
+  async init() {
+    await get().loadProjects();
+    await get().loadPhotos();
+  },
+
+  async loadProjects() {
+    const projects = await api.listProjects();
+    let cur = get().currentProjectId;
+    if (cur === null || !projects.some((p) => p.id === cur)) cur = projects[0]?.id ?? null;
+    set({ projects, currentProjectId: cur });
+  },
+
+  async setProject(id) {
+    if (id === get().currentProjectId) return;
+    set({ currentProjectId: id, currentId: null, selection: [], view: "grid" });
+    await get().loadPhotos();
+  },
+
+  async createProject(name) {
+    const p = await api.createProject(name);
+    await get().loadProjects();
+    await get().setProject(p.id);
+  },
+
+  async renameProject(id, name) {
+    await api.renameProject(id, name);
+    set({ projects: get().projects.map((p) => (p.id === id ? { ...p, name } : p)) });
+  },
+
+  async deleteProject(id) {
+    await api.deleteProject(id);
+    const wasCurrent = get().currentProjectId === id;
+    await get().loadProjects();
+    if (wasCurrent) {
+      const next = get().projects[0]?.id ?? null;
+      set({ currentProjectId: next, currentId: null, selection: [], view: "grid" });
+      await get().loadPhotos();
+    }
+  },
+
   async loadPhotos() {
-    const photos = await api.listPhotos(get().filters);
-    set({ photos });
+    const photos = await api.listPhotos(get().filters, get().currentProjectId);
+    const ids = new Set(photos.map((p) => p.id));
+    set({ photos, selection: get().selection.filter((id) => ids.has(id)) });
     const { currentId } = get();
-    if (currentId !== null && !photos.some((p) => p.id === currentId)) {
+    if (currentId !== null && !ids.has(currentId)) {
       set({ currentId: photos.length ? photos[0].id : null });
     }
   },
@@ -113,7 +182,36 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   selectPhoto(id) {
-    set({ currentId: id });
+    set({ currentId: id, selection: id === null ? [] : [id] });
+  },
+
+  // Ctrl/⌘+clic : (dé)sélectionne sans changer la photo active (pas de rechargement du dev)
+  toggleSelect(id) {
+    const sel = get().selection;
+    set({ selection: sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id] });
+  },
+
+  // Maj+clic : plage de la photo active jusqu'à la cliquée (dans l'ordre affiché)
+  selectRange(id) {
+    const { photos, currentId } = get();
+    const a = photos.findIndex((p) => p.id === currentId);
+    const b = photos.findIndex((p) => p.id === id);
+    if (a < 0 || b < 0) { get().selectPhoto(id); return; }
+    const [lo, hi] = a < b ? [a, b] : [b, a];
+    set({ selection: photos.slice(lo, hi + 1).map((p) => p.id) });
+  },
+
+  openContextMenu(id, x, y) {
+    if (!get().selection.includes(id)) set({ selection: [id] });
+    set({ contextMenu: { x, y } });
+  },
+
+  closeContextMenu() {
+    set({ contextMenu: null });
+  },
+
+  setExportIds(ids) {
+    set({ exportIds: ids });
   },
 
   async openDevelop(id) {
@@ -135,7 +233,7 @@ export const useStore = create<Store>((set, get) => ({
     const next = photos[Math.max(0, Math.min(photos.length - 1, (idx < 0 ? 0 : idx + delta)))];
     if (!next || next.id === currentId) return;
     if (view === "develop") void get().openDevelop(next.id);
-    else set({ currentId: next.id });
+    else set({ currentId: next.id, selection: [next.id] });
   },
 
   setRating(rating) {
@@ -159,6 +257,28 @@ export const useStore = create<Store>((set, get) => ({
     const next = cur?.color === color ? "" : color; // re-cliquer enlève le label
     set({ photos: photos.map((p) => (p.id === currentId ? { ...p, color: next } : p)) });
     void api.patchPhoto(currentId, { color: next }).catch(() => get().loadPhotos());
+  },
+
+  // Applique une note/drapeau/label à toute la sélection (clic droit), optimiste.
+  patchSelection(patch) {
+    const { selection, currentId, photos } = get();
+    const ids = selection.length ? selection : (currentId !== null ? [currentId] : []);
+    if (!ids.length) return;
+    const idSet = new Set(ids);
+    set({ photos: photos.map((p) => (idSet.has(p.id) ? { ...p, ...patch } : p)) });
+    ids.forEach((id) => void api.patchPhoto(id, patch).catch(() => get().loadPhotos()));
+  },
+
+  async removeSelection(deleteFile) {
+    const { selection, currentId, photos } = get();
+    const ids = selection.length ? selection : (currentId !== null ? [currentId] : []);
+    if (!ids.length) return;
+    const idSet = new Set(ids);
+    await Promise.all(ids.map((id) => api.deletePhoto(id, deleteFile).catch(() => {})));
+    const rest = photos.filter((p) => !idSet.has(p.id));
+    const nextCur = rest.length ? (rest.find((p) => p.id === currentId)?.id ?? rest[0].id) : null;
+    set({ photos: rest, currentId: nextCur, selection: nextCur !== null ? [nextCur] : [] });
+    if (!rest.length) set({ view: "grid" });
   },
 
   async removeCurrent(deleteFile) {
@@ -301,6 +421,7 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   setUI(p) {
+    if (p.gridSize !== undefined) localStorage.setItem("rs.gridSize", String(p.gridSize));
     set(p);
   },
 

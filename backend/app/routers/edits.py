@@ -31,6 +31,19 @@ def auto(photo_id: int, body: EditsBody):
     return {"edits": pipeline.auto_adjust(base, body.edits)}
 
 
+class WbPickBody(EditsBody):
+    x: float
+    y: float
+
+
+@router.post("/photos/{photo_id}/wb_pick")
+def wb_pick(photo_id: int, body: WbPickBody):
+    """Pipette WB : renvoie {temp, tint} neutralisant le point (x, y) cliqué."""
+    row = get_photo_row(photo_id)
+    base = previews.get_base(photo_id, config.ORIGINALS_DIR / row["relpath"])
+    return pipeline.wb_from_point(base, body.edits, body.x, body.y)
+
+
 BUILTIN_PRESETS: list[tuple[str, dict]] = [
     ("Noir & blanc classique", {
         "presence": {"saturation": -100.0, "clarity": 12.0},

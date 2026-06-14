@@ -19,9 +19,12 @@ SORTS = {
 
 @router.get("/photos")
 def list_photos(min_rating: int = 0, flag: str = "", color: str = "",
-                sort: str = "captured_asc"):
+                sort: str = "captured_asc", project_id: int = 0):
     sql = "SELECT * FROM photos WHERE rating >= ?"
     params: list = [min_rating]
+    if project_id:
+        sql += " AND project_id = ?"
+        params.append(project_id)
     if flag:
         sql += " AND flag = ?"
         params.append(flag)

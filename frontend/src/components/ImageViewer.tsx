@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "../api";
 import { useStore } from "../store";
 import { useGpuPreview } from "../gpu/useGpuPreview";
 import { defaultLocalAdjust, type LocalAdjust } from "../types";
@@ -138,11 +139,27 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
     setUI({ selectedLocalId: local.id, activeTool: local.type === "brush" ? "brush" : "none" });
   };
 
+  // Pipette balance des blancs : échantillonne le point cliqué côté serveur et applique temp/teinte.
+  const pickWhiteBalance = async (nx: number, ny: number) => {
+    const { currentId, edits, notify } = useStore.getState();
+    if (currentId === null || !edits) return;
+    setUI({ activeTool: "none" });
+    try {
+      const { temp, tint } = await api.pickWhiteBalance(currentId, edits, nx, ny);
+      updateEdits((e) => { e.wb.temp = temp; e.wb.tint = tint; });
+      notify(`Balance des blancs : ${temp >= 0 ? "+" : ""}${temp} / ${tint >= 0 ? "+" : ""}${tint}`);
+    } catch (err) {
+      notify(`Pipette impossible : ${err}`);
+    }
+  };
+
   const onPointerDown = (ev: React.PointerEvent) => {
     if (ev.button !== 0) return;
     (ev.currentTarget as Element).setPointerCapture(ev.pointerId);
     const [nx, ny] = toImg(ev.clientX, ev.clientY);
-    if (activeTool === "linear" || activeTool === "radial") {
+    if (activeTool === "wb") {
+      void pickWhiteBalance(nx, ny);
+    } else if (activeTool === "linear" || activeTool === "radial") {
       mode.current = "shape";
       setTempShape({ type: activeTool, x0: nx, y0: ny, x1: nx, y1: ny });
     } else if (activeTool === "brush") {

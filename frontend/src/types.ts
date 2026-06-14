@@ -1,3 +1,10 @@
+export interface Project {
+  id: number;
+  name: string;
+  created_at?: string;
+  count?: number;
+}
+
 export interface Photo {
   id: number;
   filename: string;

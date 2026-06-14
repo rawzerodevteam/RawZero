@@ -1,4 +1,4 @@
-import type { EditState, ImportResult, Photo, Preset } from "./types";
+import type { EditState, ImportResult, Photo, Preset, Project } from "./types";
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -17,10 +17,33 @@ export interface PhotoFilters {
 }
 
 export const api = {
-  async listPhotos(f: PhotoFilters): Promise<Photo[]> {
+  async listProjects(): Promise<Project[]> {
+    return (await json<{ projects: Project[] }>(await fetch("/api/projects"))).projects;
+  },
+
+  async createProject(name: string): Promise<Project> {
+    return json(await fetch("/api/projects", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }));
+  },
+
+  async renameProject(id: number, name: string): Promise<Project> {
+    return json(await fetch(`/api/projects/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }));
+  },
+
+  async deleteProject(id: number): Promise<void> {
+    await json(await fetch(`/api/projects/${id}`, { method: "DELETE" }));
+  },
+
+  async listPhotos(f: PhotoFilters, projectId?: number | null): Promise<Photo[]> {
     const q = new URLSearchParams({
       min_rating: String(f.minRating), flag: f.flag, color: f.color, sort: f.sort,
     });
+    if (projectId) q.set("project_id", String(projectId));
     return (await json<{ photos: Photo[] }>(await fetch(`/api/photos?${q}`))).photos;
   },
 
@@ -40,9 +63,10 @@ export const api = {
     await json(await fetch(`/api/photos/${id}?delete_file=${deleteFile}`, { method: "DELETE" }));
   },
 
-  async uploadFile(file: File): Promise<ImportResult> {
+  async uploadFile(file: File, projectId?: number | null): Promise<ImportResult> {
     const fd = new FormData();
     fd.append("files", file, file.name);
+    if (projectId) fd.append("project_id", String(projectId));
     const out = await json<{ results: ImportResult[] }>(
       await fetch("/api/import/upload", { method: "POST", body: fd }));
     return out.results[0];
@@ -56,12 +80,12 @@ export const api = {
     return json(await fetch(`/api/import/browse?path=${encodeURIComponent(path)}`));
   },
 
-  async importFolder(paths: string[]): Promise<ImportResult[]> {
+  async importFolder(paths: string[], projectId?: number | null): Promise<ImportResult[]> {
     const out = await json<{ results: ImportResult[] }>(
       await fetch("/api/import/folder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paths }),
+        body: JSON.stringify({ paths, project_id: projectId ?? 0 }),
       }));
     return out.results;
   },
@@ -98,6 +122,14 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ edits }),
     }))).edits;
+  },
+
+  async pickWhiteBalance(id: number, edits: EditState, x: number, y: number): Promise<{ temp: number; tint: number }> {
+    return json(await fetch(`/api/photos/${id}/wb_pick`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ edits, x, y }),
+    }));
   },
 
   async listPresets(): Promise<Preset[]> {

@@ -5,6 +5,7 @@ import { Histogram } from "../components/Histogram";
 import { ImageViewer } from "../components/ImageViewer";
 import { StarRating } from "../components/StarRating";
 import { GpuDiffDialog } from "../components/GpuDiffDialog";
+import { ModeTabs } from "../components/ModeTabs";
 import { useStore } from "../store";
 import { BasicPanel } from "../panels/BasicPanel";
 import { CurvePanel } from "../panels/CurvePanel";
@@ -73,7 +74,6 @@ export function DevelopView() {
   const beforeAfter = useStore((s) => s.beforeAfter);
   const showClipping = useStore((s) => s.showClipping);
   const showInfo = useStore((s) => s.showInfo);
-  const setView = useStore((s) => s.setView);
   const setUI = useStore((s) => s.setUI);
   const setRating = useStore((s) => s.setRating);
   const copyEdits = useStore((s) => s.copyEdits);
@@ -89,7 +89,7 @@ export function DevelopView() {
     <div className="develop">
       <div className="develop-main">
         <div className="toolbar">
-          <button className="btn" onClick={() => setView("grid")}>← Bibliothèque (G)</button>
+          <ModeTabs />
           <span className="name">{photo.filename}</span>
           {dirty && <span className="dim" title="Sauvegarde automatique en cours">●</span>}
           {(photo.edited || dirty) && <span className="edited-chip" title="Photo retouchée">Modifiée</span>}

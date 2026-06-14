@@ -7,8 +7,9 @@ export const SHORTCUTS: [string, string][] = [
   ["P / X / U", "Drapeau : retenue / rejetée / neutre"],
   ["6 / 7 / 8 / 9", "Label couleur : rouge / jaune / vert / bleu"],
   ["G", "Grille (bibliothèque)"],
-  ["E", "Loupe (tri rapide)"],
+  ["E", "Zoom (tri rapide)"],
   ["D", "Mode développement"],
+  ["Ctrl/Maj + clic", "Sélection multiple (clic droit pour exporter…)"],
   ["Espace ou Z", "Zoom ajusté ↔ 100 % (glisser pour naviguer)"],
   ["\\", "Avant / après"],
   ["J", "Alertes d'écrêtage"],
@@ -79,12 +80,16 @@ export function handleGlobalKey(ev: KeyboardEvent) {
     case "x": s.setFlag("reject"); break;
     case "u": s.setFlag("none"); break;
     case "g": s.setView("grid"); break;
-    case "e":
-      if (s.currentId !== null) s.setView("loupe");
+    case "e": {
+      const t = s.currentId ?? s.photos[0]?.id ?? null;
+      if (t !== null) { if (s.currentId === null) s.selectPhoto(t); s.setView("loupe"); }
       break;
-    case "d":
-      if (s.currentId !== null) void s.openDevelop(s.currentId);
+    }
+    case "d": {
+      const t = s.currentId ?? s.photos[0]?.id ?? null;
+      if (t !== null) void s.openDevelop(t);
       break;
+    }
     case "j":
       if (s.view === "develop") s.setUI({ showClipping: !s.showClipping });
       break;

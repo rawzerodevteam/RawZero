@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from .. import config, db, previews, raw_loader
@@ -22,9 +22,20 @@ def _safe_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._\-éèêëàâäôöûüçÉÈÀÔ ]+", "_", name) or "photo"
 
 
+def _resolve_project(project_id: int | None) -> int:
+    """Retourne un project_id valide : celui demandé, sinon le premier projet (la « maison »)."""
+    if project_id:
+        row = db.query_one("SELECT id FROM projects WHERE id=?", (project_id,))
+        if row:
+            return row["id"]
+    row = db.query_one("SELECT id FROM projects ORDER BY id LIMIT 1")
+    return row["id"] if row else 0
+
+
 def import_bytes_or_file(filename: str, src: Path | None = None,
-                         data: bytes | None = None) -> dict:
+                         data: bytes | None = None, project_id: int | None = None) -> dict:
     """Copie dans la bibliothèque, déduplique par hash, indexe, génère les previews."""
+    project_id = _resolve_project(project_id)
     filename = _safe_name(filename)
     ext = Path(filename).suffix.lower()
     if ext not in ALLOWED_EXTS:
@@ -61,12 +72,12 @@ def import_bytes_or_file(filename: str, src: Path | None = None,
     width, height = raw_loader.image_dimensions(dest)
     photo_id = db.execute(
         """INSERT INTO photos (filename, relpath, hash, ext, is_raw, width, height,
-           captured_at, imported_at, camera, lens, iso, aperture, shutter, focal)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           captured_at, imported_at, camera, lens, iso, aperture, shutter, focal, project_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (dest.name, str(sub / dest.name).replace("\\", "/"), digest, ext,
          int(raw_loader.is_raw(dest)), width, height,
          meta["captured_at"], now.isoformat(), meta["camera"], meta["lens"],
-         meta["iso"], meta["aperture"], meta["shutter"], meta["focal"]))
+         meta["iso"], meta["aperture"], meta["shutter"], meta["focal"], project_id))
     try:
         previews.generate_initial_previews(photo_id, dest)
     except Exception as e:
@@ -77,12 +88,12 @@ def import_bytes_or_file(filename: str, src: Path | None = None,
 
 
 @router.post("/import/upload")
-async def import_upload(files: list[UploadFile]):
+async def import_upload(files: list[UploadFile], project_id: int = Form(0)):
     results = []
     for f in files:
         data = await f.read()
         try:
-            results.append(import_bytes_or_file(f.filename or "photo", data=data))
+            results.append(import_bytes_or_file(f.filename or "photo", data=data, project_id=project_id))
         except Exception as e:
             log.exception("Import upload échoué : %s", f.filename)
             results.append({"filename": f.filename, "status": "error", "reason": str(e)})
@@ -118,6 +129,7 @@ def browse(path: str = ""):
 
 class FolderImport(BaseModel):
     paths: list[str]
+    project_id: int = 0
 
 
 @router.post("/import/folder")
@@ -129,7 +141,7 @@ def import_from_folder(req: FolderImport):
             results.append({"filename": rel, "status": "error", "reason": "introuvable"})
             continue
         try:
-            results.append(import_bytes_or_file(target.name, src=target))
+            results.append(import_bytes_or_file(target.name, src=target, project_id=req.project_id))
         except Exception as e:
             log.exception("Import dossier échoué : %s", rel)
             results.append({"filename": rel, "status": "error", "reason": str(e)})

@@ -90,8 +90,15 @@ describe("navigation et vues", () => {
     expect(useStore.getState().view).toBe("grid");
   });
 
-  it("E sans photo courante ne change pas de vue", () => {
+  it("E sans photo courante ouvre la 1ʳᵉ photo en zoom", () => {
     useStore.setState({ currentId: null });
+    press("e");
+    expect(useStore.getState().view).toBe("loupe");
+    expect(useStore.getState().currentId).toBe(1);
+  });
+
+  it("E sans aucune photo ne change pas de vue", () => {
+    useStore.setState({ photos: [], currentId: null });
     press("e");
     expect(useStore.getState().view).toBe("grid");
   });

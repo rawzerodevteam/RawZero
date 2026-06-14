@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { useStore } from "../store";
 
-type Scope = "current" | "all";
+type Scope = "selection" | "current" | "all";
 
 interface Result {
   files: { id: number; name: string; url: string; width: number; height: number }[];
@@ -12,10 +12,13 @@ interface Result {
 export function ExportDialog() {
   const photos = useStore((s) => s.photos);
   const currentId = useStore((s) => s.currentId);
+  const exportIds = useStore((s) => s.exportIds);
+  const setExportIds = useStore((s) => s.setExportIds);
   const saveNow = useStore((s) => s.saveNow);
   const setUI = useStore((s) => s.setUI);
 
-  const [scope, setScope] = useState<Scope>("current");
+  const hasSelection = !!exportIds && exportIds.length > 0;
+  const [scope, setScope] = useState<Scope>(hasSelection ? "selection" : "current");
   const [format, setFormat] = useState("jpeg");
   const [quality, setQuality] = useState(90);
   const [maxSize, setMaxSize] = useState(0); // 0 = pleine résolution
@@ -23,9 +26,11 @@ export function ExportDialog() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
 
-  const ids = scope === "current"
-    ? (currentId !== null ? [currentId] : [])
-    : photos.filter((p) => p.flag !== "reject").map((p) => p.id);
+  const ids = scope === "selection"
+    ? (exportIds ?? [])
+    : scope === "current"
+      ? (currentId !== null ? [currentId] : [])
+      : photos.filter((p) => p.flag !== "reject").map((p) => p.id);
 
   const run = async () => {
     if (!ids.length) return;
@@ -42,7 +47,7 @@ export function ExportDialog() {
     }
   };
 
-  const close = () => setUI({ showExport: false });
+  const close = () => { setExportIds(null); setUI({ showExport: false }); };
 
   return (
     <div className="modal-backdrop" onClick={close}>
@@ -55,6 +60,7 @@ export function ExportDialog() {
         <div className="form-row">
           <label>Photos</label>
           <select value={scope} onChange={(ev) => setScope(ev.target.value as Scope)}>
+            {hasSelection && <option value="selection">Sélection — {exportIds!.length}</option>}
             <option value="current">Photo courante</option>
             <option value="all">Toutes les photos affichées (sauf rejetées) — {photos.filter((p) => p.flag !== "reject").length}</option>
           </select>

@@ -13,16 +13,19 @@ const STATUS_LABELS: Record<ImportResult["status"], string> = {
 export function ImportPanel() {
   const setUI = useStore((s) => s.setUI);
   const loadPhotos = useStore((s) => s.loadPhotos);
+  const loadProjects = useStore((s) => s.loadProjects);
+  const project = useStore((s) => s.projects.find((p) => p.id === s.currentProjectId));
   const [tab, setTab] = useState<Tab>("upload");
   const [results, setResults] = useState<ImportResult[]>([]);
   const [busy, setBusy] = useState(false);
   const close = () => setUI({ showImport: false });
+  const afterImport = async () => { await loadPhotos(); await loadProjects(); };
 
   return (
     <div className="modal-backdrop" onClick={busy ? undefined : close}>
       <div className="modal import-modal" onClick={(ev) => ev.stopPropagation()}>
         <header>
-          <h2>Importer des photos</h2>
+          <h2>Importer dans « {project?.name ?? "Projet"} »</h2>
           <button className="mini-btn" onClick={close} disabled={busy}>✕</button>
         </header>
         <div className="hsl-tabs">
@@ -34,8 +37,8 @@ export function ImportPanel() {
           </button>
         </div>
         {tab === "upload"
-          ? <UploadTab busy={busy} setBusy={setBusy} setResults={setResults} onDone={loadPhotos} />
-          : <FolderTab busy={busy} setBusy={setBusy} setResults={setResults} onDone={loadPhotos} />}
+          ? <UploadTab busy={busy} setBusy={setBusy} setResults={setResults} onDone={afterImport} />
+          : <FolderTab busy={busy} setBusy={setBusy} setResults={setResults} onDone={afterImport} />}
         {results.length > 0 && (
           <ul className="import-results">
             {results.map((r, i) => (
@@ -61,6 +64,7 @@ interface TabProps {
 function UploadTab({ busy, setBusy, setResults, onDone }: TabProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const projectId = useStore((s) => s.currentProjectId);
 
   const importFiles = async (files: File[]) => {
     if (!files.length || busy) return;
@@ -70,7 +74,7 @@ function UploadTab({ busy, setBusy, setResults, onDone }: TabProps) {
       setResults((rs) => rs.map((r, j) => (j === i ? { ...r, status: "uploading" } : r)));
       let res: ImportResult;
       try {
-        res = await api.uploadFile(files[i]);
+        res = await api.uploadFile(files[i], projectId);
       } catch (e) {
         res = { filename: files[i].name, status: "error", reason: String(e) };
       }
@@ -113,6 +117,7 @@ function FolderTab({ busy, setBusy, setResults, onDone }: TabProps) {
   const [path, setPath] = useState("");
   const [listing, setListing] = useState<Awaited<ReturnType<typeof api.browseImport>> | null>(null);
   const [error, setError] = useState("");
+  const projectId = useStore((s) => s.currentProjectId);
 
   const browse = (p: string) => {
     api.browseImport(p)
@@ -126,7 +131,7 @@ function FolderTab({ busy, setBusy, setResults, onDone }: TabProps) {
     setBusy(true);
     setResults(paths.map((p) => ({ filename: p.split("/").pop() ?? p, status: "pending" })));
     try {
-      const res = await api.importFolder(paths);
+      const res = await api.importFolder(paths, projectId);
       setResults(res);
       await onDone();
     } catch (e) {

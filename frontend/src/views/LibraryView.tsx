@@ -2,7 +2,10 @@ import { useEffect, useRef } from "react";
 import { api } from "../api";
 import { Filmstrip } from "../components/Filmstrip";
 import { ImageViewer } from "../components/ImageViewer";
+import { ModeTabs } from "../components/ModeTabs";
+import { ProjectMenu } from "../components/ProjectMenu";
 import { StarRating } from "../components/StarRating";
+import { useThumbSelection } from "../components/useThumbSelection";
 import { useStore } from "../store";
 import { COLOR_HEX, COLOR_VALUES, FLAG_LABELS } from "../types";
 
@@ -24,17 +27,18 @@ export function LibraryView() {
 function LeftRail() {
   const view = useStore((s) => s.view);
   const currentId = useStore((s) => s.currentId);
+  const photos = useStore((s) => s.photos);
   const setView = useStore((s) => s.setView);
-  const openDevelop = useStore((s) => s.openDevelop);
+  const selectPhoto = useStore((s) => s.selectPhoto);
   const setUI = useStore((s) => s.setUI);
+  const zoomTarget = currentId ?? photos[0]?.id ?? null;
   return (
     <nav className="left-rail">
       <button className={"rail-btn" + (view === "grid" ? " active" : "")}
         onClick={() => setView("grid")} title="Grille (G)">▦<span>Grille</span></button>
-      <button className={"rail-btn" + (view === "loupe" ? " active" : "")} disabled={currentId === null}
-        onClick={() => setView("loupe")} title="Loupe (E)">⊙<span>Loupe</span></button>
-      <button className="rail-btn" disabled={currentId === null}
-        onClick={() => currentId !== null && void openDevelop(currentId)} title="Développer (D)">✎<span>Développer</span></button>
+      <button className={"rail-btn" + (view === "loupe" ? " active" : "")} disabled={zoomTarget === null}
+        onClick={() => { if (zoomTarget !== null) { if (currentId === null) selectPhoto(zoomTarget); setView("loupe"); } }}
+        title="Zoom (E)">⊙<span>Zoom</span></button>
       <span className="rail-spacer" />
       <button className="rail-btn" onClick={() => setUI({ showImport: true })} title="Importer">⤓<span>Importer</span></button>
       <button className="rail-btn export" onClick={() => setUI({ showExport: true })}
@@ -47,10 +51,14 @@ function Toolbar() {
   const filters = useStore((s) => s.filters);
   const setFilters = useStore((s) => s.setFilters);
   const photos = useStore((s) => s.photos);
+  const view = useStore((s) => s.view);
+  const gridSize = useStore((s) => s.gridSize);
   const setUI = useStore((s) => s.setUI);
   return (
     <div className="toolbar">
       <strong className="brand">RawStudio</strong>
+      <ProjectMenu />
+      <ModeTabs />
       <span className="dim">{photos.length} photo{photos.length > 1 ? "s" : ""}</span>
       <span className="sep" />
       <label>Note ≥</label>
@@ -82,6 +90,13 @@ function Toolbar() {
         <option value="filename">Nom de fichier</option>
       </select>
       <span className="spacer" />
+      {view === "grid" && (
+        <label className="grid-size" title="Taille des vignettes">
+          ▦
+          <input type="range" min={140} max={460} step={10} value={gridSize}
+            onChange={(ev) => setUI({ gridSize: Number(ev.target.value) })} />
+        </label>
+      )}
       <button className="btn" onClick={() => setUI({ showImport: true })}>⤓ Importer</button>
       <button className="btn" onClick={() => setUI({ showExport: true })}>⤒ Exporter</button>
       <button className="btn" title="Raccourcis (?)" onClick={() => setUI({ showHelp: true })}>?</button>
@@ -92,11 +107,14 @@ function Toolbar() {
 function Grid() {
   const photos = useStore((s) => s.photos);
   const currentId = useStore((s) => s.currentId);
+  const selection = useStore((s) => s.selection);
   const versions = useStore((s) => s.editsVersion);
   const selectPhoto = useStore((s) => s.selectPhoto);
   const setView = useStore((s) => s.setView);
   const setRating = useStore((s) => s.setRating);
   const setUI = useStore((s) => s.setUI);
+  const gridSize = useStore((s) => s.gridSize);
+  const { onClick, onContextMenu } = useThumbSelection();
   const ref = useRef<HTMLDivElement>(null);
 
   // garde la photo courante visible quand on navigue au clavier
@@ -117,13 +135,16 @@ function Grid() {
   }
 
   return (
-    <div className="grid" ref={ref}>
+    <div className="grid" ref={ref}
+      style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${gridSize}px, 1fr))` }}>
       {photos.map((p) => (
         <div
           key={p.id}
           data-id={p.id}
-          className={"cell" + (p.id === currentId ? " current" : "") + (p.flag === "reject" ? " rejected" : "")}
-          onClick={() => selectPhoto(p.id)}
+          className={"cell" + (p.id === currentId ? " current" : "") +
+            (selection.includes(p.id) ? " selected" : "") + (p.flag === "reject" ? " rejected" : "")}
+          onClick={(ev) => onClick(ev, p.id)}
+          onContextMenu={(ev) => onContextMenu(ev, p.id)}
           onDoubleClick={() => { selectPhoto(p.id); setView("loupe"); }}
         >
           <div className="cell-img">

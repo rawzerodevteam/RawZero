@@ -490,3 +490,26 @@ def auto_adjust(base: np.ndarray, edits: dict) -> dict:
     e["wb"]["temp"] = round(temp, 1)
     e["wb"]["tint"] = round(tint, 1)
     return e
+
+
+def wb_from_point(base: np.ndarray, edits: dict, x: float, y: float,
+                  radius: float = 0.02) -> dict:
+    """Pipette balance des blancs : température/teinte qui neutralisent le point (x, y).
+
+    (x, y) sont normalisés (0..1) dans l'image *affichée* (recadrée). On échantillonne
+    un petit patch de la base neutre (géométrie appliquée, sans WB) et on résout les
+    gains qui égalisent les canaux en linéaire — même math que `auto_adjust`, donc le
+    résultat est une valeur absolue indépendante des réglages WB courants."""
+    e = merge_edits(edits)
+    img = apply_geometry(base.astype(np.float32, copy=True), e["geometry"])
+    h, w = img.shape[:2]
+    cx = int(np.clip(x, 0.0, 1.0) * (w - 1))
+    cy = int(np.clip(y, 0.0, 1.0) * (h - 1))
+    r = max(1, int(round(radius * max(w, h))))
+    patch = img[max(0, cy - r):cy + r + 1, max(0, cx - r):cx + r + 1]
+    lin = srgb_to_linear(patch)
+    mr, mg, mb = [max(float(lin[..., i].mean()), 1e-4) for i in range(3)]
+    rm, bm = math.log2(mg / mr), math.log2(mg / mb)
+    temp = float(np.clip(100.0 * (rm - bm), -100.0, 100.0))
+    tint = float(np.clip(100.0 * (rm + bm) / 0.9, -100.0, 100.0))
+    return {"temp": round(temp, 1), "tint": round(tint, 1)}

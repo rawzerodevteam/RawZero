@@ -2,6 +2,7 @@
 import json
 import sqlite3
 import threading
+from datetime import datetime
 from typing import Any, Optional
 
 from . import config
@@ -39,6 +40,11 @@ CREATE TABLE IF NOT EXISTS presets (
   settings TEXT NOT NULL,
   builtin INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS projects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS albums (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT UNIQUE NOT NULL,
@@ -63,7 +69,24 @@ def get_conn() -> sqlite3.Connection:
         _conn.execute("PRAGMA foreign_keys=ON")
         with _conn:
             _conn.executescript(SCHEMA)
+            _migrate(_conn)
     return _conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Migrations légères : colonne project_id + projet par défaut (catalogue → projets)."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(photos)")]
+    if "project_id" not in cols:
+        conn.execute("ALTER TABLE photos ADD COLUMN project_id INTEGER")
+    # Toujours garder au moins un projet (la « maison » des photos existantes)
+    row = conn.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
+    if row is None:
+        cur = conn.execute("INSERT INTO projects (name, created_at) VALUES (?, ?)",
+                           ("Projet par défaut", datetime.now().isoformat()))
+        default_id = cur.lastrowid
+    else:
+        default_id = row[0]
+    conn.execute("UPDATE photos SET project_id=? WHERE project_id IS NULL", (default_id,))
 
 
 def query(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
