@@ -48,7 +48,7 @@ export interface LocalAdjustValues {
 
 export interface LocalAdjust {
   id: string;
-  type: "linear" | "radial" | "brush";
+  type: "linear" | "radial" | "brush" | "ai";
   params: Record<string, any>;
   invert: boolean;
   adjust: LocalAdjustValues;

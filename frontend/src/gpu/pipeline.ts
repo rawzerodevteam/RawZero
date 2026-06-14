@@ -348,6 +348,9 @@ export class GpuPipeline {
   private curveTex: WebGLTexture;
   private brushTex = new Map<string, { tex: WebGLTexture; key: string }>(); // masque pinceau rasterisé, par id
   private brushCanvas?: HTMLCanvasElement;
+  private aiTex = new Map<string, { tex: WebGLTexture; ref: string; loaded: boolean }>(); // bitmap masque IA, par id
+  /** Appelé quand un bitmap de masque IA fini de charger → demande un nouveau rendu. */
+  requestRerender: (() => void) | null = null;
   private lastCurve = "";
   private lastGeo = "";
   private geoRT: RT | null = null;

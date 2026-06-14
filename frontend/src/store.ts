@@ -40,6 +40,8 @@ interface Store {
   brushSize: number;
   brushErase: boolean;
   cropAspect: number | null;
+  aiMaskAvailable: boolean;       // moteur + modèle de segmentation présents
+  aiMaskBusy: boolean;            // calcul d'un masque IA en cours
   toast: string;
 
   init(): Promise<void>;
@@ -66,6 +68,7 @@ interface Store {
   removeCurrent(deleteFile: boolean): Promise<void>;
   removeSelection(deleteFile: boolean): Promise<void>;
 
+  createAutoMask(kind: string): Promise<void>;
   updateEdits(fn: (e: EditState) => void, commit?: boolean): void;
   startDrag(): void;
   endDrag(): void;
@@ -118,12 +121,15 @@ export const useStore = create<Store>((set, get) => ({
   brushSize: 0.08,
   brushErase: false,
   cropAspect: null,
+  aiMaskAvailable: false,
+  aiMaskBusy: false,
   toast: "",
 
   // Au démarrage : charge les projets puis les photos du projet courant.
   async init() {
     await get().loadProjects();
     await get().loadPhotos();
+    void api.autoMaskAvailable().then((available) => set({ aiMaskAvailable: available }));
   },
 
   async loadProjects() {
@@ -289,6 +295,23 @@ export const useStore = create<Store>((set, get) => ({
     const rest = photos.filter((p) => p.id !== currentId);
     set({ photos: rest, currentId: rest.length ? rest[Math.min(idx, rest.length - 1)].id : null });
     if (!rest.length) set({ view: "grid" });
+  },
+
+  // Masque IA : calcule côté serveur puis ajoute le masque retourné aux retouches locales.
+  async createAutoMask(kind) {
+    const { currentId, edits, aiMaskBusy } = get();
+    if (currentId === null || !edits || aiMaskBusy) return;
+    set({ aiMaskBusy: true });
+    try {
+      const local = await api.autoMask(currentId, edits, kind);
+      get().updateEdits((e) => { e.locals.push(local); });
+      set({ selectedLocalId: local.id, activeTool: "none", showMaskOverlay: true });
+      get().notify("Masque « sujet » créé");
+    } catch (err) {
+      get().notify(`Masque IA impossible : ${err}`);
+    } finally {
+      set({ aiMaskBusy: false });
+    }
   },
 
   updateEdits(fn, commit = true) {

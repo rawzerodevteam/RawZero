@@ -10,6 +10,8 @@ ORIGINALS_DIR = DATA_DIR / "originals"
 THUMBS_DIR = DATA_DIR / "cache" / "thumbs"
 PREVIEWS_DIR = DATA_DIR / "cache" / "previews"
 BASE_DIR = DATA_DIR / "cache" / "base"
+MASKS_DIR = DATA_DIR / "cache" / "masks"   # masques IA rasterisés (PNG mono-canal)
+MODELS_DIR = DATA_DIR / "models"           # modèles ONNX (déposés manuellement)
 EXPORTS_DIR = DATA_DIR / "exports"
 DB_PATH = DATA_DIR / "catalog.db"
 
@@ -24,5 +26,5 @@ IMG_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
 
 
 def ensure_dirs() -> None:
-    for d in (ORIGINALS_DIR, THUMBS_DIR, PREVIEWS_DIR, BASE_DIR, EXPORTS_DIR):
+    for d in (ORIGINALS_DIR, THUMBS_DIR, PREVIEWS_DIR, BASE_DIR, MASKS_DIR, EXPORTS_DIR):
         d.mkdir(parents=True, exist_ok=True)

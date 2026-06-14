@@ -4,7 +4,7 @@ import { useStore, type Tool } from "../store";
 import { defaultLocalAdjust, type LocalAdjustValues } from "../types";
 
 const TYPE_LABELS: Record<string, string> = {
-  linear: "Dégradé linéaire", radial: "Filtre radial", brush: "Pinceau",
+  linear: "Dégradé linéaire", radial: "Filtre radial", brush: "Pinceau", ai: "Sujet (IA)",
 };
 
 const TOOLS: { tool: Tool; label: string; hint: string }[] = [
@@ -22,6 +22,9 @@ export function LocalPanel() {
   const brushSize = useStore((s) => s.brushSize);
   const brushErase = useStore((s) => s.brushErase);
   const setUI = useStore((s) => s.setUI);
+  const aiMaskAvailable = useStore((s) => s.aiMaskAvailable);
+  const aiMaskBusy = useStore((s) => s.aiMaskBusy);
+  const createAutoMask = useStore((s) => s.createAutoMask);
   if (!edits) return null;
 
   const selected = edits.locals.find((l) => l.id === selectedLocalId) ?? null;
@@ -48,6 +51,18 @@ export function LocalPanel() {
       </div>
       {activeTool !== "none" && activeTool !== "crop" && (
         <p className="hint">{TOOLS.find((t) => t.tool === activeTool)?.hint}</p>
+      )}
+      {aiMaskAvailable && (
+        <div className="row-actions">
+          <button
+            className={"btn ai-mask" + (aiMaskBusy ? " busy" : "")}
+            disabled={aiMaskBusy}
+            title="Détecte automatiquement le sujet principal et crée un masque"
+            onClick={() => void createAutoMask("subject")}
+          >
+            {aiMaskBusy ? "✨ Calcul…" : "✨ Sélectionner le sujet"}
+          </button>
+        </div>
       )}
       {activeTool === "brush" && (
         <>

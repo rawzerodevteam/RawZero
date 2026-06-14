@@ -8,6 +8,8 @@ from typing import Optional
 import cv2
 import numpy as np
 
+from . import config
+
 
 def _grid(h: int, w: int) -> tuple[np.ndarray, np.ndarray]:
     y, x = np.mgrid[0:h, 0:w].astype(np.float32)
@@ -76,6 +78,28 @@ def _brush_mask(params: dict, h: int, w: int) -> np.ndarray:
     return np.clip(mask, 0.0, 1.0)
 
 
+def _ai_mask(params: dict, h: int, w: int) -> Optional[np.ndarray]:
+    """Masque IA : recharge le bitmap stocké (PNG mono-canal) et le redimensionne à (h, w).
+
+    `params['ref']` est un chemin relatif sous MASKS_DIR (« {photo_id}/{mask_id}.png »).
+    Un feather optionnel adoucit les bords après agrandissement (utile au full-res export)."""
+    ref = str(params.get("ref", ""))
+    if not ref:
+        return None
+    path = (config.MASKS_DIR / ref).resolve()
+    if config.MASKS_DIR.resolve() not in path.parents or not path.exists():
+        return None
+    raw = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if raw is None:
+        return None
+    mask = cv2.resize(raw.astype(np.float32) / 255.0, (w, h), interpolation=cv2.INTER_LINEAR)
+    feather = float(np.clip(params.get("feather", 0.0), 0.0, 1.0))
+    if feather > 0:
+        sigma = max(feather * 0.02 * max(h, w), 0.5)
+        mask = cv2.GaussianBlur(mask, (0, 0), sigma)
+    return np.clip(mask, 0.0, 1.0).astype(np.float32)
+
+
 def build_mask(local: dict, h: int, w: int) -> Optional[np.ndarray]:
     kind = local.get("type", "")
     params = local.get("params") or {}
@@ -85,7 +109,11 @@ def build_mask(local: dict, h: int, w: int) -> Optional[np.ndarray]:
         mask = _radial_mask(params, h, w)
     elif kind == "brush":
         mask = _brush_mask(params, h, w)
+    elif kind == "ai":
+        mask = _ai_mask(params, h, w)
     else:
+        return None
+    if mask is None:
         return None
     if local.get("invert"):
         mask = 1.0 - mask

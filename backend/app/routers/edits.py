@@ -1,11 +1,16 @@
 """Sauvegarde des edits, auto-réglages, presets (filtres globaux)."""
 import json
+import uuid
 from typing import Any
 
+import cv2
+import numpy as np
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
+
 from pydantic import BaseModel
 
-from .. import config, db, pipeline, previews
+from .. import config, db, pipeline, previews, segment
 from .photos import get_photo_row
 
 router = APIRouter()
@@ -42,6 +47,75 @@ def wb_pick(photo_id: int, body: WbPickBody):
     row = get_photo_row(photo_id)
     base = previews.get_base(photo_id, config.ORIGINALS_DIR / row["relpath"])
     return pipeline.wb_from_point(base, body.edits, body.x, body.y)
+
+
+# ------------------------------------------------------------- masques IA
+
+# Borne de stockage du masque (bord long) : assez fin pour un upscale propre, fichier léger.
+_MASK_STORE_SIZE = 1024
+
+
+@router.get("/automask/available")
+def automask_available():
+    """Indique au client si les masques IA sont utilisables (moteur + modèle présents)."""
+    return {"available": segment.available()}
+
+
+class AutoMaskBody(EditsBody):
+    kind: str = "subject"
+
+
+@router.post("/photos/{photo_id}/automask")
+def automask(photo_id: int, body: AutoMaskBody):
+    """Calcule un masque IA, le stocke (PNG), et renvoie le descripteur `local` à ajouter aux edits.
+
+    Le masque est calculé sur l'image *géométrie appliquée* (recadrée) pour s'aligner sur
+    l'espace des autres masques, puis stocké normalisé sous MASKS_DIR/{photo}/{id}.png."""
+    if body.kind != "subject":
+        raise HTTPException(422, "Type de masque IA non pris en charge")
+    if not segment.available():
+        raise HTTPException(503, "Masque IA indisponible (onnxruntime ou modèle absent)")
+    row = get_photo_row(photo_id)
+    base = previews.get_base(photo_id, config.ORIGINALS_DIR / row["relpath"])
+    e = pipeline.merge_edits(body.edits)
+    img = pipeline.apply_geometry(base.astype(np.float32, copy=True), e["geometry"])
+    small = _resize_long_edge(img, _MASK_STORE_SIZE)
+    try:
+        mask = segment.subject_mask(small)
+    except segment.SegmentationUnavailable as ex:
+        raise HTTPException(503, str(ex))
+    if float(mask.max()) < 1e-3:
+        raise HTTPException(422, "Aucun sujet détecté")
+
+    mask_id = "ai-" + uuid.uuid4().hex[:8]
+    ref = f"{photo_id}/{mask_id}.png"
+    out = (config.MASKS_DIR / ref)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(out), (np.clip(mask, 0.0, 1.0) * 255).astype(np.uint8))
+    return {
+        "id": mask_id, "type": "ai",
+        "params": {"ref": ref, "kind": body.kind, "feather": 0.0},
+        "invert": False, "adjust": dict(pipeline.LOCAL_ADJUST_DEFAULTS),
+    }
+
+
+def _resize_long_edge(arr: np.ndarray, size: int) -> np.ndarray:
+    h, w = arr.shape[:2]
+    if max(h, w) <= size:
+        return arr
+    f = size / max(h, w)
+    return cv2.resize(arr, (max(int(w * f), 1), max(int(h * f), 1)), interpolation=cv2.INTER_AREA)
+
+
+@router.get("/masks/{photo_id}/{name}")
+def get_mask_png(photo_id: int, name: str):
+    """Sert le bitmap d'un masque IA (consommé par l'aperçu GPU côté navigateur)."""
+    if "/" in name or "\\" in name or ".." in name:
+        raise HTTPException(400, "Nom invalide")
+    path = (config.MASKS_DIR / str(photo_id) / name).resolve()
+    if config.MASKS_DIR.resolve() not in path.parents or not path.exists():
+        raise HTTPException(404, "Masque introuvable")
+    return FileResponse(path, media_type="image/png")
 
 
 BUILTIN_PRESETS: list[tuple[str, dict]] = [

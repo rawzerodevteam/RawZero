@@ -1,4 +1,4 @@
-import type { EditState, ImportResult, Photo, Preset, Project } from "./types";
+import type { EditState, ImportResult, LocalAdjust, Photo, Preset, Project } from "./types";
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -130,6 +130,26 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ edits, x, y }),
     }));
+  },
+
+  async autoMaskAvailable(): Promise<boolean> {
+    try {
+      return (await json<{ available: boolean }>(await fetch("/api/automask/available"))).available;
+    } catch {
+      return false;
+    }
+  },
+
+  async autoMask(id: number, edits: EditState, kind: string): Promise<LocalAdjust> {
+    return json(await fetch(`/api/photos/${id}/automask`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ edits, kind }),
+    }));
+  },
+
+  maskUrl(ref: string): string {
+    return `/api/masks/${ref}`;
   },
 
   async listPresets(): Promise<Preset[]> {

@@ -8,6 +8,7 @@ Stratégie performance :
 """
 import json
 import logging
+import shutil
 import threading
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
@@ -107,6 +108,9 @@ def invalidate(photo_id: int) -> None:
         _base_cache.pop(photo_id, None)
     for p in (thumb_path(photo_id), preview_path(photo_id), base_path(photo_id)):
         p.unlink(missing_ok=True)
+    mask_dir = config.MASKS_DIR / str(photo_id)
+    if mask_dir.exists():
+        shutil.rmtree(mask_dir, ignore_errors=True)
 
 
 def full_long_edge(row: dict) -> int:
