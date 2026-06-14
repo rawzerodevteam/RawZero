@@ -134,6 +134,10 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
   overflow: hidden;
   cursor: pointer;
   transition: border-color 0.1s;
+  /* Le navigateur saute le layout/paint des cellules hors écran (grosses grilles fluides),
+     tout en les gardant dans le DOM → le rectangle de sélection continue de les atteindre. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 240px;
 }
 .cell:hover { border-color: var(--border); }
 .cell.current { border-color: var(--accent); }

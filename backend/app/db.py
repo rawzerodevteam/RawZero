@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS photos (
   rating INTEGER NOT NULL DEFAULT 0,
   flag TEXT NOT NULL DEFAULT 'none',
   color TEXT NOT NULL DEFAULT '',
-  edits TEXT NOT NULL DEFAULT '{}'
+  edits TEXT NOT NULL DEFAULT '{}',
+  edited INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_photos_captured ON photos(captured_at);
 CREATE TABLE IF NOT EXISTS presets (
@@ -78,6 +79,20 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = [r[1] for r in conn.execute("PRAGMA table_info(photos)")]
     if "project_id" not in cols:
         conn.execute("ALTER TABLE photos ADD COLUMN project_id INTEGER")
+    # Colonne `edited` : calculée une fois ici puis maintenue au save, pour éviter de
+    # recalculer `edits_meaningful` (deepcopy) à chaque listing du catalogue.
+    if "edited" not in cols:
+        conn.execute("ALTER TABLE photos ADD COLUMN edited INTEGER NOT NULL DEFAULT 0")
+        from . import pipeline
+        updates = []
+        for r in conn.execute("SELECT id, edits FROM photos").fetchall():
+            try:
+                parsed = json.loads(r[1] or "{}")
+            except json.JSONDecodeError:
+                parsed = {}
+            updates.append((1 if pipeline.edits_meaningful(parsed) else 0, r[0]))
+        if updates:
+            conn.executemany("UPDATE photos SET edited=? WHERE id=?", updates)
     # Toujours garder au moins un projet (la « maison » des photos existantes)
     row = conn.execute("SELECT id FROM projects ORDER BY id LIMIT 1").fetchone()
     if row is None:
@@ -119,15 +134,14 @@ def executemany(sql: str, seq: list[tuple]) -> None:
 
 
 def photo_to_dict(row: sqlite3.Row, with_edits: bool = False) -> dict[str, Any]:
-    from . import pipeline  # import tardif : évite tout cycle au chargement
     d = {k: row[k] for k in row.keys()}
-    try:
-        parsed = json.loads(d.get("edits") or "{}")
-    except json.JSONDecodeError:
-        parsed = {}
-    d["edited"] = pipeline.edits_meaningful(parsed)
+    # `edited` lu depuis la colonne persistée (plus de deepcopy/compare au listing).
+    d["edited"] = bool(d.get("edited", 0))
     if with_edits:
-        d["edits"] = parsed
+        try:
+            d["edits"] = json.loads(row["edits"] or "{}")
+        except json.JSONDecodeError:
+            d["edits"] = {}
     else:
         d.pop("edits", None)
     d.pop("relpath", None)

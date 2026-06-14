@@ -79,7 +79,7 @@ def import_bytes_or_file(filename: str, src: Path | None = None,
          meta["captured_at"], now.isoformat(), meta["camera"], meta["lens"],
          meta["iso"], meta["aperture"], meta["shutter"], meta["focal"], project_id))
     try:
-        previews.generate_initial_previews(photo_id, dest)
+        previews.generate_initial_previews(photo_id, dest, meta.get("_orientation"))
     except Exception as e:
         log.warning("Previews initiaux impossibles pour %s : %s", dest.name, e)
     row = db.query_one("SELECT * FROM photos WHERE id=?", (photo_id,))

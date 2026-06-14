@@ -23,8 +23,8 @@ class EditsBody(BaseModel):
 @router.put("/photos/{photo_id}/edits")
 def save_edits(photo_id: int, body: EditsBody):
     get_photo_row(photo_id)
-    db.execute("UPDATE photos SET edits=? WHERE id=?",
-               (json.dumps(body.edits), photo_id))
+    db.execute("UPDATE photos SET edits=?, edited=? WHERE id=?",
+               (json.dumps(body.edits), int(pipeline.edits_meaningful(body.edits)), photo_id))
     previews.schedule_preview_refresh(photo_id)
     return {"ok": True}
 

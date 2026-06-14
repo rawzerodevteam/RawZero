@@ -49,7 +49,7 @@ def denoised(photo_id: int, max_size: int = 1600):
                     headers={"Cache-Control": "no-store"})
 
 
-def _cached_file(photo_id: int, path, fallback_quality: int) -> Response:
+def _cached_file(photo_id: int, path, versioned: bool) -> Response:
     if not path.exists():
         row = get_photo_row(photo_id)
         try:
@@ -57,19 +57,22 @@ def _cached_file(photo_id: int, path, fallback_quality: int) -> Response:
         except Exception as e:
             log.warning("Génération preview à la volée échouée #%s : %s", photo_id, e)
     if path.exists():
-        return FileResponse(path, media_type="image/jpeg",
-                            headers={"Cache-Control": "no-cache"})
-    return Response(content=previews.placeholder_jpeg(), media_type="image/jpeg")
+        # L'URL est cache-bustée par ?v= (incrémenté après chaque édition) → on peut servir
+        # « immutable » : plus de revalidation à chaque montage de grille / scroll.
+        cache = "public, max-age=31536000, immutable" if versioned else "no-cache"
+        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": cache})
+    return Response(content=previews.placeholder_jpeg(), media_type="image/jpeg",
+                    headers={"Cache-Control": "no-store"})
 
 
 @router.get("/photos/{photo_id}/thumb")
 def thumb(photo_id: int, v: Optional[str] = None):
-    return _cached_file(photo_id, previews.thumb_path(photo_id), 82)
+    return _cached_file(photo_id, previews.thumb_path(photo_id), versioned=v is not None)
 
 
 @router.get("/photos/{photo_id}/preview")
 def preview(photo_id: int, v: Optional[str] = None):
-    return _cached_file(photo_id, previews.preview_path(photo_id), 88)
+    return _cached_file(photo_id, previews.preview_path(photo_id), versioned=v is not None)
 
 
 @router.get("/photos/{photo_id}/original")

@@ -63,9 +63,11 @@ def _save_jpeg_u8(arr: np.ndarray, path: Path, quality: int = 86) -> None:
                 [int(cv2.IMWRITE_JPEG_QUALITY), quality])
 
 
-def generate_initial_previews(photo_id: int, original: Path) -> None:
-    """À l'import : préférer le JPEG embarqué (pas de décodage RAW complet)."""
-    img = raw_loader.extract_embedded_jpeg(original)
+def generate_initial_previews(photo_id: int, original: Path, orientation: "int | None" = None) -> None:
+    """À l'import : préférer le JPEG embarqué (pas de décodage RAW complet).
+
+    `orientation` : valeur EXIF déjà connue à l'import, transmise pour ne pas re-lire l'EXIF."""
+    img = raw_loader.extract_embedded_jpeg(original, orientation)
     if img is not None:
         arr = np.asarray(img.convert("RGB"))
     else:
@@ -100,7 +102,10 @@ def get_base(photo_id: int, original: Path) -> np.ndarray:
 
 
 def _decode_base(photo_id: int, original: Path) -> np.ndarray:
-    full = raw_loader.decode_full(original)
+    # La base est bornée à BASE_SIZE (2560) : un dématriçage demi-résolution suffit largement
+    # pour les RAW modernes (≥ 5000 px → ≥ 2500 px) et divise ~par 2 le temps de décodage.
+    # L'export, lui, décode toujours en pleine résolution.
+    full = raw_loader.decode_full(original, half_size=True)
     arr = _resize_long_edge(full, config.BASE_SIZE)
     del full
     try:

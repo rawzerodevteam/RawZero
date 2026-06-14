@@ -18,8 +18,12 @@ def is_raw(path: Path) -> bool:
     return path.suffix.lower() in config.RAW_EXTS
 
 
-def decode_full(path: Path) -> np.ndarray:
-    """Décode en float32 RGB 0..1 (sRGB), pleine résolution."""
+def decode_full(path: Path, half_size: bool = False) -> np.ndarray:
+    """Décode en float32 RGB 0..1 (sRGB).
+
+    `half_size=True` : demande à LibRaw un dématriçage demi-résolution (≈¼ des pixels,
+    ~2× plus rapide). Utilisé pour la base de développement (≤ 2560 px de toute façon) ;
+    l'export garde la pleine résolution."""
     if is_raw(path):
         import rawpy
         with rawpy.imread(str(path)) as raw:
@@ -28,6 +32,7 @@ def decode_full(path: Path) -> np.ndarray:
                 no_auto_bright=True,
                 output_bps=16,
                 output_color=rawpy.ColorSpace.sRGB,
+                half_size=half_size,
             )
         return rgb16.astype(np.float32) / 65535.0
     img = Image.open(path)
@@ -39,8 +44,10 @@ def decode_full(path: Path) -> np.ndarray:
     return np.asarray(img, dtype=np.float32) / 255.0
 
 
-def extract_embedded_jpeg(path: Path) -> Optional[Image.Image]:
-    """JPEG embarqué d'un RAW (rapide, pour le mode tri). None si indisponible."""
+def extract_embedded_jpeg(path: Path, orientation: Optional[int] = None) -> Optional[Image.Image]:
+    """JPEG embarqué d'un RAW (rapide, pour le mode tri). None si indisponible.
+
+    `orientation` : valeur EXIF déjà connue (évite de re-parser l'EXIF). Si None, on la lit."""
     if not is_raw(path):
         return None
     try:
@@ -55,14 +62,14 @@ def extract_embedded_jpeg(path: Path) -> Optional[Image.Image]:
                 img.load()
             else:  # bitmap
                 img = Image.fromarray(thumb.data)
-        return _apply_exif_orientation(img, path)
+        return _apply_exif_orientation(img, path, orientation)
     except Exception as e:  # fichier corrompu, format exotique…
         log.warning("Thumb embarqué illisible pour %s : %s", path.name, e)
         return None
 
 
-def _apply_exif_orientation(img: Image.Image, path: Path) -> Image.Image:
-    ori = read_exif(path).get("_orientation", 1)
+def _apply_exif_orientation(img: Image.Image, path: Path, orientation: Optional[int] = None) -> Image.Image:
+    ori = orientation if orientation is not None else read_exif(path).get("_orientation", 1)
     method = {3: Image.ROTATE_180, 6: Image.ROTATE_270, 8: Image.ROTATE_90}.get(ori)
     return img.transpose(method) if method else img
 
