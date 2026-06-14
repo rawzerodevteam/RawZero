@@ -457,6 +457,38 @@ export class GpuPipeline {
     this.lastGeo = ""; this.geoRT = null;     // la géométrie cachée appartenait à l'ancienne photo
     for (const { tex } of this.brushTex.values()) gl.deleteTexture(tex); // idem masques pinceau
     this.brushTex.clear();
+    for (const { tex } of this.aiTex.values()) gl.deleteTexture(tex);    // idem bitmaps masques IA
+    this.aiTex.clear();
+  }
+
+  /** Texture d'un masque IA : noir (= masque vide) tant que le PNG n'est pas chargé,
+   *  puis re-rendu via `requestRerender` une fois le bitmap arrivé. Cache par id. */
+  private aiTexture(loc: LocalAdjust): WebGLTexture {
+    const gl = this.gl;
+    const ref = String(loc.params?.ref ?? "");
+    const cached = this.aiTex.get(loc.id);
+    if (cached && cached.ref === ref) return cached.tex;
+    if (cached) gl.deleteTexture(cached.tex);
+
+    const tex = this.newTex();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+                  new Uint8Array([0, 0, 0, 255]));        // placeholder noir = aucun effet
+    const entry = { tex, ref, loaded: false };
+    this.aiTex.set(loc.id, entry);
+    if (ref) {
+      const img = new Image();
+      img.onload = () => {
+        if (this.aiTex.get(loc.id) !== entry) return;     // photo/masque changé entre-temps
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);    // même orientation que le pinceau
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+        entry.loaded = true;
+        this.requestRerender?.();
+      };
+      img.src = `/api/masks/${ref}`;
+    }
+    return tex;
   }
 
   /** Rasterise un masque pinceau (Canvas2D) → texture, mis en cache et régénéré quand les traits changent.
@@ -653,7 +685,8 @@ export class GpuPipeline {
       // 4) netteté + masque + fondu (ping-pong "lOutA/B" pour ne pas lire/écrire la même RT)
       let shBlur = mid;
       if (a.sharpness > 0) shBlur = this.blur(mid.tex, W, H, Math.max(1.2 * scale, 0.4), "lshA", "lshB", 1);
-      const brush = loc.type === "brush" ? this.brushTexture(loc, W, H) : this.curveTex;
+      const brush = loc.type === "brush" ? this.brushTexture(loc, W, H)
+        : loc.type === "ai" ? this.aiTexture(loc) : this.curveTex;
       const out = this.rt(parity++ % 2 ? "lOutB" : "lOutA", W, H);
       const p = loc.params || {};
       const kind = loc.type === "linear" ? 0 : loc.type === "radial" ? 1 : 2;

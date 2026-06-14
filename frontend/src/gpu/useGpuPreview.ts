@@ -39,6 +39,7 @@ export function useGpuPreview(
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [dims, setDims] = useState({ w: 0, h: 0 });
+  const [asyncTick, setAsyncTick] = useState(0); // re-rendu quand un bitmap de masque IA est chargé
 
   const currentId = useStore((s) => s.currentId);
   const edits = useStore((s) => s.edits);
@@ -57,6 +58,7 @@ export function useGpuPreview(
     if (!gl) { ctxFailed.current = true; setError("WebGL2 indisponible dans ce navigateur."); return; }
     try {
       pipeRef.current = new GpuPipeline(gl);
+      pipeRef.current.requestRerender = () => setAsyncTick((t) => t + 1);
     } catch (e) {
       ctxFailed.current = true; setError(String(e));
     }
@@ -87,7 +89,7 @@ export function useGpuPreview(
     pipeRef.current.render(beforeAfter ? defaultEdits() : edits, skipCrop, showClip);
     const c = canvasRef.current;
     if (c) setDims((d) => (d.w !== c.width || d.h !== c.height ? { w: c.width, h: c.height } : d));
-  }, [active, edits, ready, skipCrop, beforeAfter, showClip, canvasRef]);
+  }, [active, edits, ready, skipCrop, beforeAfter, showClip, canvasRef, asyncTick]);
 
   return { ready, error, dims };
 }

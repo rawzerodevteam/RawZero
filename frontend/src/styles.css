@@ -410,6 +410,9 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
 }
 .pipette-btn:hover { color: var(--text); }
 .pipette-btn.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+.btn.ai-mask { width: 100%; border-color: var(--accent); color: var(--accent); }
+.btn.ai-mask:hover:not(:disabled) { background: var(--accent-soft); }
+.btn.ai-mask.busy { opacity: 0.7; cursor: progress; }
 .chev { color: var(--text-dim); transition: transform 0.12s; font-size: 11px; }
 .chev.open { transform: rotate(90deg); }
 .panel-body { padding: 2px 14px 12px; }

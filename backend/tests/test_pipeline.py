@@ -222,6 +222,26 @@ class TestMasks:
     def test_unknown_type(self):
         assert build_mask({"type": "nope", "params": {}}, 10, 10) is None
 
+    def test_ai_mask_loads_and_resizes(self, tmp_path, monkeypatch):
+        import cv2
+        from app import config, masks
+        # bitmap 1/4 blanc (haut-gauche) stocké comme un masque IA
+        store = tmp_path / "masks"
+        (store / "7").mkdir(parents=True)
+        bmp = np.zeros((50, 50), np.uint8)
+        bmp[:25, :25] = 255
+        cv2.imwrite(str(store / "7" / "ai-x.png"), bmp)
+        monkeypatch.setattr(config, "MASKS_DIR", store)
+        monkeypatch.setattr(masks.config, "MASKS_DIR", store)
+        m = build_mask({"type": "ai", "params": {"ref": "7/ai-x.png"}}, 100, 100)
+        assert m is not None
+        assert m[10, 10] > 0.9       # zone blanche (agrandie)
+        assert m[90, 90] < 0.1       # zone noire
+
+    def test_ai_mask_missing_ref(self):
+        assert build_mask({"type": "ai", "params": {"ref": "nope/none.png"}}, 10, 10) is None
+        assert build_mask({"type": "ai", "params": {}}, 10, 10) is None
+
 
 class TestLocals:
     def test_radial_exposure_only_affects_inside(self):
