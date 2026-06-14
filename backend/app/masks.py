@@ -93,11 +93,13 @@ def _ai_mask(params: dict, h: int, w: int) -> Optional[np.ndarray]:
     if raw is None:
         return None
     mask = cv2.resize(raw.astype(np.float32) / 255.0, (w, h), interpolation=cv2.INTER_LINEAR)
-    feather = float(np.clip(params.get("feather", 0.0), 0.0, 1.0))
-    if feather > 0:
-        sigma = max(feather * 0.02 * max(h, w), 0.5)
-        mask = cv2.GaussianBlur(mask, (0, 0), sigma)
-    return np.clip(mask, 0.0, 1.0).astype(np.float32)
+    # Dureté : contraste autour de 0.5 (identité à 0, quasi binaire à 100) — durcit les bords
+    # et écarte les zones de faible confiance (cf. dureté côté GPU, shader lblend).
+    hardness = float(np.clip(params.get("hardness", 0.0), 0.0, 100.0))
+    if hardness > 0:
+        k = 1.0 + (hardness / 100.0) * 12.0
+        mask = np.clip((mask - 0.5) * k + 0.5, 0.0, 1.0)
+    return mask.astype(np.float32)
 
 
 def build_mask(local: dict, h: int, w: int) -> Optional[np.ndarray]:

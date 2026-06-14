@@ -5,8 +5,11 @@ Tout est en chargement paresseux et **dégrade proprement** : si `onnxruntime` n
 installé ou si le modèle est absent, `available()` renvoie False et `subject_mask` lève
 une `SegmentationUnavailable` (le reste de l'app continue de tourner).
 """
+import hashlib
+import json
 import logging
 import threading
+from collections import OrderedDict
 from typing import Optional
 
 import cv2
@@ -25,6 +28,17 @@ _session = None
 _input_name: Optional[str] = None
 _lock = threading.Lock()
 _load_failed = False
+
+# --- EdgeSAM (segmentation guidée par point) : encodeur 1024², décodeur prompté.
+_SAM_INPUT = 1024
+_SAM_MEAN = np.array([123.675, 116.28, 103.53], np.float32)   # normalisation SAM (sur 0..255)
+_SAM_STD = np.array([58.395, 57.12, 57.375], np.float32)
+_sam_enc = None
+_sam_dec = None
+_sam_lock = threading.Lock()
+_sam_failed = False
+_emb_cache: "OrderedDict[str, tuple]" = OrderedDict()   # embedding par (photo, géométrie)
+_EMB_CACHE_MAX = 4
 
 
 class SegmentationUnavailable(RuntimeError):
@@ -89,3 +103,104 @@ def subject_mask(img: np.ndarray) -> np.ndarray:
     mi, ma = float(pred.min()), float(pred.max())
     pred = (pred - mi) / (ma - mi) if ma > mi else np.zeros_like(pred)
     return cv2.resize(pred.astype(np.float32), (w, h), interpolation=cv2.INTER_LINEAR)
+
+
+# ------------------------------------------------------------- EdgeSAM (clic)
+
+def sam_encoder_path():
+    return config.MODELS_DIR / "edge_sam_3x_encoder.onnx"
+
+
+def sam_decoder_path():
+    return config.MODELS_DIR / "edge_sam_3x_decoder.onnx"
+
+
+def point_available() -> bool:
+    """True si la segmentation au clic (EdgeSAM) est utilisable."""
+    if _sam_failed:
+        return False
+    try:
+        import onnxruntime  # noqa: F401
+    except Exception:
+        return False
+    return sam_encoder_path().exists() and sam_decoder_path().exists()
+
+
+def _get_sam():
+    global _sam_enc, _sam_dec, _sam_failed
+    if _sam_enc is not None:
+        return _sam_enc, _sam_dec
+    with _sam_lock:
+        if _sam_enc is not None:
+            return _sam_enc, _sam_dec
+        try:
+            import onnxruntime as ort
+        except Exception as e:
+            _sam_failed = True
+            raise SegmentationUnavailable("onnxruntime n'est pas installé") from e
+        if not (sam_encoder_path().exists() and sam_decoder_path().exists()):
+            raise SegmentationUnavailable("Modèle EdgeSAM introuvable")
+        try:
+            _sam_enc = ort.InferenceSession(str(sam_encoder_path()), providers=["CPUExecutionProvider"])
+            _sam_dec = ort.InferenceSession(str(sam_decoder_path()), providers=["CPUExecutionProvider"])
+        except Exception as e:
+            _sam_failed = True
+            raise SegmentationUnavailable(f"Chargement EdgeSAM impossible : {e}") from e
+        log.info("Modèle EdgeSAM chargé")
+    return _sam_enc, _sam_dec
+
+
+def _encode(img: np.ndarray) -> tuple:
+    """Encode `img` (float32 RGB 0..1) → (embedding, scale, nh, nw, h, w).
+    Resize côté long à 1024 (façon SAM) puis padding à 1024², normalisation SAM."""
+    enc, _ = _get_sam()
+    h, w = img.shape[:2]
+    scale = _SAM_INPUT / max(h, w)
+    nh, nw = max(round(h * scale), 1), max(round(w * scale), 1)
+    rs = cv2.resize(np.clip(img, 0.0, 1.0) * 255.0, (nw, nh), interpolation=cv2.INTER_LINEAR)
+    x = (rs.astype(np.float32) - _SAM_MEAN) / _SAM_STD
+    padded = np.zeros((_SAM_INPUT, _SAM_INPUT, 3), np.float32)
+    padded[:nh, :nw] = x
+    inp = np.transpose(padded, (2, 0, 1))[None]
+    emb = enc.run(None, {"image": inp})[0]
+    return emb, scale, nh, nw, h, w
+
+
+def point_mask(img: np.ndarray, x: float, y: float, cache_key: str = "") -> np.ndarray:
+    """Masque EdgeSAM pour le point (x, y) normalisé. Renvoie float32 (h, w) dans 0..1.
+    `cache_key` (photo+géométrie) évite de ré-encoder l'image à chaque clic."""
+    _, dec = _get_sam()
+    cached = _emb_cache.get(cache_key) if cache_key else None
+    if cached is None:
+        cached = _encode(img)
+        if cache_key:
+            _emb_cache[cache_key] = cached
+            _emb_cache.move_to_end(cache_key)
+            while len(_emb_cache) > _EMB_CACHE_MAX:
+                _emb_cache.popitem(last=False)
+    emb, scale, nh, nw, h, w = cached
+
+    px = float(np.clip(x, 0.0, 1.0)) * (w - 1) * scale
+    py = float(np.clip(y, 0.0, 1.0)) * (h - 1) * scale
+    coords = np.array([[[px, py]]], np.float32)             # espace 1024
+    labels = np.array([[1.0]], np.float32)                  # 1 = avant-plan
+    scores, masks = dec.run(None, {"image_embeddings": emb,
+                                   "point_coords": coords, "point_labels": labels})
+    masks = np.asarray(masks).reshape(-1, masks.shape[-2], masks.shape[-1])
+    scores = np.asarray(scores).reshape(-1)
+    # SAM renvoie plusieurs granularités (sous-partie / partie / objet entier) ; le meilleur
+    # *score* est souvent une partie (ex. le corps sans les vêtements). On garde donc l'objet
+    # le PLUS GRAND parmi les candidats à score correct → tend vers l'objet entier.
+    areas = (masks > 0).reshape(masks.shape[0], -1).mean(axis=1)
+    keep = scores >= max(float(scores.max()) - 0.2, 0.5)
+    cand = np.where(keep)[0]
+    best = int(cand[areas[cand].argmax()]) if len(cand) else int(scores.argmax())
+    logit = cv2.resize(masks[best], (_SAM_INPUT, _SAM_INPUT), interpolation=cv2.INTER_LINEAR)
+    logit = logit[:nh, :nw]                                 # retire le padding
+    logit = cv2.resize(logit, (w, h), interpolation=cv2.INTER_LINEAR)
+    return (1.0 / (1.0 + np.exp(-logit))).astype(np.float32)  # sigmoïde → 0..1
+
+
+def geo_key(photo_id: int, geometry: dict) -> str:
+    h = hashlib.sha1(json.dumps(geometry, sort_keys=True).encode()).hexdigest()[:12]
+    return f"{photo_id}:{h}"

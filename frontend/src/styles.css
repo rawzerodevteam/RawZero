@@ -211,6 +211,7 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
 .viewer.tool-linear, .viewer.tool-radial { cursor: crosshair; }
 .viewer.tool-brush { cursor: none; }
 .viewer.tool-wb { cursor: crosshair; }
+.viewer.tool-pointmask { cursor: crosshair; }
 .viewer-box { position: absolute; }
 .viewer-box img { display: block; user-select: none; }
 .viewer-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -433,7 +434,20 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.slider-value { font-size: 11.5px; text-align: right; font-variant-numeric: tabular-nums; }
+.slider-value { font-size: 11.5px; text-align: right; font-variant-numeric: tabular-nums; cursor: text; }
+.slider-value:hover { color: var(--accent); }
+.slider-value-input {
+  width: 100%;
+  font-size: 11.5px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-deep);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 1px 3px;
+  box-sizing: border-box;
+}
 
 input[type="range"] {
   -webkit-appearance: none;

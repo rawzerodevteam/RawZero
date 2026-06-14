@@ -242,6 +242,22 @@ class TestMasks:
         assert build_mask({"type": "ai", "params": {"ref": "nope/none.png"}}, 10, 10) is None
         assert build_mask({"type": "ai", "params": {}}, 10, 10) is None
 
+    def test_ai_mask_hardness_sharpens(self, tmp_path, monkeypatch):
+        import cv2
+        from app import config, masks
+        store = tmp_path / "masks"
+        (store / "3").mkdir(parents=True)
+        # dégradé horizontal 0→1 : la dureté doit accentuer le contraste autour de 0.5
+        grad = (np.linspace(0, 255, 50).astype(np.uint8))[None].repeat(50, 0)
+        cv2.imwrite(str(store / "3" / "ai-g.png"), grad)
+        monkeypatch.setattr(config, "MASKS_DIR", store)
+        monkeypatch.setattr(masks.config, "MASKS_DIR", store)
+        soft = build_mask({"type": "ai", "params": {"ref": "3/ai-g.png", "hardness": 0}}, 50, 50)
+        hard = build_mask({"type": "ai", "params": {"ref": "3/ai-g.png", "hardness": 100}}, 50, 50)
+        # côté sombre plus proche de 0, côté clair plus proche de 1 quand on durcit
+        assert hard[25, 8] < soft[25, 8]
+        assert hard[25, 41] > soft[25, 41]
+
 
 class TestLocals:
     def test_radial_exposure_only_affects_inside(self):

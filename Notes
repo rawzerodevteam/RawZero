@@ -8,3 +8,5 @@ TO DO :
 ->
 
 - rester appuyé sur flèche directionnel pour parcourir les images plus vite au bout d'une seconde
+- On peut pas edit les masques (déplacer les bords pour radiale par exemple
+- Impossibilité de sélectionner manuellement plusieurs éléments sur un même masque via ia, ce serait pourtant pratique

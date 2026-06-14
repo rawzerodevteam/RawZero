@@ -30,7 +30,7 @@ DEFAULT_EDITS: dict[str, Any] = {
     "hsl": {b: {"h": 0.0, "s": 0.0, "l": 0.0}
             for b in ("red", "orange", "yellow", "green", "aqua", "blue", "purple", "magenta")},
     "detail": {"sharpen_amount": 25.0, "sharpen_radius": 1.0,
-               "nr_luma": 0.0, "nr_color": 0.0},
+               "nr_luma": 0.0, "nr_color": 0.0, "nr_ai": 0.0},
     "effects": {"vignette": 0.0, "grain": 0.0},
     "geometry": {"rotate": 0, "flip_h": False, "flip_v": False, "straighten": 0.0,
                  "crop": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}},
@@ -399,12 +399,22 @@ def _apply_local(img: np.ndarray, local: dict, scale: float) -> np.ndarray:
 # ---------------------------------------------------------------- pipeline complet
 
 def apply_pipeline(base: np.ndarray, edits: dict, scale: float = 1.0,
-                   skip_crop: bool = False) -> np.ndarray:
-    """base : float32 RGB 0..1 pleine image (avant géométrie). Renvoie float32 0..1."""
+                   skip_crop: bool = False,
+                   denoised_base: Optional[np.ndarray] = None) -> np.ndarray:
+    """base : float32 RGB 0..1 pleine image (avant géométrie). Renvoie float32 0..1.
+
+    `denoised_base` : version débruitée par IA de `base` (mêmes dimensions). Si fournie et
+    `detail.nr_ai > 0`, on mélange bruité↔débruité **tôt** (avant WB) pour que tout le reste
+    du pipeline opère sur des données plus propres."""
     e = merge_edits(edits)
     img = apply_geometry(base.astype(np.float32, copy=True), e["geometry"], skip_crop=skip_crop)
 
     wb, tone, pres, det, fx = e["wb"], e["tone"], e["presence"], e["detail"], e["effects"]
+    nr_ai = float(det.get("nr_ai", 0.0))
+    if nr_ai > 0.0 and denoised_base is not None and denoised_base.shape == base.shape:
+        dn = apply_geometry(denoised_base.astype(np.float32, copy=True), e["geometry"],
+                            skip_crop=skip_crop)
+        img = img + (nr_ai / 100.0) * (dn - img)
     img = _apply_linear_stage(img, float(wb["temp"]), float(wb["tint"]), float(tone["exposure"]))
     img = _apply_hl_shadows(img, float(tone["highlights"]), float(tone["shadows"]))
     img = _apply_whites_blacks(img, float(tone["whites"]), float(tone["blacks"]))
@@ -423,7 +433,8 @@ def apply_pipeline(base: np.ndarray, edits: dict, scale: float = 1.0,
 
 
 def render_array(base: np.ndarray, edits: dict, max_size: int, full_long_edge: int,
-                 show_mask: str = "", skip_crop: bool = False) -> np.ndarray:
+                 show_mask: str = "", skip_crop: bool = False,
+                 denoised_base: Optional[np.ndarray] = None) -> np.ndarray:
     """Pipeline + redimensionnement final ; renvoie uint8 RGB."""
     h, w = base.shape[:2]
     long_edge = max(h, w)
@@ -431,13 +442,17 @@ def render_array(base: np.ndarray, edits: dict, max_size: int, full_long_edge: i
     # Pré-downscale : si max_size << long_edge, traiter une image réduite pour gagner du temps
     if max_size and long_edge > max_size:
         f = max_size / long_edge
-        working = cv2.resize(base, (max(int(w * f), 1), max(int(h * f), 1)),
-                            interpolation=cv2.INTER_AREA)
+        size = (max(int(w * f), 1), max(int(h * f), 1))
+        working = cv2.resize(base, size, interpolation=cv2.INTER_AREA)
+        # La base débruitée doit subir EXACTEMENT le même redimensionnement pour rester alignée.
+        if denoised_base is not None and denoised_base.shape == base.shape:
+            denoised_base = cv2.resize(denoised_base, size, interpolation=cv2.INTER_AREA)
     else:
         working = base
 
     scale = max(working.shape[:2]) / max(full_long_edge, 1)
-    out = apply_pipeline(working, edits, scale=scale, skip_crop=skip_crop)
+    out = apply_pipeline(working, edits, scale=scale, skip_crop=skip_crop,
+                         denoised_base=denoised_base)
     if show_mask:
         out = _overlay_mask(out, edits, show_mask)
 

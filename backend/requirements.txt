@@ -6,3 +6,4 @@ opencv-python-headless>=4.9
 Pillow>=10.3
 exifread>=3.0
 python-multipart>=0.0.9
+onnxruntime>=1.17      # masques IA (segmentation du sujet) ; modèle dans data/models/

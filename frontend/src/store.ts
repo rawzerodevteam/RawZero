@@ -3,9 +3,30 @@ import { api, type PhotoFilters } from "./api";
 import { defaultEdits, mergeEdits, type EditState, type Photo, type Project } from "./types";
 
 export type View = "grid" | "loupe" | "develop";
-export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "wb";
+export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "wb" | "pointmask";
 
 let saveTimer: number | undefined;
+
+// Persistance de la dernière session (projet / photo / vue) pour rouvrir l'app où on l'a laissée.
+const SESSION_KEY = "rs.session";
+interface Session { projectId: number | null; photoId: number | null; view: View; }
+
+function readSession(): Session {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY) || "{}");
+    return {
+      projectId: typeof s.projectId === "number" ? s.projectId : null,
+      photoId: typeof s.photoId === "number" ? s.photoId : null,
+      view: s.view === "loupe" || s.view === "develop" ? s.view : "grid",
+    };
+  } catch {
+    return { projectId: null, photoId: null, view: "grid" };
+  }
+}
+
+function writeSession(s: Session) {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch { /* quota/private mode */ }
+}
 
 interface Store {
   projects: Project[];
@@ -40,7 +61,9 @@ interface Store {
   brushSize: number;
   brushErase: boolean;
   cropAspect: number | null;
-  aiMaskAvailable: boolean;       // moteur + modèle de segmentation présents
+  aiSubjectAvailable: boolean;    // modèle « sujet » (U²-Net) présent
+  aiPointAvailable: boolean;      // modèle « clic » (EdgeSAM) présent
+  aiDenoiseAvailable: boolean;    // modèle de débruitage IA (FFDNet) présent
   aiMaskBusy: boolean;            // calcul d'un masque IA en cours
   toast: string;
 
@@ -69,6 +92,7 @@ interface Store {
   removeSelection(deleteFile: boolean): Promise<void>;
 
   createAutoMask(kind: string): Promise<void>;
+  createPointMask(x: number, y: number): Promise<void>;
   updateEdits(fn: (e: EditState) => void, commit?: boolean): void;
   startDrag(): void;
   endDrag(): void;
@@ -121,15 +145,28 @@ export const useStore = create<Store>((set, get) => ({
   brushSize: 0.08,
   brushErase: false,
   cropAspect: null,
-  aiMaskAvailable: false,
+  aiSubjectAvailable: false,
+  aiPointAvailable: false,
+  aiDenoiseAvailable: false,
   aiMaskBusy: false,
   toast: "",
 
-  // Au démarrage : charge les projets puis les photos du projet courant.
+  // Au démarrage : restaure la dernière session (projet/photo/vue), puis charge projets et photos.
   async init() {
+    const saved = readSession();
+    if (saved.projectId !== null) set({ currentProjectId: saved.projectId });
     await get().loadProjects();
     await get().loadPhotos();
-    void api.autoMaskAvailable().then((available) => set({ aiMaskAvailable: available }));
+    // Rouvre l'app là où on l'a laissée (si la photo existe toujours dans le projet courant).
+    if (saved.photoId !== null && get().photos.some((p) => p.id === saved.photoId)) {
+      if (saved.view === "develop") {
+        await get().openDevelop(saved.photoId);
+      } else {
+        set({ currentId: saved.photoId, selection: [saved.photoId], view: saved.view });
+      }
+    }
+    void api.autoMaskAvailable().then((a) =>
+      set({ aiSubjectAvailable: a.subject, aiPointAvailable: a.point, aiDenoiseAvailable: a.denoise }));
   },
 
   async loadProjects() {
@@ -314,6 +351,23 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
 
+  // Segmentation au clic : segmente l'élément pointé (x, y normalisés) via EdgeSAM.
+  async createPointMask(x, y) {
+    const { currentId, edits, aiMaskBusy } = get();
+    if (currentId === null || !edits || aiMaskBusy) return;
+    set({ aiMaskBusy: true });
+    try {
+      const local = await api.clickMask(currentId, edits, x, y);
+      get().updateEdits((e) => { e.locals.push(local); });
+      set({ selectedLocalId: local.id, activeTool: "none", showMaskOverlay: true });
+      get().notify("Masque créé (clic)");
+    } catch (err) {
+      get().notify(`Segmentation impossible : ${err}`);
+    } finally {
+      set({ aiMaskBusy: false });
+    }
+  },
+
   updateEdits(fn, commit = true) {
     const cur = get().edits;
     if (!cur) return;
@@ -458,6 +512,13 @@ function scheduleSave() {
   if (saveTimer) window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => void useStore.getState().saveNow(), 800);
 }
+
+// Mémorise projet/photo/vue à chaque changement pour rouvrir l'app dans le même état.
+useStore.subscribe((s, prev) => {
+  if (s.currentProjectId !== prev.currentProjectId || s.currentId !== prev.currentId || s.view !== prev.view) {
+    writeSession({ projectId: s.currentProjectId, photoId: s.currentId, view: s.view });
+  }
+});
 
 /** Sauvegarde de secours à la fermeture de l'onglet. */
 window.addEventListener("pagehide", () => {

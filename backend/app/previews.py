@@ -18,7 +18,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from . import config, db, pipeline, raw_loader
+from . import config, db, denoise, pipeline, raw_loader
 
 log = logging.getLogger(__name__)
 executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rawstudio-bg")
@@ -26,6 +26,10 @@ executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rawstudio-bg")
 _base_cache: "OrderedDict[int, np.ndarray]" = OrderedDict()
 _base_lock = threading.Lock()
 _BASE_CACHE_MAX = 8
+
+_dn_cache: "OrderedDict[int, np.ndarray]" = OrderedDict()
+_dn_lock = threading.Lock()
+_DN_CACHE_MAX = 4
 
 
 def thumb_path(photo_id: int) -> Path:
@@ -38,6 +42,10 @@ def preview_path(photo_id: int) -> Path:
 
 def base_path(photo_id: int) -> Path:
     return config.BASE_DIR / f"{photo_id}.npy"
+
+
+def denoised_base_path(photo_id: int) -> Path:
+    return config.BASE_DIR / f"{photo_id}.dn.npy"
 
 
 def _resize_long_edge(arr: np.ndarray, size: int) -> np.ndarray:
@@ -103,10 +111,55 @@ def _decode_base(photo_id: int, original: Path) -> np.ndarray:
     return arr.astype(np.float32)
 
 
+def get_denoised_base(photo_id: int, original: Path) -> "np.ndarray | None":
+    """Base de développement débruitée par IA (force de référence fixe), cache mémoire + disque.
+
+    Calculée une seule fois (inférence FFDNet tuilée) ; le slider ne fait ensuite qu'un mélange
+    linéaire bruité↔débruité. Renvoie None si le moteur/modèle est indisponible."""
+    if not denoise.available():
+        return None
+    with _dn_lock:
+        if photo_id in _dn_cache:
+            _dn_cache.move_to_end(photo_id)
+            return _dn_cache[photo_id]
+    npy = denoised_base_path(photo_id)
+    arr: "np.ndarray | None"
+    if npy.exists():
+        try:
+            arr = np.load(npy).astype(np.float32)
+        except Exception:
+            npy.unlink(missing_ok=True)
+            arr = None
+    else:
+        arr = None
+    if arr is None:
+        try:
+            arr = denoise.denoise(get_base(photo_id, original))
+        except denoise.DenoiseUnavailable:
+            return None
+        except Exception as e:
+            log.warning("Débruitage IA échoué pour #%s : %s", photo_id, e)
+            return None
+        try:
+            npy.parent.mkdir(parents=True, exist_ok=True)
+            np.save(npy, arr.astype(np.float16))
+        except Exception as e:
+            log.warning("Cache base débruitée impossible pour #%s : %s", photo_id, e)
+    with _dn_lock:
+        _dn_cache[photo_id] = arr
+        _dn_cache.move_to_end(photo_id)
+        while len(_dn_cache) > _DN_CACHE_MAX:
+            _dn_cache.popitem(last=False)
+    return arr
+
+
 def invalidate(photo_id: int) -> None:
     with _base_lock:
         _base_cache.pop(photo_id, None)
-    for p in (thumb_path(photo_id), preview_path(photo_id), base_path(photo_id)):
+    with _dn_lock:
+        _dn_cache.pop(photo_id, None)
+    for p in (thumb_path(photo_id), preview_path(photo_id), base_path(photo_id),
+              denoised_base_path(photo_id)):
         p.unlink(missing_ok=True)
     mask_dir = config.MASKS_DIR / str(photo_id)
     if mask_dir.exists():

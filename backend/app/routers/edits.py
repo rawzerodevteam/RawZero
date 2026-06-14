@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 
 from pydantic import BaseModel
 
-from .. import config, db, pipeline, previews, segment
+from .. import config, db, denoise, pipeline, previews, segment
 from .photos import get_photo_row
 
 router = APIRouter()
@@ -57,8 +57,9 @@ _MASK_STORE_SIZE = 1024
 
 @router.get("/automask/available")
 def automask_available():
-    """Indique au client si les masques IA sont utilisables (moteur + modèle présents)."""
-    return {"available": segment.available()}
+    """Indique au client quelles fonctions IA sont utilisables (modèles présents)."""
+    return {"subject": segment.available(), "point": segment.point_available(),
+            "denoise": denoise.available()}
 
 
 class AutoMaskBody(EditsBody):
@@ -86,15 +87,44 @@ def automask(photo_id: int, body: AutoMaskBody):
         raise HTTPException(503, str(ex))
     if float(mask.max()) < 1e-3:
         raise HTTPException(422, "Aucun sujet détecté")
+    return _store_mask(photo_id, mask, body.kind)
 
+
+class ClickMaskBody(EditsBody):
+    x: float
+    y: float
+    kind: str = "point"
+
+
+@router.post("/photos/{photo_id}/clickmask")
+def clickmask(photo_id: int, body: ClickMaskBody):
+    """Segmentation au clic (EdgeSAM) : segmente l'élément sous le point (x, y) normalisé."""
+    if not segment.point_available():
+        raise HTTPException(503, "Segmentation au clic indisponible (modèle EdgeSAM absent)")
+    row = get_photo_row(photo_id)
+    base = previews.get_base(photo_id, config.ORIGINALS_DIR / row["relpath"])
+    e = pipeline.merge_edits(body.edits)
+    img = pipeline.apply_geometry(base.astype(np.float32, copy=True), e["geometry"])
+    small = _resize_long_edge(img, _MASK_STORE_SIZE)
+    try:
+        mask = segment.point_mask(small, body.x, body.y, segment.geo_key(photo_id, e["geometry"]))
+    except segment.SegmentationUnavailable as ex:
+        raise HTTPException(503, str(ex))
+    if float(mask.max()) < 1e-3:
+        raise HTTPException(422, "Rien à segmenter à cet endroit")
+    return _store_mask(photo_id, mask, body.kind)
+
+
+def _store_mask(photo_id: int, mask: np.ndarray, kind: str) -> dict:
+    """Écrit le bitmap du masque et renvoie le descripteur `local` (type 'ai')."""
     mask_id = "ai-" + uuid.uuid4().hex[:8]
     ref = f"{photo_id}/{mask_id}.png"
-    out = (config.MASKS_DIR / ref)
+    out = config.MASKS_DIR / ref
     out.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(out), (np.clip(mask, 0.0, 1.0) * 255).astype(np.uint8))
     return {
         "id": mask_id, "type": "ai",
-        "params": {"ref": ref, "kind": body.kind, "feather": 0.0},
+        "params": {"ref": ref, "kind": kind, "hardness": 0.0},
         "invert": False, "adjust": dict(pipeline.LOCAL_ADJUST_DEFAULTS),
     }
 

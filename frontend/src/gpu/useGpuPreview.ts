@@ -33,6 +33,7 @@ export function useGpuPreview(
   skipCrop: boolean,
   beforeAfter: boolean,
   showClip: boolean,
+  maskOverlayId: string | null,
 ): GpuState {
   const pipeRef = useRef<GpuPipeline | null>(null);
   const ctxFailed = useRef(false);
@@ -83,13 +84,35 @@ export function useGpuPreview(
     return () => { ctrl.abort(); if (url) URL.revokeObjectURL(url); };
   }, [active, currentId]);
 
+  // Base débruitée IA : chargée à la demande (réseau) quand le réglage NR IA devient actif,
+  // une seule fois par photo. Le slider ne fait ensuite qu'un mélange GPU temps réel.
+  const nrAi = edits?.detail?.nr_ai ?? 0;
+  const dnLoadedFor = useRef<number | null>(null);
+  useEffect(() => {
+    if (!active || !ready || currentId === null || ctxFailed.current) return;
+    if (nrAi <= 0 || dnLoadedFor.current === currentId) return;
+    const ctrl = new AbortController();
+    let url: string | null = null;
+    api.denoisedBase(currentId, { maxSize: 1600, signal: ctrl.signal })
+      .then((u) => { url = u; return u ? loadImage(u) : null; })
+      .then((img) => {
+        if (ctrl.signal.aborted || !pipeRef.current || !img) return;
+        pipeRef.current.setDenoiseBase(img);
+        dnLoadedFor.current = currentId;
+        setAsyncTick((t) => t + 1);
+      })
+      .catch((e) => { if ((e as Error).name !== "AbortError") setError(String(e)); });
+    return () => { ctrl.abort(); if (url) URL.revokeObjectURL(url); };
+  }, [active, ready, currentId, nrAi]);
+
   // Rendu à chaque changement de réglage / d'état (synchrone, sans réseau)
   useEffect(() => {
     if (!active || !pipeRef.current || !ready || !edits) return;
-    pipeRef.current.render(beforeAfter ? defaultEdits() : edits, skipCrop, showClip);
+    const ovl = beforeAfter || skipCrop ? null : maskOverlayId;
+    pipeRef.current.render(beforeAfter ? defaultEdits() : edits, skipCrop, showClip, ovl);
     const c = canvasRef.current;
     if (c) setDims((d) => (d.w !== c.width || d.h !== c.height ? { w: c.width, h: c.height } : d));
-  }, [active, edits, ready, skipCrop, beforeAfter, showClip, canvasRef, asyncTick]);
+  }, [active, edits, ready, skipCrop, beforeAfter, showClip, maskOverlayId, canvasRef, asyncTick]);
 
   return { ready, error, dims };
 }

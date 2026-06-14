@@ -256,23 +256,16 @@ void main(){
 
 // 13) retouche locale : netteté finale du mini-pipeline + masque (linéaire/radial/pinceau) + fondu
 //     Masque en coordonnées image (y vers le bas) : muv = (v_uv.x, 1 - v_uv.y), comme masks.py.
-const F_LBLEND = VERSION + PRELUDE + `
-uniform sampler2D u_blur;   // flou de l'image ajustée (pour la netteté)
-uniform sampler2D u_orig;   // image avant ce masque
-uniform sampler2D u_brush;  // masque pinceau rasterisé
-uniform float u_sharpen;
-uniform int u_kind;         // 0 linéaire, 1 radial, 2 pinceau
+// Valeur du masque local (partagée entre lblend et l'overlay rouge) — muv = coords image (y bas).
+const MASK_GLSL = `
+uniform sampler2D u_brush;  // masque rasterisé (pinceau / IA)
+uniform int u_kind;         // 0 linéaire, 1 radial, 2 pinceau, 3 masque IA
 uniform int u_invert;
+uniform float u_aiK;        // dureté du masque IA (contraste autour de 0.5)
 uniform vec4 u_lin;         // x0,y0,x1,y1
 uniform vec4 u_rad;         // cx,cy,rx,ry
 uniform vec3 u_rad2;        // angle(rad), feather, aspect = w/h
-void main(){
-  vec3 adj = texture(u_tex, v_uv).rgb;
-  if(u_sharpen>0.){
-    float detail = luma(adj) - luma(texture(u_blur, v_uv).rgb);
-    adj += (u_sharpen/100.) * detail;
-  }
-  vec2 muv = vec2(v_uv.x, 1.0 - v_uv.y);
+float computeMask(vec2 muv){
   float m;
   if(u_kind==0){                                   // dégradé linéaire
     vec2 d = u_lin.zw - u_lin.xy;
@@ -287,12 +280,42 @@ void main(){
     vec2 q = vec2(p.x / (rx*ar), p.y / ry);
     float dist = sqrt(q.x*q.x + q.y*q.y);
     m = 1.0 - smoothstep(max(1.0 - feather, 0.0), 1.0 + 0.25*feather, dist);
-  } else {                                         // pinceau (texture)
+  } else if(u_kind==2){                            // pinceau (texture)
     m = texture(u_brush, muv).r;
+  } else {                                         // masque IA (texture + dureté)
+    m = texture(u_brush, muv).r;
+    m = clamp((m - 0.5) * u_aiK + 0.5, 0.0, 1.0);
   }
   if(u_invert == 1) m = 1.0 - m;
-  o = vec4(mix(texture(u_orig, v_uv).rgb, adj, clamp(m, 0.0, 1.0)), 1.0);
+  return clamp(m, 0.0, 1.0);
 }`;
+
+const F_LBLEND = VERSION + PRELUDE + MASK_GLSL + `
+uniform sampler2D u_blur;   // flou de l'image ajustée (pour la netteté)
+uniform sampler2D u_orig;   // image avant ce masque
+uniform float u_sharpen;
+void main(){
+  vec3 adj = texture(u_tex, v_uv).rgb;
+  if(u_sharpen>0.){
+    float detail = luma(adj) - luma(texture(u_blur, v_uv).rgb);
+    adj += (u_sharpen/100.) * detail;
+  }
+  float m = computeMask(vec2(v_uv.x, 1.0 - v_uv.y));
+  o = vec4(mix(texture(u_orig, v_uv).rgb, adj, m), 1.0);
+}`;
+
+// Overlay rouge du masque sélectionné (touche O) — reproduit _overlay_mask côté Python.
+const F_MASKOVL = VERSION + PRELUDE + MASK_GLSL + `
+void main(){
+  vec3 img = texture(u_tex, v_uv).rgb;
+  float m = computeMask(vec2(v_uv.x, 1.0 - v_uv.y));
+  o = vec4(mix(img, vec3(1.0, 0.15, 0.15), m * 0.6), 1.0);
+}`;
+
+// 14) mélange de deux textures (base bruitée ↔ base débruitée IA) — réduction de bruit IA.
+const F_BLEND = VERSION + PRELUDE + `
+uniform sampler2D u_tex2; uniform float u_amt;
+void main(){ o = vec4(mix(texture(u_tex,v_uv).rgb, texture(u_tex2,v_uv).rgb, u_amt), 1.); }`;
 
 // 0) géométrie (pré-pass sur la base) — mapping INVERSE output→base, fidèle à apply_geometry.
 //    Coords « sample » y vers le haut (= v_uv ; la base est uploadée FLIP_Y). Ordre inverse :
@@ -345,6 +368,8 @@ export class GpuPipeline {
   private uloc: Record<string, Record<string, WebGLUniformLocation | null>> = {};
   private rts = new Map<string, RT>();
   private baseTex: WebGLTexture;
+  private denoiseTex: WebGLTexture | null = null;   // base débruitée IA (chargée en lazy)
+  private denoiseLoaded = false;
   private curveTex: WebGLTexture;
   private brushTex = new Map<string, { tex: WebGLTexture; key: string }>(); // masque pinceau rasterisé, par id
   private brushCanvas?: HTMLCanvasElement;
@@ -352,8 +377,8 @@ export class GpuPipeline {
   /** Appelé quand un bitmap de masque IA fini de charger → demande un nouveau rendu. */
   requestRerender: (() => void) | null = null;
   private lastCurve = "";
-  private lastGeo = "";
-  private geoRT: RT | null = null;
+  private geoBase = { key: "", rt: null as RT | null };   // cache géométrie de la base bruitée
+  private geoAI = { key: "", rt: null as RT | null };      // cache géométrie de la base débruitée
   private hasCurve = false;
   private colorType: number;        // HALF_FLOAT si dispo, sinon UNSIGNED_BYTE
   private colorInternal: number;
@@ -375,7 +400,7 @@ export class GpuPipeline {
     const sources: Record<string, string> = {
       linear: F_LINEAR, luma: F_LUMA, blur: F_BLUR, tone: F_TONE, clarity: F_CLARITY, final: F_FINAL,
       dcval: F_DCVAL, reducemax: F_REDUCE_MAX, dehaze: F_DEHAZE, ycc: F_YCC, chroma: F_CHROMA,
-      bilateral: F_BILATERAL, lblend: F_LBLEND, geom: F_GEOM,
+      bilateral: F_BILATERAL, lblend: F_LBLEND, geom: F_GEOM, maskovl: F_MASKOVL, blend: F_BLEND,
     };
     for (const [name, frag] of Object.entries(sources)) {
       const p = this.link(VERT, frag);
@@ -454,11 +479,26 @@ export class GpuPipeline {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     this.lastCurve = "";
-    this.lastGeo = ""; this.geoRT = null;     // la géométrie cachée appartenait à l'ancienne photo
+    this.geoBase = { key: "", rt: null };     // la géométrie cachée appartenait à l'ancienne photo
+    this.geoAI = { key: "", rt: null };
+    this.denoiseLoaded = false;               // la base débruitée appartenait à l'ancienne photo
     for (const { tex } of this.brushTex.values()) gl.deleteTexture(tex); // idem masques pinceau
     this.brushTex.clear();
     for (const { tex } of this.aiTex.values()) gl.deleteTexture(tex);    // idem bitmaps masques IA
     this.aiTex.clear();
+  }
+
+  /** Base débruitée par IA (même résolution/orientation que la base) — chargée en lazy par
+   *  useGpuPreview quand le réglage NR IA est actif. Mélangée à la base bruitée dans render(). */
+  setDenoiseBase(img: HTMLImageElement) {
+    const gl = this.gl;
+    if (!this.denoiseTex) this.denoiseTex = this.newTex();
+    gl.bindTexture(gl.TEXTURE_2D, this.denoiseTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    this.geoAI = { key: "", rt: null };
+    this.denoiseLoaded = true;
   }
 
   /** Texture d'un masque IA : noir (= masque vide) tant que le PNG n'est pas chargé,
@@ -587,7 +627,9 @@ export class GpuPipeline {
   /** Pré-pass géométrie : rotation 90° / miroirs / redressement+auto-crop / recadrage, sur la base.
    *  Mis en cache (recalcul seulement quand la géométrie change). Renvoie la texture source et ses dims
    *  pour le reste du pipeline (qui tourne alors sur l'image recadrée — les masques locaux y sont alignés). */
-  private applyGeometry(geo: EditState["geometry"], skipCrop: boolean): { tex: WebGLTexture; w: number; h: number } {
+  private applyGeometry(geo: EditState["geometry"], skipCrop: boolean,
+                        src: WebGLTexture = this.baseTex, rtKey = "geo",
+                        cache = this.geoBase): { tex: WebGLTexture; w: number; h: number } {
     const gl = this.gl;
     const rotK = ((((geo.rotate || 0) % 360) + 360) % 360) / 90 | 0;
     const angle = geo.straighten || 0;
@@ -596,11 +638,11 @@ export class GpuPipeline {
     const straighten = Math.abs(angle) > 0.01;
     const cropped = c.w < 0.999 || c.h < 0.999 || c.x > 0.001 || c.y > 0.001;
     if (rotK === 0 && !geo.flip_h && !geo.flip_v && !straighten && !cropped)
-      return { tex: this.baseTex, w: this.workW, h: this.workH };
+      return { tex: src, w: this.workW, h: this.workH };
 
     const key = JSON.stringify({ geo, skipCrop });
-    if (key === this.lastGeo && this.geoRT)
-      return { tex: this.geoRT.tex, w: this.geoRT.w, h: this.geoRT.h };
+    if (key === cache.key && cache.rt)
+      return { tex: cache.rt.tex, w: cache.rt.w, h: cache.rt.h };
 
     let rw = this.workW, rh = this.workH;
     if (rotK === 1 || rotK === 3) [rw, rh] = [rh, rw];
@@ -611,8 +653,8 @@ export class GpuPipeline {
       wrwh = [Wr / rw, Hr / rh]; sw = Wr; sh = Hr;
     }
     const gw = Math.max(Math.round(sw * c.w), 8), gh = Math.max(Math.round(sh * c.h), 8);
-    const out = this.rt("geo", gw, gh);
-    this.pass("geom", [[0, this.baseTex]], out, gw, gh, () => {
+    const out = this.rt(rtKey, gw, gh);
+    this.pass("geom", [[0, src]], out, gw, gh, () => {
       gl.uniform1i(this.u("geom", "u_tex"), 0);
       gl.uniform1i(this.u("geom", "u_rotK"), rotK);
       gl.uniform1i(this.u("geom", "u_flipH"), geo.flip_h ? 1 : 0);
@@ -622,7 +664,7 @@ export class GpuPipeline {
       gl.uniform1f(this.u("geom", "u_aspect"), aRot);
       gl.uniform4f(this.u("geom", "u_crop"), c.x, c.y, c.w, c.h);
     });
-    this.lastGeo = key; this.geoRT = out;
+    cache.key = key; cache.rt = out;
     return { tex: out.tex, w: gw, h: gh };
   }
 
@@ -689,7 +731,8 @@ export class GpuPipeline {
         : loc.type === "ai" ? this.aiTexture(loc) : this.curveTex;
       const out = this.rt(parity++ % 2 ? "lOutB" : "lOutA", W, H);
       const p = loc.params || {};
-      const kind = loc.type === "linear" ? 0 : loc.type === "radial" ? 1 : 2;
+      const kind = loc.type === "linear" ? 0 : loc.type === "radial" ? 1 : loc.type === "brush" ? 2 : 3;
+      const aiK = 1 + (num(p.hardness, 0) / 100) * 12;
       this.pass("lblend", [[0, mid.tex], [1, shBlur.tex], [2, cur.tex], [3, brush]], out, W, H, () => {
         gl.uniform1i(this.u("lblend", "u_tex"), 0);
         gl.uniform1i(this.u("lblend", "u_blur"), 1);
@@ -697,6 +740,7 @@ export class GpuPipeline {
         gl.uniform1i(this.u("lblend", "u_brush"), 3);
         gl.uniform1f(this.u("lblend", "u_sharpen"), a.sharpness);
         gl.uniform1i(this.u("lblend", "u_kind"), kind);
+        gl.uniform1f(this.u("lblend", "u_aiK"), aiK);
         gl.uniform1i(this.u("lblend", "u_invert"), loc.invert ? 1 : 0);
         gl.uniform4f(this.u("lblend", "u_lin"), num(p.x0, 0.5), num(p.y0, 0.2), num(p.x1, 0.5), num(p.y1, 0.8));
         gl.uniform4f(this.u("lblend", "u_rad"), num(p.cx, 0.5), num(p.cy, 0.5), num(p.rx, 0.25), num(p.ry, 0.25));
@@ -707,13 +751,47 @@ export class GpuPipeline {
     return cur;
   }
 
-  render(e: EditState, skipCrop = false, showClip = false) {
+  /** Dessine l'overlay rouge du masque sélectionné (touche O) sur l'image rendue → écran. */
+  private maskOverlay(loc: LocalAdjust, img: RT, W: number, H: number) {
+    const gl = this.gl;
+    const p = loc.params || {};
+    const kind = loc.type === "linear" ? 0 : loc.type === "radial" ? 1 : loc.type === "brush" ? 2 : 3;
+    const tex = loc.type === "brush" ? this.brushTexture(loc, W, H)
+      : loc.type === "ai" ? this.aiTexture(loc) : this.curveTex;
+    this.pass("maskovl", [[0, img.tex], [3, tex]], null, W, H, () => {
+      gl.uniform1i(this.u("maskovl", "u_tex"), 0);
+      gl.uniform1i(this.u("maskovl", "u_brush"), 3);
+      gl.uniform1i(this.u("maskovl", "u_kind"), kind);
+      gl.uniform1f(this.u("maskovl", "u_aiK"), 1 + (num(p.hardness, 0) / 100) * 12);
+      gl.uniform1i(this.u("maskovl", "u_invert"), loc.invert ? 1 : 0);
+      gl.uniform4f(this.u("maskovl", "u_lin"), num(p.x0, 0.5), num(p.y0, 0.2), num(p.x1, 0.5), num(p.y1, 0.8));
+      gl.uniform4f(this.u("maskovl", "u_rad"), num(p.cx, 0.5), num(p.cy, 0.5), num(p.rx, 0.25), num(p.ry, 0.25));
+      gl.uniform3f(this.u("maskovl", "u_rad2"), num(p.angle, 0) * Math.PI / 180, num(p.feather, 0.5), W / Math.max(H, 1));
+    });
+  }
+
+  render(e: EditState, skipCrop = false, showClip = false, maskOverlayId: string | null = null) {
     const gl = this.gl;
     if (!this.workW) return;
+    const ovlLoc = maskOverlayId ? e.locals.find((l) => l.id === maskOverlayId) ?? null : null;
 
     // 0) géométrie (pré-pass mis en cache) : le reste tourne sur l'image recadrée.
     const geo = this.applyGeometry(e.geometry, skipCrop);
     const W = geo.w, H = geo.h, maxd = Math.max(W, H);
+
+    // 0bis) réduction de bruit IA : mélange base bruitée ↔ base débruitée (même géométrie).
+    //       Quasi gratuit ; coût nul quand inactif ou base débruitée pas encore chargée.
+    let inputTex = geo.tex;
+    if (e.detail.nr_ai > 0 && this.denoiseLoaded && this.denoiseTex) {
+      const geoDn = this.applyGeometry(e.geometry, skipCrop, this.denoiseTex, "geoAI", this.geoAI);
+      const blended = this.rt("nrai", W, H);
+      this.pass("blend", [[0, geo.tex], [1, geoDn.tex]], blended, W, H, () => {
+        gl.uniform1i(this.u("blend", "u_tex"), 0);
+        gl.uniform1i(this.u("blend", "u_tex2"), 1);
+        gl.uniform1f(this.u("blend", "u_amt"), e.detail.nr_ai / 100);
+      });
+      inputTex = blended.tex;
+    }
     // scale = ratio rendu/pleine-résolution, calculé sur la taille NON recadrée (comme le Python)
     const scale = Math.max(this.workW, this.workH) / this.fullLong;
     const cv = gl.canvas as HTMLCanvasElement;
@@ -734,7 +812,7 @@ export class GpuPipeline {
     // 1) WB + exposition → ppA
     const ppA = this.rt("ppA", W, H);
     const [wr, wg, wb] = wbGains(e.wb.temp, e.wb.tint);
-    this.pass("linear", [[0, geo.tex]], ppA, W, H, () => {
+    this.pass("linear", [[0, inputTex]], ppA, W, H, () => {
       gl.uniform1i(this.u("linear", "u_tex"), 0);
       gl.uniform3f(this.u("linear", "u_wb"), wr, wg, wb);
       gl.uniform1f(this.u("linear", "u_expo"), e.tone.exposure);
@@ -854,13 +932,16 @@ export class GpuPipeline {
       const sigma = Math.max(e.detail.sharpen_radius * scale, 0.4);
       sharpBlur = this.blur(cur.tex, W, H, sigma, "shA", "shB", 1);
     }
-    this.pass("final", [[0, cur.tex], [1, sharpBlur.tex]], null, W, H, () => {
+    // overlay actif → la passe finale écrit dans une RT, puis l'overlay rouge va à l'écran
+    const finOut = ovlLoc ? this.rt("fin", W, H) : null;
+    this.pass("final", [[0, cur.tex], [1, sharpBlur.tex]], finOut, W, H, () => {
       gl.uniform1i(this.u("final", "u_tex"), 0);
       gl.uniform1i(this.u("final", "u_blur"), 1);
       gl.uniform1f(this.u("final", "u_sharpen"), sharpen);
       gl.uniform1f(this.u("final", "u_vignette"), e.effects.vignette);
       gl.uniform1i(this.u("final", "u_showClip"), showClip ? 1 : 0);
     });
+    if (ovlLoc && finOut) this.maskOverlay(ovlLoc, finOut, W, H);
     gl.finish();
 
     // Force la présentation du canvas : sur certains pilotes le drawing buffer

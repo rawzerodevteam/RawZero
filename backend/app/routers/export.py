@@ -8,7 +8,7 @@ import cv2
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import config, db, pipeline, raw_loader
+from .. import config, db, denoise, pipeline, raw_loader
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -51,9 +51,16 @@ def _export_one(row: dict, out_dir: Path, req: ExportRequest) -> dict:
     original = config.ORIGINALS_DIR / row["relpath"]
     base = raw_loader.decode_full(original)
     edits = json.loads(row.get("edits") or "{}")
+    # Débruitage IA pleine résolution (tuilé) — chemin lent, seulement si le réglage est actif.
+    denoised = None
+    if float(edits.get("detail", {}).get("nr_ai", 0.0)) > 0.0 and denoise.available():
+        try:
+            denoised = denoise.denoise(base)
+        except Exception as e:
+            log.warning("Débruitage IA export échoué #%s : %s", row.get("id"), e)
     arr = pipeline.render_array(base, edits, req.max_size or 0,
-                                max(base.shape[:2]))
-    del base
+                                max(base.shape[:2]), denoised_base=denoised)
+    del base, denoised
     stem = Path(row["filename"]).stem + (req.suffix or "")
     ext = FORMATS[req.format]
     dest = out_dir / f"{stem}{ext}"

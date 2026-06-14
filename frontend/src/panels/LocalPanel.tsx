@@ -22,7 +22,8 @@ export function LocalPanel() {
   const brushSize = useStore((s) => s.brushSize);
   const brushErase = useStore((s) => s.brushErase);
   const setUI = useStore((s) => s.setUI);
-  const aiMaskAvailable = useStore((s) => s.aiMaskAvailable);
+  const aiSubjectAvailable = useStore((s) => s.aiSubjectAvailable);
+  const aiPointAvailable = useStore((s) => s.aiPointAvailable);
   const aiMaskBusy = useStore((s) => s.aiMaskBusy);
   const createAutoMask = useStore((s) => s.createAutoMask);
   if (!edits) return null;
@@ -52,17 +53,32 @@ export function LocalPanel() {
       {activeTool !== "none" && activeTool !== "crop" && (
         <p className="hint">{TOOLS.find((t) => t.tool === activeTool)?.hint}</p>
       )}
-      {aiMaskAvailable && (
-        <div className="row-actions">
-          <button
-            className={"btn ai-mask" + (aiMaskBusy ? " busy" : "")}
-            disabled={aiMaskBusy}
-            title="Détecte automatiquement le sujet principal et crée un masque"
-            onClick={() => void createAutoMask("subject")}
-          >
-            {aiMaskBusy ? "✨ Calcul…" : "✨ Sélectionner le sujet"}
-          </button>
+      {(aiSubjectAvailable || aiPointAvailable) && (
+        <div className="row-actions ai-actions">
+          {aiPointAvailable && (
+            <button
+              className={"btn ai-mask" + (activeTool === "pointmask" ? " active" : "") + (aiMaskBusy ? " busy" : "")}
+              disabled={aiMaskBusy}
+              title="Cliquez ensuite sur l'élément à sélectionner dans l'image"
+              onClick={() => setUI({ activeTool: activeTool === "pointmask" ? "none" : "pointmask" })}
+            >
+              {aiMaskBusy ? "Calcul…" : "Sélection manuelle"}
+            </button>
+          )}
+          {aiSubjectAvailable && (
+            <button
+              className={"btn ai-mask" + (aiMaskBusy ? " busy" : "")}
+              disabled={aiMaskBusy}
+              title="Détecte automatiquement le sujet principal et crée un masque"
+              onClick={() => void createAutoMask("subject")}
+            >
+              {aiMaskBusy ? "Calcul…" : "Sélection automatique"}
+            </button>
+          )}
         </div>
+      )}
+      {activeTool === "pointmask" && (
+        <p className="hint">Cliquez sur l'élément à sélectionner dans l'image.</p>
       )}
       {activeTool === "brush" && (
         <>
@@ -130,6 +146,14 @@ export function LocalPanel() {
               apply={(e, v) => {
                 const loc = e.locals.find((l) => l.id === selected.id);
                 if (loc) loc.params.feather = v / 100;
+              }} />
+          )}
+          {selected.type === "ai" && (
+            <EditSlider label="Dureté" value={selected.params.hardness ?? 0}
+              min={0} max={100} reset={0}
+              apply={(e, v) => {
+                const loc = e.locals.find((l) => l.id === selected.id);
+                if (loc) loc.params.hardness = v;
               }} />
           )}
           <LocalSlider id={selected.id} label="Exposition" k="exposure" min={-3} max={3} step={0.05}

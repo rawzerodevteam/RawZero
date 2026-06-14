@@ -24,9 +24,27 @@ def render(photo_id: int, req: RenderRequest, max_size: int = config.PREVIEW_SIZ
     original = config.ORIGINALS_DIR / row["relpath"]
     base = previews.get_base(photo_id, original)
     edits = {} if before else req.edits
+    denoised = None
+    if not before and float(edits.get("detail", {}).get("nr_ai", 0.0)) > 0.0:
+        denoised = previews.get_denoised_base(photo_id, original)
     arr = pipeline.render_array(base, edits, min(max_size, config.BASE_SIZE),
                                 previews.full_long_edge(dict(row)), show_mask=show_mask,
-                                skip_crop=crop_edit)
+                                skip_crop=crop_edit, denoised_base=denoised)
+    return Response(content=pipeline.encode_jpeg(arr, 90), media_type="image/jpeg",
+                    headers={"Cache-Control": "no-store"})
+
+
+@router.get("/photos/{photo_id}/denoised")
+def denoised(photo_id: int, max_size: int = 1600):
+    """Base **neutre débruitée** (JPEG) pour la texture GPU — miroir du chemin `before:true`.
+    503 si le modèle de débruitage est absent (le client masque alors le réglage)."""
+    row = get_photo_row(photo_id)
+    original = config.ORIGINALS_DIR / row["relpath"]
+    dn = previews.get_denoised_base(photo_id, original)
+    if dn is None:
+        return Response(status_code=503)
+    arr = pipeline.render_array(dn, {}, min(max_size, config.BASE_SIZE),
+                                previews.full_long_edge(dict(row)))
     return Response(content=pipeline.encode_jpeg(arr, 90), media_type="image/jpeg",
                     headers={"Cache-Control": "no-store"})
 

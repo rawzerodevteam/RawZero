@@ -33,13 +33,17 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
   const brushSize = useStore((s) => s.brushSize);
   const brushErase = useStore((s) => s.brushErase);
   const selectedLocalId = useStore((s) => s.selectedLocalId);
+  const showMaskOverlay = useStore((s) => interactive && s.showMaskOverlay);
   const locals = useStore((s) => s.edits?.locals);
   const updateEdits = useStore((s) => s.updateEdits);
   const setUI = useStore((s) => s.setUI);
   const beforeAfter = useStore((s) => s.beforeAfter);
+  // Pendant le drag d'un slider, on masque l'overlay rouge pour voir l'effet du réglage.
+  const dragging = useStore((s) => s.dragBaseline != null);
 
   // Aperçu GPU : rend dans glCanvasRef ; outil crop actif → image entière (le cadre se dessine par-dessus)
-  const gpuState = useGpuPreview(glCanvasRef, gpu, activeTool === "crop", beforeAfter, showClipping);
+  const maskOverlayId = showMaskOverlay && selectedLocalId && !dragging ? selectedLocalId : null;
+  const gpuState = useGpuPreview(glCanvasRef, gpu, activeTool === "crop", beforeAfter, showClipping, maskOverlayId);
   const nat = gpu ? gpuState.dims : natural;
 
   const lastPointer = useRef({ x: 0, y: 0 });
@@ -159,6 +163,8 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
     const [nx, ny] = toImg(ev.clientX, ev.clientY);
     if (activeTool === "wb") {
       void pickWhiteBalance(nx, ny);
+    } else if (activeTool === "pointmask") {
+      void useStore.getState().createPointMask(nx, ny);
     } else if (activeTool === "linear" || activeTool === "radial") {
       mode.current = "shape";
       setTempShape({ type: activeTool, x0: nx, y0: ny, x1: nx, y1: ny });
@@ -247,7 +253,7 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
           {!gpu && showClipping && src && <ClippingOverlay src={src} />}
           <svg className="viewer-overlay" viewBox={`0 0 ${box.w} ${box.h}`} preserveAspectRatio="none">
             <ShapeOutline shape={tempShape} w={box.w} h={box.h} />
-            {!tempShape && selectedLocal && selectedLocal.type !== "brush" && (
+            {!tempShape && selectedLocal && (selectedLocal.type === "linear" || selectedLocal.type === "radial") && (
               <ShapeOutline
                 shape={{
                   type: selectedLocal.type,

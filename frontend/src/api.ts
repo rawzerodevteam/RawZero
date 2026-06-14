@@ -108,6 +108,15 @@ export const api = {
     return URL.createObjectURL(await res.blob());
   },
 
+  /** Base neutre débruitée par IA : object URL de JPEG (à révoquer), ou null si indisponible. */
+  async denoisedBase(id: number, opts: { maxSize?: number; signal?: AbortSignal } = {}): Promise<string | null> {
+    const q = new URLSearchParams({ max_size: String(opts.maxSize ?? 1600) });
+    const res = await fetch(`/api/photos/${id}/denoised?${q}`, { signal: opts.signal });
+    if (res.status === 503) return null;        // modèle de débruitage absent
+    if (!res.ok) throw new Error(`denoised: ${res.status}`);
+    return URL.createObjectURL(await res.blob());
+  },
+
   async saveEdits(id: number, edits: EditState): Promise<void> {
     await json(await fetch(`/api/photos/${id}/edits`, {
       method: "PUT",
@@ -132,11 +141,11 @@ export const api = {
     }));
   },
 
-  async autoMaskAvailable(): Promise<boolean> {
+  async autoMaskAvailable(): Promise<{ subject: boolean; point: boolean; denoise: boolean }> {
     try {
-      return (await json<{ available: boolean }>(await fetch("/api/automask/available"))).available;
+      return await json(await fetch("/api/automask/available"));
     } catch {
-      return false;
+      return { subject: false, point: false, denoise: false };
     }
   },
 
@@ -145,6 +154,14 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ edits, kind }),
+    }));
+  },
+
+  async clickMask(id: number, edits: EditState, x: number, y: number): Promise<LocalAdjust> {
+    return json(await fetch(`/api/photos/${id}/clickmask`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ edits, x, y }),
     }));
   },
 

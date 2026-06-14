@@ -61,7 +61,7 @@ export interface EditState {
   presence: { clarity: number; dehaze: number; vibrance: number; saturation: number };
   curve: { points: [number, number][] };
   hsl: Record<Band, { h: number; s: number; l: number }>;
-  detail: { sharpen_amount: number; sharpen_radius: number; nr_luma: number; nr_color: number };
+  detail: { sharpen_amount: number; sharpen_radius: number; nr_luma: number; nr_color: number; nr_ai: number };
   effects: { vignette: number; grain: number };
   geometry: {
     rotate: number; flip_h: boolean; flip_v: boolean; straighten: number;
@@ -80,7 +80,7 @@ export function defaultEdits(): EditState {
     presence: { clarity: 0, dehaze: 0, vibrance: 0, saturation: 0 },
     curve: { points: [[0, 0], [1, 1]] },
     hsl,
-    detail: { sharpen_amount: 25, sharpen_radius: 1, nr_luma: 0, nr_color: 0 },
+    detail: { sharpen_amount: 25, sharpen_radius: 1, nr_luma: 0, nr_color: 0, nr_ai: 0 },
     effects: { vignette: 0, grain: 0 },
     geometry: { rotate: 0, flip_h: false, flip_v: false, straighten: 0, crop: { x: 0, y: 0, w: 1, h: 1 } },
     locals: [],
