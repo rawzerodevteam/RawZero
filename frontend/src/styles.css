@@ -715,6 +715,24 @@ kbd {
 .export-done { margin-top: 12px; color: var(--accent); }
 .folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
 
+/* ---------- Panneau de profilage (dev, F9) ---------- */
+.dev-overlay {
+  position: fixed; top: 10px; right: 10px; z-index: 4000; width: 250px;
+  background: rgba(18, 20, 24, 0.94); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 11px; font-family: ui-monospace, "Cascadia Code", monospace;
+  color: var(--text); box-shadow: 0 8px 28px rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+  pointer-events: auto;
+}
+.dev-head { display: flex; align-items: center; gap: 6px; font-weight: 700; margin-bottom: 6px; }
+.dev-head .dev-dim { font-weight: 400; }
+.dev-close { margin-left: auto; background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 12px; }
+.dev-row { display: flex; justify-content: space-between; gap: 8px; line-height: 1.55; }
+.dev-k { color: var(--text-dim); }
+.dev-v { font-variant-numeric: tabular-nums; }
+.dev-dim { color: var(--text-dim); }
+.dev-sep { height: 1px; background: var(--border); margin: 6px 0; }
+.dev-parts { color: var(--text-dim); font-size: 10px; word-break: break-all; margin: 2px 0 4px; }
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed;

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { ContextMenu } from "./components/ContextMenu";
+import { DevOverlay } from "./components/DevOverlay";
 import { ExportDialog } from "./components/ExportDialog";
 import { ImportPanel } from "./components/ImportPanel";
 import { ShortcutsOverlay } from "./components/ShortcutsOverlay";
@@ -28,6 +29,7 @@ export function App() {
       {showHelp && <ShortcutsOverlay />}
       <ContextMenu />
       {toast && <div className="toast">{toast}</div>}
+      <DevOverlay />
     </div>
   );
 }

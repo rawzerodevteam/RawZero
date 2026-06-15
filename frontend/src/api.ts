@@ -16,6 +16,12 @@ export interface PhotoFilters {
   sort: string;
 }
 
+/** Évènement du flux d'export (NDJSON) : une photo terminée, une erreur, ou la fin. */
+export type ExportEvent =
+  | { type: "file"; id: number; name: string; url: string; width: number; height: number }
+  | { type: "error"; id: number; error: string }
+  | { type: "done"; folder: string };
+
 export const api = {
   async listProjects(): Promise<Project[]> {
     return (await json<{ projects: Project[] }>(await fetch("/api/projects"))).projects;
@@ -98,6 +104,7 @@ export const api = {
     if (opts.before) q.set("before", "1");
     if (opts.showMask) q.set("show_mask", opts.showMask);
     if (opts.cropEdit) q.set("crop_edit", "1");
+    const t0 = performance.now();
     const res = await fetch(`/api/photos/${id}/render?${q}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -105,7 +112,15 @@ export const api = {
       signal: opts.signal,
     });
     if (!res.ok) throw new Error(`render: ${res.status}`);
-    return URL.createObjectURL(await res.blob());
+    const blob = await res.blob();
+    void import("./lib/devMetrics").then((m) => m.recordRender({
+      clientMs: performance.now() - t0,
+      serverTiming: res.headers.get("Server-Timing"),
+      maxSize: opts.maxSize ?? 2048,
+      bytes: blob.size,
+      before: !!opts.before,
+    }));
+    return URL.createObjectURL(blob);
   },
 
   /** Base neutre débruitée par IA : object URL de JPEG (à révoquer), ou null si indisponible. */
@@ -195,6 +210,35 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
     }));
+  },
+
+  /** Export parallèle avec progression : lit le flux NDJSON et appelle `onEvent` par évènement. */
+  async exportStream(
+    req: { ids: number[]; format: string; quality: number; max_size: number; suffix: string },
+    onEvent: (ev: ExportEvent) => void | Promise<void>,
+  ): Promise<void> {
+    const res = await fetch("/api/export/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok || !res.body) throw new Error(`export: ${res.status}`);
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (line) await onEvent(JSON.parse(line) as ExportEvent);
+      }
+    }
+    const tail = buf.trim();
+    if (tail) await onEvent(JSON.parse(tail) as ExportEvent);
   },
 
   thumbUrl: (id: number, v: number) => `/api/photos/${id}/thumb?v=${v}`,

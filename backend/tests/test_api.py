@@ -139,6 +139,23 @@ def test_export_bad_format(client, photo_id):
     assert client.post("/api/export", json={"ids": [photo_id], "format": "bmp"}).status_code == 422
 
 
+def test_export_stream(client, photo_id):
+    """Export parallèle en flux NDJSON : une ligne 'file' par photo + une ligne 'done'."""
+    r = client.post("/api/export/stream", json={"ids": [photo_id, photo_id, 999999],
+                                                "format": "jpeg", "max_size": 200})
+    assert r.status_code == 200
+    events = [json.loads(line) for line in r.text.splitlines() if line.strip()]
+    files = [e for e in events if e["type"] == "file"]
+    errors = [e for e in events if e["type"] == "error"]
+    done = [e for e in events if e["type"] == "done"]
+    assert len(files) == 2                       # la photo valide, deux fois
+    assert any(e["id"] == 999999 for e in errors)  # l'id inexistant remonte une erreur
+    assert len(done) == 1 and done[0]["folder"].startswith("data/exports/")
+    # les noms ne s'écrasent pas malgré le même fichier source
+    assert files[0]["name"] != files[1]["name"]
+    assert client.get(files[0]["url"]).status_code == 200
+
+
 def test_browse_import_dir(client):
     config.IMPORT_DIR.mkdir(parents=True, exist_ok=True)
     (config.IMPORT_DIR / "sub").mkdir(exist_ok=True)

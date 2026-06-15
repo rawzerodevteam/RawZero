@@ -1,5 +1,6 @@
 """Rendu interactif (edits → JPEG) + fichiers cache (thumb/preview) + original."""
 import logging
+import time
 from typing import Any, Optional
 
 from fastapi import APIRouter, Response
@@ -22,7 +23,10 @@ def render(photo_id: int, req: RenderRequest, max_size: int = config.PREVIEW_SIZ
            show_mask: str = "", before: bool = False, crop_edit: bool = False):
     row = get_photo_row(photo_id)
     original = config.ORIGINALS_DIR / row["relpath"]
+    # Chronométrage par étape → en-tête Server-Timing (lu par le panneau de profilage dev).
+    t0 = time.perf_counter()
     base = previews.get_base(photo_id, original)
+    t1 = time.perf_counter()
     edits = {} if before else req.edits
     denoised = None
     if not before and float(edits.get("detail", {}).get("nr_ai", 0.0)) > 0.0:
@@ -30,8 +34,13 @@ def render(photo_id: int, req: RenderRequest, max_size: int = config.PREVIEW_SIZ
     arr = pipeline.render_array(base, edits, min(max_size, config.BASE_SIZE),
                                 previews.full_long_edge(dict(row)), show_mask=show_mask,
                                 skip_crop=crop_edit, denoised_base=denoised)
-    return Response(content=pipeline.encode_jpeg(arr, 90), media_type="image/jpeg",
-                    headers={"Cache-Control": "no-store"})
+    t2 = time.perf_counter()
+    jpeg = pipeline.encode_jpeg(arr, 90)
+    t3 = time.perf_counter()
+    timing = (f"base;dur={(t1 - t0) * 1000:.1f}, pipeline;dur={(t2 - t1) * 1000:.1f}, "
+              f"encode;dur={(t3 - t2) * 1000:.1f}, total;dur={(t3 - t0) * 1000:.1f}")
+    return Response(content=jpeg, media_type="image/jpeg",
+                    headers={"Cache-Control": "no-store", "Server-Timing": timing})
 
 
 @router.get("/photos/{photo_id}/denoised")

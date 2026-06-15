@@ -29,6 +29,7 @@ app.add_middleware(
     allow_origins=["*"],  # application locale ; le serveur Vite de dev tourne sur un autre port
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Server-Timing"],  # lisible par le panneau de profilage dev
 )
 
 for r in (photos.router, imports.router, render.router, edits.router, export.router, projects.router):

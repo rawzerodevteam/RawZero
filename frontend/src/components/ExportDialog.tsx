@@ -5,8 +5,6 @@ import { chooseExportDir, ensureWritable, fsAccessSupported, loadExportDir, writ
 
 type Scope = "selection" | "current" | "all";
 
-interface ExportedFile { id: number; name: string; url: string; width: number; height: number }
-
 /** Repli (navigateurs sans File System Access) : télécharge un fichier via une ancre invisible. */
 function triggerDownload(url: string, name: string) {
   const a = document.createElement("a");
@@ -79,25 +77,26 @@ export function ExportDialog() {
     await saveNow(); // les derniers réglages doivent être en base avant l'export
     const errs: { id: number; error: string }[] = [];
     const used = new Set<string>();
-    let ok = 0;
-    // Export photo par photo : barre de progression réelle + enregistrement direct dans le dossier.
-    for (let i = 0; i < ids.length; i++) {
-      try {
-        const out = await api.exportPhotos({ ids: [ids[i]], format, quality, max_size: maxSize, suffix });
-        out.errors.forEach((e) => errs.push(e));
-        for (const f of out.files as ExportedFile[]) {
+    let ok = 0, done = 0;
+    // Export parallèle côté serveur (multi-cœurs) : on reçoit chaque photo terminée au fil
+    // de l'eau et on l'enregistre aussitôt dans le dossier choisi.
+    try {
+      await api.exportStream({ ids, format, quality, max_size: maxSize, suffix }, async (ev) => {
+        if (ev.type === "file") {
           if (fsAccessSupported && target) {
-            const blob = await (await fetch(f.url)).blob();
-            await writeFile(target, f.name, blob, used);
+            const blob = await (await fetch(ev.url)).blob();
+            await writeFile(target, ev.name, blob, used);
           } else {
-            triggerDownload(f.url, f.name);
+            triggerDownload(ev.url, ev.name);
           }
-          ok++;
+          ok++; done++; setProgress({ done, total: ids.length });
+        } else if (ev.type === "error") {
+          errs.push({ id: ev.id, error: ev.error });
+          done++; setProgress({ done, total: ids.length });
         }
-      } catch (e) {
-        errs.push({ id: ids[i], error: String(e) });
-      }
-      setProgress({ done: i + 1, total: ids.length });
+      });
+    } catch (e) {
+      errs.push({ id: -1, error: String(e) });
     }
     setErrors(errs);
     setDoneCount(ok);
