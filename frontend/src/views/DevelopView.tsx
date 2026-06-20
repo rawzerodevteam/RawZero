@@ -41,6 +41,17 @@ function useRenderedImage(): string | null {
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<number>();
 
+  // Au changement de photo : afficher tout de suite la preview JPEG en cache (instantanée)
+  // pendant que la base RAW décode côté serveur (~plusieurs secondes au 1er accès). Le rendu
+  // HD ci-dessous la remplace dès qu'il est prêt. Volontairement déclenché par le seul
+  // `currentId` (pas par les edits) pour ne pas écraser le rendu courant pendant le réglage.
+  useEffect(() => {
+    if (currentId === null) return;
+    const v = useStore.getState().editsVersion[currentId] ?? 0;
+    const placeholder = api.previewUrl(currentId, v);
+    setSrc((old) => { if (old?.startsWith("blob:")) URL.revokeObjectURL(old); return placeholder; });
+  }, [currentId]);
+
   useEffect(() => {
     if (currentId === null || !edits) { setSrc(null); return; }
     window.clearTimeout(timerRef.current);
@@ -57,7 +68,7 @@ function useRenderedImage(): string | null {
         cropEdit, // en mode recadrage : on affiche l'image entière, l'overlay dessine le cadre
         signal: ctrl.signal,
       })
-        .then((url) => setSrc((old) => { if (old) URL.revokeObjectURL(old); return url; }))
+        .then((url) => setSrc((old) => { if (old?.startsWith("blob:")) URL.revokeObjectURL(old); return url; }))
         .catch((e) => { if ((e as Error).name !== "AbortError") console.error(e); });
     }, delay);
     return () => window.clearTimeout(timerRef.current);
@@ -66,7 +77,7 @@ function useRenderedImage(): string | null {
   // libération de la dernière URL au démontage
   useEffect(() => () => {
     abortRef.current?.abort();
-    setSrc((old) => { if (old) URL.revokeObjectURL(old); return null; });
+    setSrc((old) => { if (old?.startsWith("blob:")) URL.revokeObjectURL(old); return null; });
   }, []);
 
   return src;
