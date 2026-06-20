@@ -47,6 +47,11 @@ export function DetailPanel() {
       ) : (
         <p className="dim hint">Modèle absent (déposer <code>ffdnet_color.onnx</code> dans <code>data/models/</code>).</p>
       )}
+      <h4>Défrange (aberration chromatique)</h4>
+      <EditSlider label="Pourpre" value={edits.detail.defringe_purple} min={0} max={100}
+        apply={(e, v) => { e.detail.defringe_purple = v; }} />
+      <EditSlider label="Vert" value={edits.detail.defringe_green} min={0} max={100}
+        apply={(e, v) => { e.detail.defringe_green = v; }} />
     </PanelSection>
   );
 }

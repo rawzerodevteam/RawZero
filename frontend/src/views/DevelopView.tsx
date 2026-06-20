@@ -7,6 +7,7 @@ import { StarRating } from "../components/StarRating";
 import { GpuDiffDialog } from "../components/GpuDiffDialog";
 import { ModeTabs } from "../components/ModeTabs";
 import { useStore } from "../store";
+import { useMaskSuppressed } from "../lib/useMaskSuppressed";
 import { BasicPanel } from "../panels/BasicPanel";
 import { CurvePanel } from "../panels/CurvePanel";
 import { DetailPanel } from "../panels/DetailPanel";
@@ -14,6 +15,7 @@ import { EffectsPanel } from "../panels/EffectsPanel";
 import { GeometryPanel } from "../panels/GeometryPanel";
 import { HSLPanel } from "../panels/HSLPanel";
 import { LocalPanel } from "../panels/LocalPanel";
+import { HistoryPanel } from "../panels/HistoryPanel";
 import { MetaPanel } from "../panels/MetaPanel";
 import { PresetsPanel } from "../panels/PresetsPanel";
 import { ExifOverlay } from "./LibraryView";
@@ -31,6 +33,9 @@ function useRenderedImage(): string | null {
   const showMaskOverlay = useStore((s) => s.showMaskOverlay);
   const selectedLocalId = useStore((s) => s.selectedLocalId);
   const isDragging = useStore((s) => s.dragBaseline !== null);
+  // Pendant le réglage (et un court instant après), on ne cuit pas l'overlay du masque dans le
+  // JPEG serveur : on voit l'effet du réglage. Le « linger » couvre les clics rapides.
+  const maskSuppressed = useMaskSuppressed();
   const cropEdit = useStore((s) => s.activeTool === "crop");
   const [src, setSrc] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -48,7 +53,7 @@ function useRenderedImage(): string | null {
       api.render(currentId, edits, {
         maxSize,
         before: beforeAfter,
-        showMask: showMaskOverlay && selectedLocalId ? selectedLocalId : undefined,
+        showMask: showMaskOverlay && selectedLocalId && !maskSuppressed ? selectedLocalId : undefined,
         cropEdit, // en mode recadrage : on affiche l'image entière, l'overlay dessine le cadre
         signal: ctrl.signal,
       })
@@ -56,7 +61,7 @@ function useRenderedImage(): string | null {
         .catch((e) => { if ((e as Error).name !== "AbortError") console.error(e); });
     }, delay);
     return () => window.clearTimeout(timerRef.current);
-  }, [currentId, edits, beforeAfter, showMaskOverlay, selectedLocalId, isDragging, cropEdit]);
+  }, [currentId, edits, beforeAfter, showMaskOverlay, selectedLocalId, isDragging, maskSuppressed, cropEdit]);
 
   // libération de la dernière URL au démontage
   useEffect(() => () => {
@@ -132,6 +137,7 @@ export function DevelopView() {
         <GeometryPanel />
         <LocalPanel />
         <PresetsPanel />
+        <HistoryPanel />
         <MetaPanel />
       </aside>
     </div>

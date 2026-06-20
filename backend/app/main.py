@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import config, db
-from .routers import edits, export, imports, photos, projects, render
+from .routers import albums, edits, export, imports, photos, projects, render
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -32,7 +32,8 @@ app.add_middleware(
     expose_headers=["Server-Timing"],  # lisible par le panneau de profilage dev
 )
 
-for r in (photos.router, imports.router, render.router, edits.router, export.router, projects.router):
+for r in (photos.router, imports.router, render.router, edits.router, export.router,
+          projects.router, albums.router):
     app.include_router(r, prefix="/api")
 
 

@@ -57,6 +57,7 @@ export function EditSlider({ label, value, min, max, step = 1, reset = 0, fmt, a
         step={step}
         value={value}
         onPointerDown={startDrag}
+        onKeyDown={startDrag}
         onChange={(ev) => updateEdits((e) => apply(e, Number(ev.target.value)), false)}
         onPointerUp={endDrag}
         onKeyUp={endDrag}

@@ -19,21 +19,68 @@ SORTS = {
 
 @router.get("/photos")
 def list_photos(min_rating: int = 0, flag: str = "", color: str = "",
-                sort: str = "captured_asc", project_id: int = 0):
-    sql = "SELECT * FROM photos WHERE rating >= ?"
-    params: list = [min_rating]
-    if project_id:
-        sql += " AND project_id = ?"
-        params.append(project_id)
+                sort: str = "captured_asc", project_id: int = 0, album_id: int = 0,
+                camera: str = "", lens: str = "", iso_min: int = 0, iso_max: int = 0,
+                date_from: str = "", date_to: str = ""):
+    # Un album est transverse aux projets : s'il est demandé, il prime sur project_id.
+    if album_id:
+        sql = ("SELECT photos.* FROM photos "
+               "JOIN album_photos ON album_photos.photo_id = photos.id "
+               "WHERE album_photos.album_id = ? AND photos.rating >= ?")
+        params: list = [album_id, min_rating]
+    else:
+        sql = "SELECT * FROM photos WHERE rating >= ?"
+        params = [min_rating]
+        if project_id:
+            sql += " AND project_id = ?"
+            params.append(project_id)
     if flag:
         sql += " AND flag = ?"
         params.append(flag)
     if color:
         sql += " AND color = ?"
         params.append(color)
+    if camera:
+        sql += " AND camera = ?"
+        params.append(camera)
+    if lens:
+        sql += " AND lens = ?"
+        params.append(lens)
+    if iso_min > 0:
+        sql += " AND iso >= ?"
+        params.append(iso_min)
+    if iso_max > 0:
+        sql += " AND iso <= ?"
+        params.append(iso_max)
+    if date_from:
+        sql += " AND captured_at >= ?"
+        params.append(date_from)
+    if date_to:
+        sql += " AND captured_at <= ?"
+        params.append(date_to + "T23:59:59")   # captured_at en ISO → borne inclusive du jour
     sql += f" ORDER BY {SORTS.get(sort, SORTS['captured_asc'])}"
     rows = db.query(sql, tuple(params))
     return {"photos": [db.photo_to_dict(r) for r in rows]}
+
+
+@router.get("/photos/facets")
+def photo_facets(project_id: int = 0, album_id: int = 0):
+    """Valeurs distinctes (caméra, objectif) pour peupler les filtres, restreintes au
+    contexte courant (album si fourni, sinon projet, sinon tout le catalogue)."""
+    if album_id:
+        src = ("photos JOIN album_photos ON album_photos.photo_id = photos.id "
+               "WHERE album_photos.album_id = ?")
+        args: tuple = (album_id,)
+    elif project_id:
+        src, args = "photos WHERE project_id = ?", (project_id,)
+    else:
+        src, args = "photos WHERE 1=1", ()
+
+    def distinct(col: str) -> list[str]:
+        rows = db.query(f"SELECT DISTINCT photos.{col} AS v FROM {src} AND photos.{col} != ''", args)
+        return sorted((r["v"] for r in rows), key=str.lower)
+
+    return {"cameras": distinct("camera"), "lenses": distinct("lens")}
 
 
 def get_photo_row(photo_id: int):

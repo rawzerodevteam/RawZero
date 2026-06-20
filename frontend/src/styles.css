@@ -94,6 +94,20 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
 .sep { width: 1px; height: 20px; background: var(--border); }
 .spacer { flex: 1; }
 
+.exif-filter { position: relative; display: inline-flex; }
+.exif-filter-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 240px; padding: 12px;
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.exif-filter-pop label { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+.exif-filter-pop select, .exif-filter-pop input { width: 100%; }
+.exif-range { display: flex; align-items: center; gap: 6px; }
+.exif-range input { width: 100%; min-width: 0; }
+.exif-reset { margin-top: 8px; }
+
 .color-filter { display: flex; gap: 5px; }
 .color-dot {
   width: 15px; height: 15px;
@@ -150,7 +164,9 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
   align-items: center;
   justify-content: center;
 }
-.cell-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* contain → l'image entière est toujours visible (jamais rognée ni déformée) ;
+   bandes neutres autour des formats qui ne sont pas 3:2. */
+.cell-img img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .badge {
   position: absolute;
   top: 6px;
@@ -225,6 +241,11 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
 .viewer.tool-brush { cursor: none; }
 .viewer.tool-wb { cursor: crosshair; }
 .viewer.tool-pointmask { cursor: crosshair; }
+/* Espace maintenu : main pour se déplacer dans l'image, quel que soit l'outil actif */
+.viewer.space-pan, .viewer.space-pan.tool-crop, .viewer.space-pan.tool-linear,
+.viewer.space-pan.tool-radial, .viewer.space-pan.tool-brush, .viewer.space-pan.tool-wb,
+.viewer.space-pan.tool-pointmask { cursor: grab; }
+.viewer.space-pan:active { cursor: grabbing; }
 .viewer-box { position: absolute; }
 .viewer-box img { display: block; user-select: none; }
 .viewer-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -535,6 +556,14 @@ input[type="range"]:hover::-moz-range-thumb { background: var(--accent); }
   touch-action: none;
   cursor: crosshair;
 }
+.curve-channels { display: flex; gap: 4px; margin-bottom: 6px; }
+.curve-chan {
+  flex: 1; padding: 3px 0; font-size: 12px; cursor: pointer;
+  background: var(--bg-deep); color: var(--text-dim);
+  border: 1px solid transparent; border-radius: var(--radius);
+}
+.curve-chan:hover { color: var(--text); }
+.curve-chan.active { background: var(--bg); }
 .curve-grid line { stroke: #2b2d34; stroke-width: 1; }
 .curve-diag { stroke: #3a3c44; stroke-dasharray: 4 4; }
 .curve-path { fill: none; stroke: var(--text); stroke-width: 1.8; }
@@ -569,6 +598,11 @@ input[type="range"]:hover::-moz-range-thumb { background: var(--accent); }
   padding: 0 4px;
 }
 .local-adjust { margin-top: 6px; border-top: 1px dashed var(--border); padding-top: 6px; }
+
+/* Panneau Historique : étapes après l'étape courante (rétablissables) grisées */
+.history-list { max-height: 280px; overflow-y: auto; }
+.history-list .step-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-list li.future { color: var(--text-dim); opacity: 0.65; }
 
 /* ---------- Presets ---------- */
 .preset-list { list-style: none; margin: 4px 0; padding: 0; }
@@ -816,6 +850,57 @@ kbd {
 .rail-btn:disabled { opacity: 0.4; cursor: default; }
 .rail-btn.export { color: var(--accent); }
 .rail-btn.export:hover:not(:disabled) { background: var(--accent-soft); }
+
+/* ---------- Panneau Collections (albums) ---------- */
+.collections {
+  flex: none; width: 210px; display: flex; flex-direction: column;
+  background: var(--bg-panel); border-right: 1px solid var(--border);
+  padding: 8px; overflow-y: auto; gap: 2px;
+}
+.collections-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-dim); padding: 4px 6px;
+}
+.coll-add {
+  background: none; border: none; color: var(--text-dim); cursor: pointer;
+  font-size: 16px; line-height: 1; padding: 0 4px;
+}
+.coll-add:hover { color: var(--accent); }
+.coll-sep { height: 1px; background: var(--border); margin: 4px 0; }
+.coll-empty { font-size: 11.5px; color: var(--text-dim); padding: 4px 6px; line-height: 1.4; }
+.coll-item {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  background: none; border: 1px solid transparent; border-radius: var(--radius);
+  color: var(--text); cursor: pointer; padding: 6px 8px; font-size: 13px; text-align: left;
+}
+.coll-item:hover { background: var(--bg-raised); }
+.coll-item.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.coll-item.drop-target { border-color: var(--accent); background: var(--accent-soft); }
+.coll-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.coll-count { font-size: 11px; color: var(--text-dim); }
+.coll-actions { display: none; gap: 2px; }
+.coll-item:hover .coll-actions { display: flex; }
+.coll-actions button {
+  background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 11px; padding: 0 2px;
+}
+.coll-actions button:hover { color: var(--accent); }
+
+.album-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--accent-soft); color: var(--accent);
+  border: 1px solid var(--accent); border-radius: 12px; padding: 1px 4px 1px 9px; font-size: 12px;
+}
+.album-chip button { background: none; border: none; color: inherit; cursor: pointer; font-size: 11px; padding: 0 3px; }
+
+/* cartes d'album sur l'accueil (réutilise .project-card) */
+.project-card.album.drop-target { border-color: var(--accent); transform: translateY(-2px); }
+.home-hint { font-size: 12.5px; color: var(--text-dim); margin: -12px 0 16px; }
+
+/* sous-menu « Ajouter à l'album » du menu contextuel */
+.ctx-sub { display: flex; flex-direction: column; max-height: 180px; overflow-y: auto; margin: 2px 0; }
+.ctx-sub button { padding-left: 24px; font-size: 12.5px; }
+.ctx-sub .ctx-new { color: var(--accent); }
 
 /* ---------- Indicateurs « photo retouchée » ---------- */
 .badge.edited { right: 6px; top: 28px; color: var(--accent); }

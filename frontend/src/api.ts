@@ -1,4 +1,4 @@
-import type { EditState, ImportResult, LocalAdjust, Photo, Preset, Project } from "./types";
+import type { Album, EditState, HistoryData, ImportResult, LocalAdjust, Photo, Preset, Project } from "./types";
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -14,6 +14,17 @@ export interface PhotoFilters {
   flag: string;
   color: string;
   sort: string;
+  camera: string;
+  lens: string;
+  isoMin: number;
+  isoMax: number;
+  dateFrom: string;
+  dateTo: string;
+}
+
+export interface PhotoFacets {
+  cameras: string[];
+  lenses: string[];
 }
 
 /** Évènement du flux d'export (NDJSON) : une photo terminée, une erreur, ou la fin. */
@@ -45,15 +56,65 @@ export const api = {
     await json(await fetch(`/api/projects/${id}`, { method: "DELETE" }));
   },
 
-  async listPhotos(f: PhotoFilters, projectId?: number | null): Promise<Photo[]> {
+  async listPhotos(f: PhotoFilters, projectId?: number | null, albumId?: number | null): Promise<Photo[]> {
     const q = new URLSearchParams({
       min_rating: String(f.minRating), flag: f.flag, color: f.color, sort: f.sort,
     });
-    if (projectId) q.set("project_id", String(projectId));
+    if (f.camera) q.set("camera", f.camera);
+    if (f.lens) q.set("lens", f.lens);
+    if (f.isoMin > 0) q.set("iso_min", String(f.isoMin));
+    if (f.isoMax > 0) q.set("iso_max", String(f.isoMax));
+    if (f.dateFrom) q.set("date_from", f.dateFrom);
+    if (f.dateTo) q.set("date_to", f.dateTo);
+    if (albumId) q.set("album_id", String(albumId));      // album → prime sur le projet
+    else if (projectId) q.set("project_id", String(projectId));
     return (await json<{ photos: Photo[] }>(await fetch(`/api/photos?${q}`))).photos;
   },
 
-  async getPhoto(id: number): Promise<Photo & { edits: Partial<EditState> }> {
+  async getFacets(projectId?: number | null, albumId?: number | null): Promise<PhotoFacets> {
+    const q = new URLSearchParams();
+    if (albumId) q.set("album_id", String(albumId));
+    else if (projectId) q.set("project_id", String(projectId));
+    return json<PhotoFacets>(await fetch(`/api/photos/facets?${q}`));
+  },
+
+  async listAlbums(): Promise<Album[]> {
+    return (await json<{ albums: Album[] }>(await fetch("/api/albums"))).albums;
+  },
+
+  async createAlbum(name: string): Promise<Album> {
+    return json(await fetch("/api/albums", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }));
+  },
+
+  async renameAlbum(id: number, name: string): Promise<Album> {
+    return json(await fetch(`/api/albums/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }));
+  },
+
+  async deleteAlbum(id: number): Promise<void> {
+    await json(await fetch(`/api/albums/${id}`, { method: "DELETE" }));
+  },
+
+  async addToAlbum(id: number, photoIds: number[]): Promise<{ count: number }> {
+    return json(await fetch(`/api/albums/${id}/photos`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photo_ids: photoIds }),
+    }));
+  },
+
+  async removeFromAlbum(id: number, photoIds: number[]): Promise<{ count: number }> {
+    return json(await fetch(`/api/albums/${id}/photos`, {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photo_ids: photoIds }),
+    }));
+  },
+
+  async getPhoto(id: number): Promise<Photo & { edits: Partial<EditState>; history?: unknown }> {
     return json(await fetch(`/api/photos/${id}`));
   },
 
@@ -132,11 +193,11 @@ export const api = {
     return URL.createObjectURL(await res.blob());
   },
 
-  async saveEdits(id: number, edits: EditState): Promise<void> {
+  async saveEdits(id: number, edits: EditState, history?: HistoryData): Promise<void> {
     await json(await fetch(`/api/photos/${id}/edits`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ edits }),
+      body: JSON.stringify({ edits, history }),
     }));
   },
 

@@ -10,7 +10,8 @@ export const SHORTCUTS: [string, string][] = [
   ["E", "Zoom (tri rapide)"],
   ["D", "Mode développement"],
   ["Ctrl/Maj + clic", "Sélection multiple (clic droit pour exporter…)"],
-  ["Espace ou Z", "Zoom ajusté ↔ 100 % (glisser pour naviguer)"],
+  ["Z", "Zoom ajusté ↔ 100 %"],
+  ["Espace + glisser", "Se déplacer dans l'image (quel que soit l'outil)"],
   ["\\", "Avant / après"],
   ["J", "Alertes d'écrêtage"],
   ["R", "Outil recadrage"],
@@ -100,7 +101,12 @@ export function handleGlobalKey(ev: KeyboardEvent) {
       return;
   }
 
-  if (k >= "0" && k <= "5") { s.setRating(Number(k)); return; }
+  if (k >= "0" && k <= "5") {
+    s.setRating(Number(k));
+    // Pendant le tri (grille / loupe), noter fait passer à la photo suivante.
+    if (s.view !== "develop") s.navigate(1);
+    return;
+  }
   const colorKeys: Record<string, string> = { "6": "red", "7": "yellow", "8": "green", "9": "blue" };
   if (colorKeys[k]) { s.setColor(colorKeys[k]); return; }
 
@@ -132,7 +138,7 @@ export function handleGlobalKey(ev: KeyboardEvent) {
       s.setUI({ showInfo: !s.showInfo });
       break;
   }
-  // Espace et Z sont gérés par le visualiseur (zoom), via les événements du composant.
+  // Espace (déplacement) et Z (zoom) sont gérés par le visualiseur, via ses propres événements.
 }
 
 function resetArrowRepeat() { arrowKey = ""; }

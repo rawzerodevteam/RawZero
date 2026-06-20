@@ -45,13 +45,23 @@ const fromSvg = (sx: number, sy: number): [number, number] => [
   Math.min(Math.max((H - PAD - sy) / (H - 2 * PAD), 0), 1),
 ];
 
+const CHANNELS = [
+  { key: "points", label: "RVB", color: "#d8d8d8" },
+  { key: "r", label: "R", color: "#e5484d" },
+  { key: "g", label: "V", color: "#5bb98b" },
+  { key: "b", label: "B", color: "#5b8def" },
+] as const;
+type ChannelKey = (typeof CHANNELS)[number]["key"];
+
 export function CurveEditor() {
-  const points = useStore((s) => s.edits?.curve.points) ?? [[0, 0], [1, 1]] as [number, number][];
+  const [channel, setChannel] = useState<ChannelKey>("points");
+  const points = useStore((s) => s.edits?.curve[channel]) ?? [[0, 0], [1, 1]] as [number, number][];
   const updateEdits = useStore((s) => s.updateEdits);
   const startDrag = useStore((s) => s.startDrag);
   const endDrag = useStore((s) => s.endDrag);
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const color = CHANNELS.find((c) => c.key === channel)!.color;
 
   const svgPoint = (ev: React.PointerEvent): [number, number] => {
     const r = svgRef.current!.getBoundingClientRect();
@@ -60,7 +70,7 @@ export function CurveEditor() {
 
   const setPoint = (idx: number, p: [number, number]) => {
     updateEdits((e) => {
-      const pts = e.curve.points;
+      const pts = e.curve[channel];
       const lo = idx > 0 ? pts[idx - 1][0] + 0.02 : 0;
       const hi = idx < pts.length - 1 ? pts[idx + 1][0] - 0.02 : 1;
       const x = idx === 0 ? 0 : idx === pts.length - 1 ? 1 : Math.min(Math.max(p[0], lo), hi);
@@ -79,7 +89,7 @@ export function CurveEditor() {
     } else if (points.length < 12) {
       const idx = points.findIndex((q) => q[0] > p[0]);
       const at = idx < 0 ? points.length - 1 : idx;
-      updateEdits((e) => { e.curve.points.splice(at, 0, p); }, false);
+      updateEdits((e) => { e.curve[channel].splice(at, 0, p); }, false);
       setDragIdx(at);
     }
   };
@@ -97,7 +107,7 @@ export function CurveEditor() {
   const removePoint = (idx: number) => {
     if (idx === 0 || idx === points.length - 1) return;
     startDrag();
-    updateEdits((e) => { e.curve.points.splice(idx, 1); }, false);
+    updateEdits((e) => { e.curve[channel].splice(idx, 1); }, false);
     endDrag();
   };
 
@@ -106,6 +116,19 @@ export function CurveEditor() {
     .join(" ");
 
   return (
+    <>
+    <div className="curve-channels">
+      {CHANNELS.map((c) => (
+        <button
+          key={c.key}
+          className={"curve-chan" + (channel === c.key ? " active" : "")}
+          style={channel === c.key ? { color: c.color, borderColor: c.color } : undefined}
+          onClick={() => { setChannel(c.key); setDragIdx(null); }}
+        >
+          {c.label}
+        </button>
+      ))}
+    </div>
     <svg
       ref={svgRef}
       className="curve-editor"
@@ -122,7 +145,7 @@ export function CurveEditor() {
         </g>
       ))}
       <line className="curve-diag" x1={toSvg([0, 0])[0]} y1={toSvg([0, 0])[1]} x2={toSvg([1, 1])[0]} y2={toSvg([1, 1])[1]} />
-      <path className="curve-path" d={path} />
+      <path className="curve-path" d={path} style={{ stroke: color }} />
       {points.map((p, i) => {
         const [sx, sy] = toSvg(p as [number, number]);
         return (
@@ -132,10 +155,12 @@ export function CurveEditor() {
             cy={sy}
             r={5}
             className={"curve-pt" + (dragIdx === i ? " drag" : "")}
+            style={{ fill: color }}
             onDoubleClick={(ev) => { ev.stopPropagation(); removePoint(i); }}
           />
         );
       })}
     </svg>
+    </>
   );
 }

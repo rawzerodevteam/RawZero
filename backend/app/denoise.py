@@ -21,7 +21,9 @@ from . import config
 log = logging.getLogger(__name__)
 
 # Force de référence à laquelle on précalcule la base débruitée (sigma normalisé 0..1).
-REF_SIGMA = 22.0 / 255.0
+# Le modèle expose sigma en entrée runtime → cette valeur se règle ici sans reconvertir l'ONNX.
+# Calée pour les hauts ISO (le cas d'usage réel) ; le slider « Force » module vers le bas.
+REF_SIGMA = 40.0 / 255.0
 
 # Tuilage : tuile carrée + recouvrement fondu (rampe linéaire) entre tuiles voisines.
 _TILE = 512
@@ -93,12 +95,16 @@ def _detect_layout(sess) -> dict:
 
     if len(inputs) >= 2:
         img = next((i.name for i in inputs if ch(i) == 3), inputs[0].name)
-        sig = next((i.name for i in inputs if ch(i) == 1), None)
-        if sig is None:
-            sig = next((i.name for i in inputs if i.name != img), None)
-        return {"img": img, "sigma": sig, "concat": False}
+        sig_inp = next((i for i in inputs if ch(i) == 1), None)
+        if sig_inp is None:
+            sig_inp = next((i for i in inputs if i.name != img), None)
+        # sigma « scalaire » (export FFDNet natif : forme [N,1,1,1]) vs carte pleine [N,1,H,W].
+        s = sig_inp.shape if sig_inp is not None else []
+        scalar = len(s) == 4 and s[2] == 1 and s[3] == 1
+        return {"img": img, "sigma": sig_inp.name if sig_inp else None,
+                "concat": False, "sigma_scalar": scalar}
     only = inputs[0]
-    return {"img": only.name, "sigma": None, "concat": ch(only) == 4}
+    return {"img": only.name, "sigma": None, "concat": ch(only) == 4, "sigma_scalar": False}
 
 
 def _run_tile(sess, layout, tile: np.ndarray, sigma: float) -> np.ndarray:
@@ -116,7 +122,8 @@ def _run_tile(sess, layout, tile: np.ndarray, sigma: float) -> np.ndarray:
     else:
         feeds = {layout["img"]: x}
         if layout["sigma"] is not None:
-            feeds[layout["sigma"]] = np.full((1, 1, H, W), sigma, np.float32)
+            shape = (1, 1, 1, 1) if layout.get("sigma_scalar") else (1, 1, H, W)
+            feeds[layout["sigma"]] = np.full(shape, sigma, np.float32)
     out = np.asarray(sess.run(None, feeds)[0])[0]               # 3,H,W
     out = np.transpose(out, (1, 2, 0))
     return out[:h, :w]

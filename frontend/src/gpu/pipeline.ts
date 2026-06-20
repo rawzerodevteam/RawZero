@@ -14,7 +14,7 @@
  *
  * Pas encore portés (étape 3 / 4) : masques locaux, géométrie.
  */
-import { buildCurveLut } from "./curveLut";
+import { buildCurveTexture } from "./curveLut";
 import { HSL_BANDS } from "../types";
 import type { EditState, LocalAdjust } from "../types";
 
@@ -117,7 +117,7 @@ void main(){
   c = vec3(contrast1(c.r,k), contrast1(c.g,k), contrast1(c.b,k));
 
   c = clamp(c,0.,1.);                               // courbe
-  if(u_hasCurve==1) c = vec3(texture(u_curve,vec2(c.r,0.5)).r, texture(u_curve,vec2(c.g,0.5)).r, texture(u_curve,vec2(c.b,0.5)).r);
+  if(u_hasCurve==1) c = vec3(texture(u_curve,vec2(c.r,0.5)).r, texture(u_curve,vec2(c.g,0.5)).g, texture(u_curve,vec2(c.b,0.5)).b);
 
   vec3 hsv = rgb2hsv(clamp(c,0.,1.));               // HSL + vibrance + saturation
   float h=hsv.x, s=hsv.y, v=hsv.z;
@@ -145,6 +145,20 @@ void main(){
   float detail = l - texture(u_lumaBlur, v_uv).r;
   float mid = 1. - pow(abs(2.*clamp(l,0.,1.)-1.), 2.);
   o = vec4(c + (u_clarity/100.*0.9*detail*mid), 1.);
+}`;
+
+// 5bis) défrange : désature les franges pourpres/vertes sur les bords (aberration chromatique)
+const F_DEFRINGE = VERSION + PRELUDE + `
+uniform sampler2D u_blur; uniform float u_purple; uniform float u_green;
+void main(){
+  vec3 c = texture(u_tex, v_uv).rgb;
+  float l = luma(c);
+  float edge = clamp(abs(l - luma(texture(u_blur, v_uv).rgb)) * 8.0, 0.0, 1.0);
+  float pm = clamp(min(c.r, c.b) - c.g, 0.0, 1.0);
+  float gm = clamp(c.g - max(c.r, c.b), 0.0, 1.0);
+  float fp = clamp(pm * edge * (u_purple/100.0) * 4.0, 0.0, 1.0);
+  float fg = clamp(gm * edge * (u_green/100.0) * 4.0, 0.0, 1.0);
+  o = vec4(mix(c, vec3(l), max(fp, fg)), 1.0);
 }`;
 
 // 6) netteté (masque flou) + vignettage — passe finale (rendu écran)
@@ -259,13 +273,16 @@ void main(){
 // Valeur du masque local (partagée entre lblend et l'overlay rouge) — muv = coords image (y bas).
 const MASK_GLSL = `
 uniform sampler2D u_brush;  // masque rasterisé (pinceau / IA)
-uniform int u_kind;         // 0 linéaire, 1 radial, 2 pinceau, 3 masque IA
+uniform int u_kind;         // 0 linéaire, 1 radial, 2 pinceau, 3 IA, 4 plage luminance, 5 plage couleur
 uniform int u_invert;
 uniform float u_aiK;        // dureté du masque IA (contraste autour de 0.5)
 uniform vec4 u_lin;         // x0,y0,x1,y1
 uniform vec4 u_rad;         // cx,cy,rx,ry
 uniform vec3 u_rad2;        // angle(rad), feather, aspect = w/h
-float computeMask(vec2 muv){
+uniform vec4 u_lr;          // plage luminance : lo, hi, smooth
+uniform vec4 u_cr;          // plage couleur : hue, range, smooth, sat_min
+// muv = coords image (y bas) pour les masques géométriques ; col = couleur du pixel (plages).
+float computeMask(vec2 muv, vec3 col){
   float m;
   if(u_kind==0){                                   // dégradé linéaire
     vec2 d = u_lin.zw - u_lin.xy;
@@ -282,9 +299,19 @@ float computeMask(vec2 muv){
     m = 1.0 - smoothstep(max(1.0 - feather, 0.0), 1.0 + 0.25*feather, dist);
   } else if(u_kind==2){                            // pinceau (texture)
     m = texture(u_brush, muv).r;
-  } else {                                         // masque IA (texture + dureté)
+  } else if(u_kind==3){                            // masque IA (texture + dureté)
     m = texture(u_brush, muv).r;
     m = clamp((m - 0.5) * u_aiK + 0.5, 0.0, 1.0);
+  } else if(u_kind==4){                            // plage de luminance
+    float l = luma(col);
+    float lo = u_lr.x, hi = u_lr.y, sm = max(u_lr.z, 1e-3);
+    m = smoothstep(lo - sm, lo, l) * (1.0 - smoothstep(hi, hi + sm, l));
+  } else {                                         // plage de couleur
+    vec3 hsv = rgb2hsv(clamp(col, 0.0, 1.0));
+    float hd = abs(mod((hsv.x - u_cr.x) + 180.0, 360.0) - 180.0);
+    float hueW = 1.0 - smoothstep(u_cr.y, u_cr.y + max(u_cr.z, 1e-3), hd);
+    float satW = smoothstep(0.0, max(u_cr.w, 1e-3), hsv.y);
+    m = hueW * satW;
   }
   if(u_invert == 1) m = 1.0 - m;
   return clamp(m, 0.0, 1.0);
@@ -300,7 +327,7 @@ void main(){
     float detail = luma(adj) - luma(texture(u_blur, v_uv).rgb);
     adj += (u_sharpen/100.) * detail;
   }
-  float m = computeMask(vec2(v_uv.x, 1.0 - v_uv.y));
+  float m = computeMask(vec2(v_uv.x, 1.0 - v_uv.y), texture(u_orig, v_uv).rgb);
   o = vec4(mix(texture(u_orig, v_uv).rgb, adj, m), 1.0);
 }`;
 
@@ -308,7 +335,7 @@ void main(){
 const F_MASKOVL = VERSION + PRELUDE + MASK_GLSL + `
 void main(){
   vec3 img = texture(u_tex, v_uv).rgb;
-  float m = computeMask(vec2(v_uv.x, 1.0 - v_uv.y));
+  float m = computeMask(vec2(v_uv.x, 1.0 - v_uv.y), img);
   o = vec4(mix(img, vec3(1.0, 0.15, 0.15), m * 0.6), 1.0);
 }`;
 
@@ -401,6 +428,7 @@ export class GpuPipeline {
       linear: F_LINEAR, luma: F_LUMA, blur: F_BLUR, tone: F_TONE, clarity: F_CLARITY, final: F_FINAL,
       dcval: F_DCVAL, reducemax: F_REDUCE_MAX, dehaze: F_DEHAZE, ycc: F_YCC, chroma: F_CHROMA,
       bilateral: F_BILATERAL, lblend: F_LBLEND, geom: F_GEOM, maskovl: F_MASKOVL, blend: F_BLEND,
+      defringe: F_DEFRINGE,
     };
     for (const [name, frag] of Object.entries(sources)) {
       const p = this.link(VERT, frag);
@@ -415,7 +443,7 @@ export class GpuPipeline {
     this.baseTex = this.newTex();
     this.curveTex = this.newTex();
     gl.bindTexture(gl.TEXTURE_2D, this.curveTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 1, 1, 0, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array([255]));
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
   }
 
   private link(vsrc: string, fsrc: string): WebGLProgram {
@@ -731,7 +759,7 @@ export class GpuPipeline {
         : loc.type === "ai" ? this.aiTexture(loc) : this.curveTex;
       const out = this.rt(parity++ % 2 ? "lOutB" : "lOutA", W, H);
       const p = loc.params || {};
-      const kind = loc.type === "linear" ? 0 : loc.type === "radial" ? 1 : loc.type === "brush" ? 2 : 3;
+      const kind = maskKind(loc.type);
       const aiK = 1 + (num(p.hardness, 0) / 100) * 12;
       this.pass("lblend", [[0, mid.tex], [1, shBlur.tex], [2, cur.tex], [3, brush]], out, W, H, () => {
         gl.uniform1i(this.u("lblend", "u_tex"), 0);
@@ -745,6 +773,8 @@ export class GpuPipeline {
         gl.uniform4f(this.u("lblend", "u_lin"), num(p.x0, 0.5), num(p.y0, 0.2), num(p.x1, 0.5), num(p.y1, 0.8));
         gl.uniform4f(this.u("lblend", "u_rad"), num(p.cx, 0.5), num(p.cy, 0.5), num(p.rx, 0.25), num(p.ry, 0.25));
         gl.uniform3f(this.u("lblend", "u_rad2"), num(p.angle, 0) * Math.PI / 180, num(p.feather, 0.5), W / Math.max(H, 1));
+        gl.uniform4f(this.u("lblend", "u_lr"), num(p.lo, 0.25), num(p.hi, 0.75), num(p.smooth, 0.1), 0);
+        gl.uniform4f(this.u("lblend", "u_cr"), num(p.hue, 0), num(p.range, 30), num(p.smooth, 15), num(p.sat_min, 0.15));
       });
       cur = out;
     }
@@ -755,7 +785,7 @@ export class GpuPipeline {
   private maskOverlay(loc: LocalAdjust, img: RT, W: number, H: number) {
     const gl = this.gl;
     const p = loc.params || {};
-    const kind = loc.type === "linear" ? 0 : loc.type === "radial" ? 1 : loc.type === "brush" ? 2 : 3;
+    const kind = maskKind(loc.type);
     const tex = loc.type === "brush" ? this.brushTexture(loc, W, H)
       : loc.type === "ai" ? this.aiTexture(loc) : this.curveTex;
     this.pass("maskovl", [[0, img.tex], [3, tex]], null, W, H, () => {
@@ -767,6 +797,8 @@ export class GpuPipeline {
       gl.uniform4f(this.u("maskovl", "u_lin"), num(p.x0, 0.5), num(p.y0, 0.2), num(p.x1, 0.5), num(p.y1, 0.8));
       gl.uniform4f(this.u("maskovl", "u_rad"), num(p.cx, 0.5), num(p.cy, 0.5), num(p.rx, 0.25), num(p.ry, 0.25));
       gl.uniform3f(this.u("maskovl", "u_rad2"), num(p.angle, 0) * Math.PI / 180, num(p.feather, 0.5), W / Math.max(H, 1));
+      gl.uniform4f(this.u("maskovl", "u_lr"), num(p.lo, 0.25), num(p.hi, 0.75), num(p.smooth, 0.1), 0);
+      gl.uniform4f(this.u("maskovl", "u_cr"), num(p.hue, 0), num(p.range, 30), num(p.smooth, 15), num(p.sat_min, 0.15));
     });
   }
 
@@ -797,15 +829,15 @@ export class GpuPipeline {
     const cv = gl.canvas as HTMLCanvasElement;
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
 
-    // courbe : reconstruction de la LUT seulement quand les points changent
-    const ck = JSON.stringify(e.curve.points);
+    // courbe : reconstruction de la LUT seulement quand une courbe (maître ou canal) change
+    const ck = JSON.stringify(e.curve);
     if (ck !== this.lastCurve) {
       this.lastCurve = ck;
-      const lut = buildCurveLut(e.curve.points);
+      const lut = buildCurveTexture(e.curve);
       this.hasCurve = !!lut;
       if (lut) {
         gl.bindTexture(gl.TEXTURE_2D, this.curveTex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, lut.length, 1, 0, gl.RED, gl.UNSIGNED_BYTE, lut);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, lut.length / 4, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, lut);
       }
     }
 
@@ -925,6 +957,19 @@ export class GpuPipeline {
       cur = out;
     }
 
+    // 7bis) défrange (désaturation des franges pourpres/vertes sur les bords)
+    if (e.detail.defringe_purple > 0 || e.detail.defringe_green > 0) {
+      const dfBlur = this.blur(cur.tex, W, H, Math.max(1.5 * scale, 0.6), "dfA", "dfB", 1);
+      const out = this.rt("df", W, H);
+      this.pass("defringe", [[0, cur.tex], [1, dfBlur.tex]], out, W, H, () => {
+        gl.uniform1i(this.u("defringe", "u_tex"), 0);
+        gl.uniform1i(this.u("defringe", "u_blur"), 1);
+        gl.uniform1f(this.u("defringe", "u_purple"), e.detail.defringe_purple);
+        gl.uniform1f(this.u("defringe", "u_green"), e.detail.defringe_green);
+      });
+      cur = out;
+    }
+
     // 8) netteté (petit flou pleine résolution) → écran, + vignettage
     const sharpen = e.detail.sharpen_amount;
     let sharpBlur = cur;
@@ -955,6 +1000,11 @@ export class GpuPipeline {
 function num(v: any, def: number): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : def;
+}
+
+function maskKind(type: string): number {
+  return type === "linear" ? 0 : type === "radial" ? 1 : type === "brush" ? 2
+    : type === "ai" ? 3 : type === "lumrange" ? 4 : 5;
 }
 
 /** Plus grand rectangle de même aspect inscrit dans l'image redressée (port de _largest_rotated_rect). */

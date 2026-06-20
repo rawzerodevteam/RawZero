@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildCurveLut } from "../src/gpu/curveLut";
+import { buildCurveLut, buildCurveTexture } from "../src/gpu/curveLut";
+
+const ID = [[0, 0], [1, 1]] as [number, number][];
 
 describe("buildCurveLut (portage PCHIP)", () => {
   it("renvoie null pour la courbe identité", () => {
@@ -29,5 +31,26 @@ describe("buildCurveLut (portage PCHIP)", () => {
     const lut = buildCurveLut([[0, 0], [0.5, 0.3], [1, 1]])!;
     const mid = lut[Math.floor(lut.length / 2)];
     expect(mid).toBeLessThan(128); // 0.3 attendu au point milieu, < 0.5
+  });
+});
+
+describe("buildCurveTexture (courbes RVB par canal)", () => {
+  it("renvoie null quand maître + R/V/B sont identité", () => {
+    expect(buildCurveTexture({ points: ID, r: ID, g: ID, b: ID })).toBeNull();
+  });
+
+  it("courbe rouge seule n'affecte que le canal R", () => {
+    const tex = buildCurveTexture({ points: ID, r: [[0, 0], [0.5, 0.25], [1, 1]], g: ID, b: ID })!;
+    expect(tex).not.toBeNull();
+    const mid = (tex.length / 4) >> 1;
+    expect(tex[mid * 4]).toBeLessThan(128);        // R abaissé au milieu
+    expect(tex[mid * 4 + 1]).toBe(Math.round((mid / (tex.length / 4 - 1)) * 255)); // V identité
+    expect(tex[mid * 4 + 2]).toBe(Math.round((mid / (tex.length / 4 - 1)) * 255)); // B identité
+  });
+
+  it("compose le maître avant la courbe de canal (composed = chan(master(x)))", () => {
+    // maître = +0.1 partout (clampé), canal R = identité → R ≈ master
+    const tex = buildCurveTexture({ points: [[0, 0.1], [1, 1]], r: ID, g: ID, b: ID })!;
+    expect(tex[0]).toBe(Math.round(0.1 * 255));    // x=0 → master(0)=0.1
   });
 });

@@ -1,7 +1,7 @@
 # RawStudio
 
 A local, non-destructive **RAW photo editor** in the browser — inspired by Lightroom / Darktable.  
-No Docker required. Everything runs via a single PowerShell script.
+Runs via a single PowerShell script (Windows, no Docker) **or** as a container (Podman / Docker).
 
 ## Quick start
 
@@ -10,6 +10,25 @@ No Docker required. Everything runs via a single PowerShell script.
 ```
 
 Then open **http://localhost:8000**.
+
+### Run with Podman (or Docker)
+
+A multi-stage `Containerfile` builds the frontend and serves API + UI on one port.
+
+```bash
+# build + run with compose
+podman compose up --build -d        # or: docker compose up --build -d
+
+# …or build and run by hand
+podman build -t rawstudio .
+podman run -d --name rawstudio -p 8000:8000 \
+  -v ./data:/data:Z -v ./import:/import:Z rawstudio
+```
+
+Then open **http://localhost:8000**. The catalog/caches/exports live in `./data`
+and importable files go in `./import` (both bind-mounted, so they persist).
+AI models (subject/click masks, denoise) go in `./data/models` — without them
+those features are simply hidden.
 
 - The catalog, imported originals, caches, and exports are stored in `./data`.
 - To import large folders without going through the browser: drop your files into `./import`,

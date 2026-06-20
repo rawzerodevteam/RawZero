@@ -8,11 +8,18 @@ vi.mock("../src/api", () => ({
     patchPhoto: vi.fn(async () => ({})),
     deletePhoto: vi.fn(async () => undefined),
     saveEdits: vi.fn(async () => undefined),
+    getFacets: vi.fn(async () => ({ cameras: [], lenses: [] })),
+    listAlbums: vi.fn(async () => []),
+    createAlbum: vi.fn(async (name: string) => ({ id: 7, name, count: 0, cover: null })),
+    renameAlbum: vi.fn(async () => ({})),
+    deleteAlbum: vi.fn(async () => undefined),
+    addToAlbum: vi.fn(async () => ({ count: 1 })),
+    removeFromAlbum: vi.fn(async () => ({ count: 0 })),
   },
 }));
 
 import { api } from "../src/api";
-import { useStore } from "../src/store";
+import { historyTimeline, useStore } from "../src/store";
 import { defaultEdits } from "../src/types";
 
 const initialState = useStore.getState();
@@ -176,6 +183,60 @@ describe("copier / coller / reset", () => {
   });
 });
 
+describe("historique", () => {
+  beforeEach(() => {
+    useStore.setState({ currentId: 1, edits: defaultEdits(), view: "develop" });
+  });
+
+  const timeline = () => historyTimeline(useStore.getState());
+
+  it("chaque modification ajoute une étape libellée, l'étape d'origine en tête", () => {
+    const s = useStore.getState();
+    s.updateEdits((e) => { e.tone.exposure = 1; });
+    s.updateEdits((e) => { e.presence.clarity = 20; });
+    const { steps, index } = timeline();
+    expect(steps).toHaveLength(3);            // origine + 2 modifications
+    expect(index).toBe(2);                    // étape courante = dernière
+    expect(steps[0].label).toBe("Réglages d'origine");
+    expect(steps[1].label).toBe("Exposition +1");
+    expect(steps[2].label).toBe("Clarté +20");
+  });
+
+  it("un drag de slider produit une étape unique avec la valeur finale", () => {
+    const s = useStore.getState();
+    s.startDrag();
+    s.updateEdits((e) => { e.tone.exposure = 0.5; }, false);
+    s.updateEdits((e) => { e.tone.exposure = 1.5; }, false);
+    s.endDrag();
+    const { steps } = timeline();
+    expect(steps).toHaveLength(2);
+    expect(steps[1].label).toBe("Exposition +1.5");
+  });
+
+  it("jumpHistory restaure l'état d'une étape antérieure", () => {
+    const s = useStore.getState();
+    s.updateEdits((e) => { e.tone.exposure = 1; });
+    s.updateEdits((e) => { e.tone.exposure = 2; });
+    s.jumpHistory(0);
+    expect(useStore.getState().edits!.tone.exposure).toBe(0);
+    expect(timeline().index).toBe(0);
+    s.jumpHistory(2); // rétablir jusqu'au bout
+    expect(useStore.getState().edits!.tone.exposure).toBe(2);
+  });
+
+  it("modifier après un retour arrière tronque les étapes suivantes", () => {
+    const s = useStore.getState();
+    s.updateEdits((e) => { e.tone.exposure = 1; });
+    s.updateEdits((e) => { e.tone.exposure = 2; });
+    s.jumpHistory(1);                                  // revient à expo +1
+    s.updateEdits((e) => { e.tone.contrast = 30; });   // nouvelle branche
+    const { steps, index } = timeline();
+    expect(steps).toHaveLength(3);                     // origine + expo + contraste (le « +2 » est tombé)
+    expect(index).toBe(2);
+    expect(steps[2].label).toBe("Contraste +30");
+  });
+});
+
 describe("sauvegarde différée", () => {
   it("updateEdits déclenche saveEdits après le debounce", async () => {
     useStore.setState({ currentId: 1, edits: defaultEdits() });
@@ -215,6 +276,31 @@ describe("filtres", () => {
     useStore.getState().setFilters({ minRating: 3 });
     expect(useStore.getState().filters.minRating).toBe(3);
     expect(useStore.getState().filters.sort).toBe("captured_asc"); // inchangé
-    expect(api.listPhotos).toHaveBeenCalledWith(expect.objectContaining({ minRating: 3 }), null);
+    expect(api.listPhotos).toHaveBeenCalledWith(expect.objectContaining({ minRating: 3 }), null, null);
+  });
+});
+
+describe("albums", () => {
+  it("setAlbum liste par album et réinitialise les filtres EXIF", async () => {
+    useStore.setState({ filters: { ...useStore.getState().filters, camera: "X100", isoMin: 800 } });
+    await useStore.getState().setAlbum(5);
+    expect(useStore.getState().currentAlbumId).toBe(5);
+    expect(useStore.getState().filters.camera).toBe("");
+    expect(useStore.getState().filters.isoMin).toBe(0);
+    expect(api.listPhotos).toHaveBeenCalledWith(expect.anything(), null, 5);
+  });
+
+  it("setAlbum(null) revient au projet (album_id non transmis)", async () => {
+    await useStore.getState().setAlbum(3);
+    vi.clearAllMocks();
+    await useStore.getState().setAlbum(null);
+    expect(useStore.getState().currentAlbumId).toBe(null);
+    expect(api.listPhotos).toHaveBeenCalledWith(expect.anything(), null, null);
+  });
+
+  it("addToAlbum appelle l'API puis recharge les albums", async () => {
+    await useStore.getState().addToAlbum(2, [10, 11]);
+    expect(api.addToAlbum).toHaveBeenCalledWith(2, [10, 11]);
+    expect(api.listAlbums).toHaveBeenCalled();
   });
 });

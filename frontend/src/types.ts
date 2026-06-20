@@ -9,6 +9,15 @@ export interface Project {
 /** Id du « projet » virtuel regroupant toutes les photos importées. */
 export const ALL_PHOTOS_ID = 0;
 
+/** Album (collection) : regroupement de photos transverse aux projets. */
+export interface Album {
+  id: number;
+  name: string;
+  created_at?: string;
+  count?: number;
+  cover?: number | null;   // id de la photo de couverture (dernière ajoutée)
+}
+
 export interface Photo {
   id: number;
   filename: string;
@@ -52,7 +61,7 @@ export interface LocalAdjustValues {
 
 export interface LocalAdjust {
   id: string;
-  type: "linear" | "radial" | "brush" | "ai";
+  type: "linear" | "radial" | "brush" | "ai" | "lumrange" | "colorrange";
   params: Record<string, any>;
   invert: boolean;
   adjust: LocalAdjustValues;
@@ -63,9 +72,9 @@ export interface EditState {
   wb: { temp: number; tint: number };
   tone: { exposure: number; contrast: number; highlights: number; shadows: number; whites: number; blacks: number };
   presence: { clarity: number; dehaze: number; vibrance: number; saturation: number };
-  curve: { points: [number, number][] };
+  curve: { points: [number, number][]; r: [number, number][]; g: [number, number][]; b: [number, number][] };
   hsl: Record<Band, { h: number; s: number; l: number }>;
-  detail: { sharpen_amount: number; sharpen_radius: number; nr_luma: number; nr_color: number; nr_ai: number };
+  detail: { sharpen_amount: number; sharpen_radius: number; nr_luma: number; nr_color: number; nr_ai: number; defringe_purple: number; defringe_green: number };
   effects: { vignette: number; grain: number };
   geometry: {
     rotate: number; flip_h: boolean; flip_v: boolean; straighten: number;
@@ -73,6 +82,11 @@ export interface EditState {
   };
   locals: LocalAdjust[];
 }
+
+/** Une étape d'historique : un libellé lisible + l'état complet des réglages à ce point. */
+export interface HistoryStep { label: string; edits: EditState }
+/** Historique persisté d'une photo : séquence d'étapes + index de l'étape courante. */
+export interface HistoryData { steps: HistoryStep[]; index: number }
 
 export function defaultEdits(): EditState {
   const hsl = {} as EditState["hsl"];
@@ -82,9 +96,9 @@ export function defaultEdits(): EditState {
     wb: { temp: 0, tint: 0 },
     tone: { exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0 },
     presence: { clarity: 0, dehaze: 0, vibrance: 0, saturation: 0 },
-    curve: { points: [[0, 0], [1, 1]] },
+    curve: { points: [[0, 0], [1, 1]], r: [[0, 0], [1, 1]], g: [[0, 0], [1, 1]], b: [[0, 0], [1, 1]] },
     hsl,
-    detail: { sharpen_amount: 25, sharpen_radius: 1, nr_luma: 0, nr_color: 0, nr_ai: 0 },
+    detail: { sharpen_amount: 25, sharpen_radius: 1, nr_luma: 0, nr_color: 0, nr_ai: 0, defringe_purple: 0, defringe_green: 0 },
     effects: { vignette: 0, grain: 0 },
     geometry: { rotate: 0, flip_h: false, flip_v: false, straighten: 0, crop: { x: 0, y: 0, w: 1, h: 1 } },
     locals: [],
@@ -107,9 +121,12 @@ export function mergeEdits(partial: any): EditState {
     }
   };
   deep(base, partial);
-  base.curve.points = Array.isArray(partial.curve?.points) && partial.curve.points.length >= 2
-    ? partial.curve.points.map((p: number[]) => [p[0], p[1]])
-    : [[0, 0], [1, 1]];
+  for (const ch of ["points", "r", "g", "b"] as const) {
+    const pts = partial.curve?.[ch];
+    base.curve[ch] = Array.isArray(pts) && pts.length >= 2
+      ? pts.map((p: number[]) => [p[0], p[1]])
+      : [[0, 0], [1, 1]];
+  }
   base.locals = Array.isArray(partial.locals)
     ? partial.locals.map((l: any) => ({
         id: String(l.id ?? Math.random().toString(36).slice(2)),

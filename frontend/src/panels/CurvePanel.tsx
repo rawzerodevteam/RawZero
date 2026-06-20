@@ -10,7 +10,12 @@ export function CurvePanel() {
     <PanelSection
       title="Courbe de tonalité"
       defaultOpen={false}
-      onReset={() => updateEdits((e) => { e.curve.points = [[0, 0], [1, 1]]; })}
+      onReset={() => updateEdits((e) => {
+        e.curve.points = [[0, 0], [1, 1]];
+        e.curve.r = [[0, 0], [1, 1]];
+        e.curve.g = [[0, 0], [1, 1]];
+        e.curve.b = [[0, 0], [1, 1]];
+      })}
     >
       <CurveEditor />
       <p className="hint">Clic : ajouter un point · glisser : déplacer · double-clic : supprimer</p>

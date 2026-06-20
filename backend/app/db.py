@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS photos (
   flag TEXT NOT NULL DEFAULT 'none',
   color TEXT NOT NULL DEFAULT '',
   edits TEXT NOT NULL DEFAULT '{}',
-  edited INTEGER NOT NULL DEFAULT 0
+  edited INTEGER NOT NULL DEFAULT 0,
+  history TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_photos_captured ON photos(captured_at);
 CREATE TABLE IF NOT EXISTS presets (
@@ -81,6 +82,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE photos ADD COLUMN project_id INTEGER")
     # Colonne `edited` : calculée une fois ici puis maintenue au save, pour éviter de
     # recalculer `edits_meaningful` (deepcopy) à chaque listing du catalogue.
+    # Historique des étapes de développement (panneau « Historique »), persisté par photo.
+    if "history" not in cols:
+        conn.execute("ALTER TABLE photos ADD COLUMN history TEXT NOT NULL DEFAULT '{}'")
     if "edited" not in cols:
         conn.execute("ALTER TABLE photos ADD COLUMN edited INTEGER NOT NULL DEFAULT 0")
         from . import pipeline
@@ -137,11 +141,17 @@ def photo_to_dict(row: sqlite3.Row, with_edits: bool = False) -> dict[str, Any]:
     d = {k: row[k] for k in row.keys()}
     # `edited` lu depuis la colonne persistée (plus de deepcopy/compare au listing).
     d["edited"] = bool(d.get("edited", 0))
+    # `history` n'est servi qu'avec les edits (détail photo), jamais dans le listing du catalogue.
+    history_raw = d.pop("history", None)
     if with_edits:
         try:
             d["edits"] = json.loads(row["edits"] or "{}")
         except json.JSONDecodeError:
             d["edits"] = {}
+        try:
+            d["history"] = json.loads(history_raw or "{}")
+        except (json.JSONDecodeError, TypeError):
+            d["history"] = {}
     else:
         d.pop("edits", None)
     d.pop("relpath", None)

@@ -99,6 +99,21 @@ class TestCurveAndColor:
     def test_identity_curve_is_none(self):
         assert pipeline._curve_lut(((0.0, 0.0), (1.0, 1.0))) is None
 
+    def test_channel_curve_affects_only_its_channel(self):
+        # Courbe rouge seule (assombrie au milieu) : R diminue, V et B inchangés.
+        img = gradient_image()
+        out = apply_pipeline(img, edits(curve={"r": [[0.0, 0.0], [0.5, 0.25], [1.0, 1.0]]}))
+        assert out[..., 0].mean() < img[..., 0].mean() - 1e-3
+        assert np.allclose(out[..., 1], img[..., 1], atol=1e-3)
+        assert np.allclose(out[..., 2], img[..., 2], atol=1e-3)
+
+    def test_master_curve_composes_with_channel(self):
+        # Maître = identité décalée + canal : l'application reste dans [0,1] et bouge les 3 canaux.
+        img = gradient_image()
+        out = apply_pipeline(img, edits(curve={"points": [[0.0, 0.05], [1.0, 1.0]]}))
+        assert out.min() >= 0.0 and out.max() <= 1.0
+        assert out[..., 2].mean() > img[..., 2].mean() - 1e-2
+
     def test_wb_pick_neutralizes_cast(self):
         # zone uniforme avec un voile bleuté : la pipette doit renvoyer un temp/teinte
         # qui ramène le point cliqué vers le neutre (R≈V≈B).
@@ -114,6 +129,21 @@ class TestCurveAndColor:
         img = np.full((20, 20, 3), 0.5, np.float32)
         res = pipeline.wb_from_point(img, {}, 0.5, 0.5)
         assert abs(res["temp"]) < 1e-6 and abs(res["tint"]) < 1e-6
+
+    def test_defringe_reduces_edge_fringe(self):
+        # bord net avec frange pourpre (R,B hauts, V bas) sur les colonnes du bord
+        img = np.zeros((20, 20, 3), np.float32)
+        img[:, 10:] = 0.8
+        img[:, 9:11, 0] = 0.7
+        img[:, 9:11, 1] = 0.2
+        img[:, 9:11, 2] = 0.7
+        fr_before = float((img[:, 9:11, 0] - img[:, 9:11, 1]).mean())
+        out = apply_pipeline(img, edits(detail={"defringe_purple": 100.0}))
+        fr_after = float((out[:, 9:11, 0] - out[:, 9:11, 1]).mean())
+        assert fr_after < fr_before - 0.05          # frange pourpre nettement atténuée
+        # neutralité : sans réglage, l'image est inchangée
+        out0 = apply_pipeline(img.copy(), edits())
+        assert np.allclose(out0, img, atol=2e-3)
 
     def test_desaturation_gives_gray(self):
         img = gradient_image()
@@ -221,6 +251,29 @@ class TestMasks:
 
     def test_unknown_type(self):
         assert build_mask({"type": "nope", "params": {}}, 10, 10) is None
+
+    def test_lumrange_selects_band(self):
+        # rampe verticale de luminance 0→1 ; la plage [0.4,0.6] ne retient que le milieu
+        img = np.zeros((100, 10, 3), np.float32)
+        img[:] = np.linspace(0.0, 1.0, 100, dtype=np.float32)[:, None, None]
+        m = build_mask({"type": "lumrange", "params": {"lo": 0.4, "hi": 0.6, "smooth": 0.05}}, 100, 10, img)
+        assert m is not None
+        assert m[50, 5] > 0.9      # milieu (≈0.5) sélectionné
+        assert m[5, 5] < 0.05      # ombres exclues
+        assert m[95, 5] < 0.05     # hautes lumières exclues
+        # sans image, un masque par plage est nul (pas d'effet)
+        assert build_mask({"type": "lumrange", "params": {}}, 10, 10) is None
+
+    def test_colorrange_selects_hue(self):
+        # moitié rouge / moitié bleue ; cibler le rouge ne retient que la moitié rouge
+        img = np.zeros((40, 40, 3), np.float32)
+        img[:20] = [0.8, 0.1, 0.1]
+        img[20:] = [0.1, 0.1, 0.8]
+        m = build_mask({"type": "colorrange",
+                        "params": {"hue": 0.0, "range": 30.0, "smooth": 15.0, "sat_min": 0.2}}, 40, 40, img)
+        assert m is not None
+        assert m[5, 20] > 0.8      # rouge ciblé
+        assert m[35, 20] < 0.1     # bleu exclu
 
     def test_ai_mask_loads_and_resizes(self, tmp_path, monkeypatch):
         import cv2

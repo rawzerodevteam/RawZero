@@ -20,11 +20,20 @@ class EditsBody(BaseModel):
     edits: dict[str, Any]
 
 
+class SaveEditsBody(EditsBody):
+    history: dict[str, Any] | None = None  # timeline du panneau « Historique » (optionnel)
+
+
 @router.put("/photos/{photo_id}/edits")
-def save_edits(photo_id: int, body: EditsBody):
+def save_edits(photo_id: int, body: SaveEditsBody):
     get_photo_row(photo_id)
-    db.execute("UPDATE photos SET edits=?, edited=? WHERE id=?",
-               (json.dumps(body.edits), int(pipeline.edits_meaningful(body.edits)), photo_id))
+    if body.history is not None:
+        db.execute("UPDATE photos SET edits=?, edited=?, history=? WHERE id=?",
+                   (json.dumps(body.edits), int(pipeline.edits_meaningful(body.edits)),
+                    json.dumps(body.history), photo_id))
+    else:
+        db.execute("UPDATE photos SET edits=?, edited=? WHERE id=?",
+                   (json.dumps(body.edits), int(pipeline.edits_meaningful(body.edits)), photo_id))
     previews.schedule_preview_refresh(photo_id)
     return {"ok": True}
 

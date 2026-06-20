@@ -26,11 +26,15 @@ DEFAULT_EDITS: dict[str, Any] = {
     "tone": {"exposure": 0.0, "contrast": 0.0, "highlights": 0.0,
              "shadows": 0.0, "whites": 0.0, "blacks": 0.0},
     "presence": {"clarity": 0.0, "dehaze": 0.0, "vibrance": 0.0, "saturation": 0.0},
-    "curve": {"points": [[0.0, 0.0], [1.0, 1.0]]},
+    "curve": {"points": [[0.0, 0.0], [1.0, 1.0]],
+              "r": [[0.0, 0.0], [1.0, 1.0]],
+              "g": [[0.0, 0.0], [1.0, 1.0]],
+              "b": [[0.0, 0.0], [1.0, 1.0]]},
     "hsl": {b: {"h": 0.0, "s": 0.0, "l": 0.0}
             for b in ("red", "orange", "yellow", "green", "aqua", "blue", "purple", "magenta")},
     "detail": {"sharpen_amount": 25.0, "sharpen_radius": 1.0,
-               "nr_luma": 0.0, "nr_color": 0.0, "nr_ai": 0.0},
+               "nr_luma": 0.0, "nr_color": 0.0, "nr_ai": 0.0,
+               "defringe_purple": 0.0, "defringe_green": 0.0},
     "effects": {"vignette": 0.0, "grain": 0.0},
     "geometry": {"rotate": 0, "flip_h": False, "flip_v": False, "straighten": 0.0,
                  "crop": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}},
@@ -246,13 +250,40 @@ def _curve_lut(pts_key: tuple, n: int = 1024) -> Optional[np.ndarray]:
     return np.clip(lut, 0.0, 1.0).astype(np.float32)
 
 
-def _apply_curve(img: np.ndarray, points: list) -> np.ndarray:
-    pts_key = tuple(sorted({(round(float(p[0]), 5), float(p[1])) for p in points}))
-    lut = _curve_lut(pts_key)
-    if lut is None:
-        return img
-    idx = np.clip(img * (len(lut) - 1), 0, len(lut) - 1).astype(np.int32)
+def _pts_key(points: list) -> tuple:
+    return tuple(sorted({(round(float(p[0]), 5), float(p[1])) for p in (points or [])}))
+
+
+def _eval_lut(lut: np.ndarray, x: np.ndarray) -> np.ndarray:
+    idx = np.clip(x * (len(lut) - 1), 0, len(lut) - 1).astype(np.int32)
     return lut[idx]
+
+
+def _apply_curve(img: np.ndarray, curve: dict) -> np.ndarray:
+    """Courbe maître (`points`, appliquée aux 3 canaux) puis courbes par canal (`r`/`g`/`b`).
+
+    Maître et courbe de canal sont pré-composées en une seule LUT par canal :
+    composed(x) = chan(master(x)). Identique au GPU (un seul échantillonnage)."""
+    master = _curve_lut(_pts_key(curve.get("points")))
+    n = 1024
+    xs = np.linspace(0.0, 1.0, n, dtype=np.float32)
+    base = _eval_lut(master, xs) if master is not None else xs  # maître appliqué (ou identité)
+    luts: list[Optional[np.ndarray]] = []
+    changed = master is not None
+    for key in ("r", "g", "b"):
+        chan = _curve_lut(_pts_key(curve.get(key)))
+        if master is None and chan is None:
+            luts.append(None)
+            continue
+        luts.append((_eval_lut(chan, base) if chan is not None else base).astype(np.float32))
+        changed = True
+    if not changed:
+        return img
+    out = img.copy()
+    for ci, lut in enumerate(luts):
+        if lut is not None:
+            out[..., ci] = _eval_lut(lut, img[..., ci])
+    return out
 
 
 def _band_weight(hue: np.ndarray, center: float, half_width: float = 45.0) -> np.ndarray:
@@ -338,6 +369,24 @@ def _apply_nr(img: np.ndarray, nr_luma: float, nr_color: float, scale: float) ->
     return img
 
 
+def _apply_defringe(img: np.ndarray, purple: float, green: float, scale: float) -> np.ndarray:
+    """Défrange : désature les franges pourpres / vertes le long des bords à fort contraste
+    (symptôme de l'aberration chromatique latérale). Désaturation locale vers la luminance,
+    pondérée par la force du bord et par la « couleur de frange » du pixel."""
+    if not (purple or green):
+        return img
+    l = luma(img)
+    sigma = max(1.5 * scale, 0.6)
+    edge = np.clip(np.abs(l - luma(gauss(img, sigma))) * 8.0, 0.0, 1.0)  # bords haute fréquence
+    r, g, b = img[..., 0], img[..., 1], img[..., 2]
+    pm = np.clip(np.minimum(r, b) - g, 0.0, 1.0)   # pourpre/magenta : R,B hauts, V bas
+    gm = np.clip(g - np.maximum(r, b), 0.0, 1.0)    # vert : V haut, R,B bas
+    fp = np.clip(pm * edge * (purple / 100.0) * 4.0, 0.0, 1.0)
+    fg = np.clip(gm * edge * (green / 100.0) * 4.0, 0.0, 1.0)
+    f = np.maximum(fp, fg)[..., None]
+    return img + (l[..., None] - img) * f
+
+
 def _apply_sharpen(img: np.ndarray, amount: float, radius: float, scale: float) -> np.ndarray:
     if amount <= 0:
         return img
@@ -380,7 +429,7 @@ def _apply_local(img: np.ndarray, local: dict, scale: float) -> np.ndarray:
     if not any(abs(float(v)) > 1e-6 for v in adj.values()):
         return img
     h, w = img.shape[:2]
-    mask = build_mask(local, h, w)
+    mask = build_mask(local, h, w, img)   # les masques par plage dépendent du contenu (img)
     if mask is None or float(mask.max()) < 1e-4:
         return img
     out = img
@@ -419,13 +468,15 @@ def apply_pipeline(base: np.ndarray, edits: dict, scale: float = 1.0,
     img = _apply_hl_shadows(img, float(tone["highlights"]), float(tone["shadows"]))
     img = _apply_whites_blacks(img, float(tone["whites"]), float(tone["blacks"]))
     img = _apply_contrast(img, float(tone["contrast"]))
-    img = _apply_curve(np.clip(img, 0.0, 1.0), e["curve"]["points"])
+    img = _apply_curve(np.clip(img, 0.0, 1.0), e["curve"])
     img = _apply_color(img, e["hsl"], float(pres["vibrance"]), float(pres["saturation"]))
     img = _apply_clarity(img, float(pres["clarity"]), scale)
     img = _apply_dehaze(img, float(pres["dehaze"]))
     for local in e["locals"]:
         img = _apply_local(img, local, scale)
     img = _apply_nr(img, float(det["nr_luma"]), float(det["nr_color"]), scale)
+    img = _apply_defringe(img, float(det.get("defringe_purple", 0.0)),
+                          float(det.get("defringe_green", 0.0)), scale)
     img = _apply_sharpen(img, float(det["sharpen_amount"]), float(det["sharpen_radius"]), scale)
     img = _apply_vignette(img, float(fx["vignette"]))
     img = _apply_grain(img, float(fx["grain"]))
@@ -469,7 +520,7 @@ def render_array(base: np.ndarray, edits: dict, max_size: int, full_long_edge: i
 def _overlay_mask(img: np.ndarray, edits: dict, local_id: str) -> np.ndarray:
     for local in merge_edits(edits)["locals"]:
         if str(local.get("id")) == str(local_id):
-            mask = build_mask(local, img.shape[0], img.shape[1])
+            mask = build_mask(local, img.shape[0], img.shape[1], img)
             if mask is None:
                 return img
             m = (mask * 0.6)[..., None]

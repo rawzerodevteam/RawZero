@@ -1,0 +1,26 @@
+# Contexte de build minimal (lu par Podman ; Docker lit .dockerignore → voir lien/symétrie)
+.git
+.gitignore
+
+# outillage portable de dev (uv, python, node) — jamais dans l'image
+.tools/
+
+# données applicatives : montées en volumes, pas copiées
+data/
+import/
+
+# artefacts frontend (reconstruits dans l'étape Node)
+frontend/node_modules/
+frontend/dist/
+
+# python
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# notes / docs privées et locales
+*.md
+Notes
+AMELIORATION.md
+start.ps1

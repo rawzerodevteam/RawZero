@@ -57,3 +57,29 @@ export function buildCurveLut(points: [number, number][], n = 1024): Uint8Array 
   }
   return lut;
 }
+
+/**
+ * Texture RGBA (largeur n) des courbes pré-composées : pour chaque canal,
+ * composed(x) = chan(master(x)). Renvoie null si maître + R/G/B sont tous identité.
+ * Strictement aligné sur pipeline._apply_curve (même composition, même ordre).
+ */
+export function buildCurveTexture(
+  curve: { points: [number, number][]; r: [number, number][]; g: [number, number][]; b: [number, number][] },
+  n = 1024,
+): Uint8Array | null {
+  const master = buildCurveLut(curve.points, n);
+  const chans = [buildCurveLut(curve.r, n), buildCurveLut(curve.g, n), buildCurveLut(curve.b, n)];
+  if (!master && chans.every((c) => !c)) return null;
+
+  const data = new Uint8Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    const mv = master ? master[i] / 255 : i / (n - 1);   // maître appliqué (ou identité)
+    for (let c = 0; c < 3; c++) {
+      const chan = chans[c];
+      const out = chan ? chan[Math.round(mv * (n - 1))] / 255 : mv;
+      data[i * 4 + c] = Math.round(Math.min(1, Math.max(0, out)) * 255);
+    }
+    data[i * 4 + 3] = 255;
+  }
+  return data;
+}

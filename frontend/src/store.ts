@@ -1,6 +1,43 @@
 import { create } from "zustand";
-import { api, type PhotoFilters } from "./api";
-import { ALL_PHOTOS_ID, defaultEdits, mergeEdits, type EditState, type Photo, type Project } from "./types";
+import { api, type PhotoFilters, type PhotoFacets } from "./api";
+import { ALL_PHOTOS_ID, defaultEdits, mergeEdits, type Album, type EditState, type HistoryData, type HistoryStep, type Photo, type Project } from "./types";
+import { describeEditChange } from "./lib/historyLabel";
+
+const INITIAL_LABEL = "Réglages d'origine";
+
+/** Reconstruit la timeline d'historique (chronologique) à partir des piles undo/redo + libellés. */
+export function historyTimeline(s: Pick<Store,
+  "undoStack" | "undoLabels" | "edits" | "currentLabel" | "redoStack" | "redoLabels">): HistoryData {
+  if (!s.edits) return { steps: [], index: 0 };
+  const steps: HistoryStep[] = s.undoStack.map((edits, i) => ({ label: s.undoLabels[i] ?? "Modification", edits }));
+  steps.push({ label: s.currentLabel, edits: s.edits });
+  for (let k = s.redoStack.length - 1; k >= 0; k--)
+    steps.push({ label: s.redoLabels[k] ?? "Modification", edits: s.redoStack[k] });
+  return { steps, index: s.undoStack.length };
+}
+
+interface HistoryParts {
+  edits: EditState; currentLabel: string;
+  undoStack: EditState[]; undoLabels: string[]; redoStack: EditState[]; redoLabels: string[];
+}
+
+/** Restaure les piles d'historique depuis la forme persistée ; repli sur une étape unique. */
+function loadHistory(raw: any, fallbackEdits: EditState): HistoryParts {
+  const steps = Array.isArray(raw?.steps) ? raw.steps : null;
+  const index = raw?.index;
+  if (steps && steps.length && typeof index === "number" && index >= 0 && index < steps.length) {
+    const norm: HistoryStep[] = steps.map((s: any) => ({ label: String(s?.label ?? "Modification"), edits: mergeEdits(s?.edits) }));
+    return {
+      edits: structuredClone(norm[index].edits),
+      currentLabel: norm[index].label,
+      undoStack: norm.slice(0, index).map((s) => s.edits),
+      undoLabels: norm.slice(0, index).map((s) => s.label),
+      redoStack: norm.slice(index + 1).map((s) => s.edits).reverse(),
+      redoLabels: norm.slice(index + 1).map((s) => s.label).reverse(),
+    };
+  }
+  return { edits: fallbackEdits, currentLabel: INITIAL_LABEL, undoStack: [], undoLabels: [], redoStack: [], redoLabels: [] };
+}
 
 export type View = "home" | "grid" | "loupe" | "develop";
 export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "wb" | "pointmask";
@@ -31,8 +68,11 @@ function writeSession(s: Session) {
 interface Store {
   projects: Project[];
   currentProjectId: number | null;
+  albums: Album[];
+  currentAlbumId: number | null;   // si défini, la grille liste cet album (prime sur le projet)
   photos: Photo[];
   filters: PhotoFilters;
+  facets: PhotoFacets;
   currentId: number | null;
   view: View;
 
@@ -44,6 +84,9 @@ interface Store {
   dirty: boolean;
   undoStack: EditState[];
   redoStack: EditState[];
+  undoLabels: string[];           // libellés parallèles aux snapshots (historique)
+  redoLabels: string[];
+  currentLabel: string;           // libellé de l'étape courante (edits)
   dragBaseline: EditState | null; // snapshot avant un drag de slider
   clipboard: EditState | null;
   editsVersion: Record<number, number>; // cache-busting des thumbs/previews
@@ -55,6 +98,7 @@ interface Store {
   showHelp: boolean;
   showImport: boolean;
   showExport: boolean;
+  showAlbums: boolean;            // panneau latéral Collections (grille)
   activeTool: Tool;
   selectedLocalId: string | null;
   showMaskOverlay: boolean;
@@ -73,8 +117,17 @@ interface Store {
   createProject(name: string): Promise<void>;
   renameProject(id: number, name: string): Promise<void>;
   deleteProject(id: number): Promise<void>;
+  loadAlbums(): Promise<void>;
+  setAlbum(id: number | null): Promise<void>;
+  createAlbum(name: string): Promise<number | null>;
+  renameAlbum(id: number, name: string): Promise<void>;
+  deleteAlbum(id: number): Promise<void>;
+  addToAlbum(id: number, photoIds: number[]): Promise<void>;
+  removeFromAlbum(id: number, photoIds: number[]): Promise<void>;
   loadPhotos(): Promise<void>;
   setFilters(p: Partial<PhotoFilters>): void;
+  resetFilters(): void;
+  loadFacets(): Promise<void>;
   setView(v: View): void;
   selectPhoto(id: number | null): void;
   toggleSelect(id: number): void;
@@ -94,11 +147,12 @@ interface Store {
 
   createAutoMask(kind: string): Promise<void>;
   createPointMask(x: number, y: number): Promise<void>;
-  updateEdits(fn: (e: EditState) => void, commit?: boolean): void;
+  updateEdits(fn: (e: EditState) => void, commit?: boolean, label?: string): void;
   startDrag(): void;
   endDrag(): void;
   undo(): void;
   redo(): void;
+  jumpHistory(index: number): void;
   resetEdits(): void;
   applyPartial(settings: Partial<EditState>): void;
   copyEdits(): void;
@@ -108,7 +162,7 @@ interface Store {
   bumpVersion(id: number): void;
 
   setUI(p: Partial<Pick<Store, "beforeAfter" | "showClipping" | "showInfo" | "showHelp" |
-    "showImport" | "showExport" | "activeTool" | "selectedLocalId" | "showMaskOverlay" |
+    "showImport" | "showExport" | "showAlbums" | "activeTool" | "selectedLocalId" | "showMaskOverlay" |
     "brushSize" | "brushErase" | "cropAspect" | "gridSize">>): void;
   notify(msg: string): void;
 }
@@ -116,8 +170,12 @@ interface Store {
 export const useStore = create<Store>((set, get) => ({
   projects: [],
   currentProjectId: null,
+  albums: [],
+  currentAlbumId: null,
   photos: [],
-  filters: { minRating: 0, flag: "", color: "", sort: "captured_asc" },
+  filters: { minRating: 0, flag: "", color: "", sort: "captured_asc",
+             camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "" },
+  facets: { cameras: [], lenses: [] },
   currentId: null,
   view: "grid",
 
@@ -129,6 +187,9 @@ export const useStore = create<Store>((set, get) => ({
   dirty: false,
   undoStack: [],
   redoStack: [],
+  undoLabels: [],
+  redoLabels: [],
+  currentLabel: INITIAL_LABEL,
   dragBaseline: null,
   clipboard: null,
   editsVersion: {},
@@ -140,6 +201,7 @@ export const useStore = create<Store>((set, get) => ({
   showHelp: false,
   showImport: false,
   showExport: false,
+  showAlbums: false,
   activeTool: "none",
   selectedLocalId: null,
   showMaskOverlay: true,
@@ -157,6 +219,7 @@ export const useStore = create<Store>((set, get) => ({
     const saved = readSession();
     if (saved.projectId !== null) set({ currentProjectId: saved.projectId });
     await get().loadProjects();
+    await get().loadAlbums();
     await get().loadPhotos();
     // Rouvre l'app là où on l'a laissée (si la photo existe toujours dans le projet courant).
     if (saved.photoId !== null && get().photos.some((p) => p.id === saved.photoId)) {
@@ -186,8 +249,11 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   async setProject(id) {
-    if (id === get().currentProjectId) return;
-    set({ currentProjectId: id, currentId: null, selection: [], view: "grid" });
+    if (id === get().currentProjectId && get().currentAlbumId === null) return;
+    set({
+      currentProjectId: id, currentAlbumId: null, currentId: null, selection: [], view: "grid",
+      filters: { ...get().filters, camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "" },
+    });
     await get().loadPhotos();
   },
 
@@ -214,17 +280,85 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   async loadPhotos() {
-    const photos = await api.listPhotos(get().filters, get().currentProjectId);
+    const photos = await api.listPhotos(get().filters, get().currentProjectId, get().currentAlbumId);
     const ids = new Set(photos.map((p) => p.id));
     set({ photos, selection: get().selection.filter((id) => ids.has(id)) });
     const { currentId } = get();
     if (currentId !== null && !ids.has(currentId)) {
       set({ currentId: photos.length ? photos[0].id : null });
     }
+    void get().loadFacets();   // valeurs distinctes caméra/objectif du contexte (refresh post-import)
+  },
+
+  async loadFacets() {
+    try {
+      set({ facets: await api.getFacets(get().currentProjectId, get().currentAlbumId) });
+    } catch { /* non bloquant */ }
+  },
+
+  async loadAlbums() {
+    try {
+      set({ albums: await api.listAlbums() });
+    } catch { /* non bloquant */ }
+  },
+
+  async setAlbum(id) {
+    set({
+      currentAlbumId: id, currentId: null, selection: [], view: "grid",
+      filters: { ...get().filters, camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "" },
+    });
+    await get().loadPhotos();
+  },
+
+  async createAlbum(name) {
+    try {
+      const a = await api.createAlbum(name);
+      await get().loadAlbums();
+      return a.id;
+    } catch (e) {
+      get().notify(e instanceof Error ? e.message : "Échec de création de l'album");
+      return null;
+    }
+  },
+
+  async renameAlbum(id, name) {
+    try {
+      await api.renameAlbum(id, name);
+      await get().loadAlbums();
+    } catch (e) {
+      get().notify(e instanceof Error ? e.message : "Échec du renommage");
+    }
+  },
+
+  async deleteAlbum(id) {
+    await api.deleteAlbum(id);
+    if (get().currentAlbumId === id) { set({ currentAlbumId: null }); await get().loadPhotos(); }
+    await get().loadAlbums();
+  },
+
+  async addToAlbum(id, photoIds) {
+    if (!photoIds.length) return;
+    const res = await api.addToAlbum(id, photoIds);
+    await get().loadAlbums();
+    const album = get().albums.find((a) => a.id === id);
+    get().notify(`${photoIds.length} photo${photoIds.length > 1 ? "s" : ""} ajoutée${photoIds.length > 1 ? "s" : ""} à « ${album?.name ?? "album"} » (${res.count})`);
+  },
+
+  async removeFromAlbum(id, photoIds) {
+    if (!photoIds.length) return;
+    await api.removeFromAlbum(id, photoIds);
+    await get().loadAlbums();
+    if (get().currentAlbumId === id) await get().loadPhotos();
   },
 
   setFilters(p) {
     set({ filters: { ...get().filters, ...p } });
+    void get().loadPhotos();
+  },
+
+  resetFilters() {
+    set({ filters: { minRating: 0, flag: "", color: "", sort: get().filters.sort,
+                     camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "" } });
     void get().loadPhotos();
   },
 
@@ -273,11 +407,16 @@ export const useStore = create<Store>((set, get) => ({
 
   async openDevelop(id) {
     await get().saveNow();
-    set({ currentId: id, view: "develop", edits: null, undoStack: [], redoStack: [],
+    set({ currentId: id, view: "develop", edits: null,
+          undoStack: [], redoStack: [], undoLabels: [], redoLabels: [], currentLabel: INITIAL_LABEL,
           activeTool: "none", selectedLocalId: null, beforeAfter: false });
     try {
       const p = await api.getPhoto(id);
-      if (get().currentId === id) set({ edits: mergeEdits(p.edits), dirty: false });
+      if (get().currentId === id) {
+        const h = loadHistory((p as any).history, mergeEdits(p.edits));
+        set({ edits: h.edits, currentLabel: h.currentLabel, dirty: false,
+              undoStack: h.undoStack, undoLabels: h.undoLabels, redoStack: h.redoStack, redoLabels: h.redoLabels });
+      }
     } catch (e) {
       get().notify(`Chargement impossible : ${e}`);
     }
@@ -336,6 +475,7 @@ export const useStore = create<Store>((set, get) => ({
     const nextCur = rest.length ? (rest.find((p) => p.id === currentId)?.id ?? rest[0].id) : null;
     set({ photos: rest, currentId: nextCur, selection: nextCur !== null ? [nextCur] : [] });
     if (!rest.length) set({ view: "grid" });
+    void get().loadAlbums();   // les photos retirées quittent aussi leurs albums (cascade)
   },
 
   async removeCurrent(deleteFile) {
@@ -355,7 +495,7 @@ export const useStore = create<Store>((set, get) => ({
     set({ aiMaskBusy: true });
     try {
       const local = await api.autoMask(currentId, edits, kind);
-      get().updateEdits((e) => { e.locals.push(local); });
+      get().updateEdits((e) => { e.locals.push(local); }, true, "Masque sujet (IA)");
       set({ selectedLocalId: local.id, activeTool: "none", showMaskOverlay: true });
       get().notify("Masque « sujet » créé");
     } catch (err) {
@@ -381,10 +521,10 @@ export const useStore = create<Store>((set, get) => ({
         get().updateEdits((e) => {
           const loc = e.locals.find((l) => l.id === target.id);
           if (loc) loc.params = { ...loc.params, ref: local.params.ref };
-        });
+        }, true, "Élément ajouté au masque");
         get().notify("Élément ajouté au masque");
       } else {
-        get().updateEdits((e) => { e.locals.push(local); });
+        get().updateEdits((e) => { e.locals.push(local); }, true, "Masque au clic");
         set({ selectedLocalId: local.id, showMaskOverlay: true });
         get().notify("Masque créé (clic)");
       }
@@ -396,14 +536,19 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
 
-  updateEdits(fn, commit = true) {
+  updateEdits(fn, commit = true, label) {
     const cur = get().edits;
     if (!cur) return;
-    if (commit && !get().dragBaseline) {
-      set({ undoStack: [...get().undoStack.slice(-49), structuredClone(cur)], redoStack: [] });
-    }
     const next = structuredClone(cur);
     fn(next);
+    if (commit && !get().dragBaseline) {
+      set({
+        undoStack: [...get().undoStack.slice(-49), structuredClone(cur)],
+        undoLabels: [...get().undoLabels.slice(-49), get().currentLabel],
+        redoStack: [], redoLabels: [],
+        currentLabel: label ?? describeEditChange(cur, next),
+      });
+    }
     set({ edits: next, dirty: true });
     scheduleSave();
   },
@@ -415,20 +560,29 @@ export const useStore = create<Store>((set, get) => ({
 
   endDrag() {
     const base = get().dragBaseline;
-    if (base) {
-      set({ undoStack: [...get().undoStack.slice(-49), base], redoStack: [], dragBaseline: null });
+    const cur = get().edits;
+    if (base && cur) {
+      set({
+        undoStack: [...get().undoStack.slice(-49), base],
+        undoLabels: [...get().undoLabels.slice(-49), get().currentLabel],
+        redoStack: [], redoLabels: [],
+        currentLabel: describeEditChange(base, cur),
+        dragBaseline: null,
+      });
       scheduleSave();
     }
   },
 
   undo() {
-    const { undoStack, edits } = get();
+    const { undoStack, undoLabels, edits, currentLabel } = get();
     if (!undoStack.length || !edits) return;
-    const prev = undoStack[undoStack.length - 1];
     set({
-      edits: prev,
+      edits: undoStack[undoStack.length - 1],
       undoStack: undoStack.slice(0, -1),
+      undoLabels: undoLabels.slice(0, -1),
       redoStack: [...get().redoStack, structuredClone(edits)],
+      redoLabels: [...get().redoLabels, currentLabel],
+      currentLabel: undoLabels[undoLabels.length - 1] ?? INITIAL_LABEL,
       dirty: true,
       dragBaseline: null,
     });
@@ -436,20 +590,30 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   redo() {
-    const { redoStack, edits } = get();
+    const { redoStack, redoLabels, edits, currentLabel } = get();
     if (!redoStack.length || !edits) return;
-    const next = redoStack[redoStack.length - 1];
     set({
-      edits: next,
+      edits: redoStack[redoStack.length - 1],
       redoStack: redoStack.slice(0, -1),
+      redoLabels: redoLabels.slice(0, -1),
       undoStack: [...get().undoStack, structuredClone(edits)],
+      undoLabels: [...get().undoLabels, currentLabel],
+      currentLabel: redoLabels[redoLabels.length - 1] ?? "Modification",
       dirty: true,
     });
     scheduleSave();
   },
 
+  // Saut direct à une étape de la timeline (panneau Historique) : rejoue undo/redo.
+  jumpHistory(index) {
+    const cur = get().undoStack.length; // index courant dans la timeline
+    const delta = index - cur;
+    for (let i = 0; i < -delta; i++) get().undo();
+    for (let i = 0; i < delta; i++) get().redo();
+  },
+
   resetEdits() {
-    get().updateEdits((e) => Object.assign(e, defaultEdits()));
+    get().updateEdits((e) => Object.assign(e, defaultEdits()), true, "Réinitialisation");
     get().notify("Réglages réinitialisés");
   },
 
@@ -457,7 +621,7 @@ export const useStore = create<Store>((set, get) => ({
     get().updateEdits((e) => {
       const merged = mergeEdits({ ...structuredClone(e), ...structuredClone(settings) });
       Object.assign(e, merged);
-    });
+    }, true, "Preset appliqué");
   },
 
   copyEdits() {
@@ -475,7 +639,7 @@ export const useStore = create<Store>((set, get) => ({
       const keep = e.geometry; // le recadrage reste propre à chaque photo
       Object.assign(e, structuredClone(c));
       e.geometry = keep;
-    });
+    }, true, "Réglages collés");
     get().notify("Réglages collés");
   },
 
@@ -509,7 +673,7 @@ export const useStore = create<Store>((set, get) => ({
     const { dirty, edits, currentId } = get();
     if (!dirty || !edits || currentId === null) return;
     try {
-      await api.saveEdits(currentId, edits);
+      await api.saveEdits(currentId, edits, historyTimeline(get()));
       const id = currentId;
       set({
         dirty: false,
@@ -550,12 +714,12 @@ useStore.subscribe((s, prev) => {
 
 /** Sauvegarde de secours à la fermeture de l'onglet. */
 window.addEventListener("pagehide", () => {
-  const { dirty, edits, currentId } = useStore.getState();
-  if (dirty && edits && currentId !== null) {
-    void fetch(`/api/photos/${currentId}/edits`, {
+  const s = useStore.getState();
+  if (s.dirty && s.edits && s.currentId !== null) {
+    void fetch(`/api/photos/${s.currentId}/edits`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ edits }),
+      body: JSON.stringify({ edits: s.edits, history: historyTimeline(s) }),
       keepalive: true,
     });
   }

@@ -21,6 +21,41 @@ def _smoothstep(e0: float, e1: float, x: np.ndarray) -> np.ndarray:
     return t * t * (3.0 - 2.0 * t)
 
 
+def _luma(img: np.ndarray) -> np.ndarray:
+    return img[..., 0] * 0.2126 + img[..., 1] * 0.7152 + img[..., 2] * 0.0722
+
+
+def _lumrange_mask(params: dict, img: Optional[np.ndarray]) -> Optional[np.ndarray]:
+    """Masque par plage de luminance : 1 dans [lo, hi], adouci de `smooth` aux bords."""
+    if img is None:
+        return None
+    lo = float(np.clip(params.get("lo", 0.25), 0.0, 1.0))
+    hi = float(np.clip(params.get("hi", 0.75), 0.0, 1.0))
+    if hi < lo:
+        lo, hi = hi, lo
+    sm = float(np.clip(params.get("smooth", 0.1), 1e-3, 0.5))
+    l = _luma(img)
+    m = _smoothstep(lo - sm, lo, l) * (1.0 - _smoothstep(hi, hi + sm, l))
+    return m.astype(np.float32)
+
+
+def _colorrange_mask(params: dict, img: Optional[np.ndarray]) -> Optional[np.ndarray]:
+    """Masque par plage de couleur : proximité de teinte (± `range`, adoucie de `smooth`),
+    pondérée par la saturation (au-dessus de `sat_min`)."""
+    if img is None:
+        return None
+    hue = float(params.get("hue", 0.0))
+    rng = float(max(params.get("range", 30.0), 0.0))
+    sm = float(max(params.get("smooth", 15.0), 1e-3))
+    sat_min = float(max(params.get("sat_min", 0.15), 1e-3))
+    hsv = cv2.cvtColor(np.clip(img, 0.0, 1.0), cv2.COLOR_RGB2HSV)
+    h, s = hsv[..., 0], hsv[..., 1]
+    hd = np.abs(((h - hue) + 180.0) % 360.0 - 180.0)
+    hue_w = 1.0 - _smoothstep(rng, rng + sm, hd)
+    sat_w = _smoothstep(0.0, sat_min, s)
+    return (hue_w * sat_w).astype(np.float32)
+
+
 def _linear_mask(params: dict, h: int, w: int) -> np.ndarray:
     """Dégradé : 1 du côté du point de départ, 0 après le point d'arrivée."""
     x0, y0 = float(params.get("x0", 0.5)), float(params.get("y0", 0.2))
@@ -102,7 +137,9 @@ def _ai_mask(params: dict, h: int, w: int) -> Optional[np.ndarray]:
     return mask.astype(np.float32)
 
 
-def build_mask(local: dict, h: int, w: int) -> Optional[np.ndarray]:
+def build_mask(local: dict, h: int, w: int, img: Optional[np.ndarray] = None) -> Optional[np.ndarray]:
+    """`img` (float32 RGB 0..1 de l'image affichée) n'est requis que par les masques
+    par plage (luminance/couleur) qui dépendent du contenu ; None sinon."""
     kind = local.get("type", "")
     params = local.get("params") or {}
     if kind == "linear":
@@ -113,6 +150,10 @@ def build_mask(local: dict, h: int, w: int) -> Optional[np.ndarray]:
         mask = _brush_mask(params, h, w)
     elif kind == "ai":
         mask = _ai_mask(params, h, w)
+    elif kind == "lumrange":
+        mask = _lumrange_mask(params, img)
+    elif kind == "colorrange":
+        mask = _colorrange_mask(params, img)
     else:
         return None
     if mask is None:

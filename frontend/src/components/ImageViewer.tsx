@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useStore } from "../store";
 import { useGpuPreview } from "../gpu/useGpuPreview";
+import { useMaskSuppressed } from "../lib/useMaskSuppressed";
 import { defaultLocalAdjust, type LocalAdjust } from "../types";
 
 interface Props {
@@ -27,6 +28,8 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [tempShape, setTempShape] = useState<{ type: "linear" | "radial"; x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [, setTick] = useState(0);
+  const [spaceHeld, setSpaceHeld] = useState(false); // Espace maintenu → déplacement (Krita/Photoshop)
+  const spaceRef = useRef(false);                     // lu dans les handlers pointeur (toujours à jour)
 
   const activeTool = useStore((s) => (interactive ? s.activeTool : "none"));
   const showClipping = useStore((s) => interactive && s.showClipping);
@@ -40,11 +43,12 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
   const endDrag = useStore((s) => s.endDrag);
   const setUI = useStore((s) => s.setUI);
   const beforeAfter = useStore((s) => s.beforeAfter);
-  // Pendant le drag d'un slider, on masque l'overlay rouge pour voir l'effet du réglage.
-  const dragging = useStore((s) => s.dragBaseline != null);
+  // Pendant le drag d'un slider (et un court instant après), on masque l'overlay rouge pour
+  // voir l'effet du réglage ; le « linger » couvre aussi les clics rapides.
+  const maskSuppressed = useMaskSuppressed();
 
   // Aperçu GPU : rend dans glCanvasRef ; outil crop actif → image entière (le cadre se dessine par-dessus)
-  const maskOverlayId = showMaskOverlay && selectedLocalId && !dragging ? selectedLocalId : null;
+  const maskOverlayId = showMaskOverlay && selectedLocalId && !maskSuppressed ? selectedLocalId : null;
   const gpuState = useGpuPreview(glCanvasRef, gpu, activeTool === "crop", beforeAfter, showClipping, maskOverlayId);
   const nat = gpu ? gpuState.dims : natural;
 
@@ -113,18 +117,31 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
     zoomAt(target, clientX, clientY);
   }, [zoomScale, fitScale, zoomAt]);
 
-  // Espace / Z : bascule de zoom (navigation dans l'image)
+  // Z : bascule de zoom (ajusté ↔ 100 %). Espace (maintenu) : déplacement à la souris,
+  // comme dans Krita/Photoshop — Espace + glisser fait défiler l'image, quel que soit l'outil.
   useEffect(() => {
-    const onKey = (ev: KeyboardEvent) => {
+    const setSpace = (on: boolean) => { spaceRef.current = on; setSpaceHeld(on); };
+    const onKeyDown = (ev: KeyboardEvent) => {
       if (isTyping()) return;
       if (ev.ctrlKey || ev.metaKey || ev.altKey) return; // laisse passer Ctrl+Z, etc.
-      if (ev.key === " " || ev.key.toLowerCase() === "z") {
+      if (ev.key === " ") {
+        ev.preventDefault();        // pas de scroll de page ni d'activation d'un bouton focalisé
+        if (!ev.repeat) setSpace(true);
+      } else if (ev.key.toLowerCase() === "z") {
         ev.preventDefault();
         toggleZoom(lastPointer.current.x, lastPointer.current.y);
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const onKeyUp = (ev: KeyboardEvent) => { if (ev.key === " ") setSpace(false); };
+    const onBlur = () => setSpace(false); // évite un état « Espace bloqué » si le focus part
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
   }, [toggleZoom]);
 
   // Molette : zoom continu centré sur le curseur (listener natif non-passif)
@@ -152,7 +169,7 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
     setUI({ activeTool: "none" });
     try {
       const { temp, tint } = await api.pickWhiteBalance(currentId, edits, nx, ny);
-      updateEdits((e) => { e.wb.temp = temp; e.wb.tint = tint; });
+      updateEdits((e) => { e.wb.temp = temp; e.wb.tint = tint; }, true, "Balance des blancs (pipette)");
       notify(`Balance des blancs : ${temp >= 0 ? "+" : ""}${temp} / ${tint >= 0 ? "+" : ""}${tint}`);
     } catch (err) {
       notify(`Pipette impossible : ${err}`);
@@ -163,7 +180,11 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
     if (ev.button !== 0) return;
     (ev.currentTarget as Element).setPointerCapture(ev.pointerId);
     const [nx, ny] = toImg(ev.clientX, ev.clientY);
-    if (activeTool === "wb") {
+    if (spaceRef.current) {
+      // Espace maintenu : déplacement prioritaire, peu importe l'outil sélectionné
+      mode.current = "pan";
+      panStart.current = { x: pan.x, y: pan.y, px: ev.clientX, py: ev.clientY };
+    } else if (activeTool === "wb") {
       void pickWhiteBalance(nx, ny);
     } else if (activeTool === "pointmask") {
       void useStore.getState().createPointMask(nx, ny);
@@ -240,7 +261,7 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
   return (
     <div
       ref={containerRef}
-      className={"viewer tool-" + activeTool}
+      className={"viewer tool-" + activeTool + (spaceHeld ? " space-pan" : "")}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

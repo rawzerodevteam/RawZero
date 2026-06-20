@@ -71,6 +71,20 @@ def test_rating_flag_color(client, photo_id):
     assert all(ph["rating"] >= 5 for ph in photos)
 
 
+def test_facets_and_exif_filters(client, photo_id):
+    facets = client.get("/api/photos/facets").json()
+    assert isinstance(facets["cameras"], list) and isinstance(facets["lenses"], list)
+    # bornes ISO : un seuil très haut exclut tout (le JPEG de test a ISO 0)
+    assert client.get("/api/photos", params={"iso_min": 999999}).json()["photos"] == []
+    # filtre par date : une borne très ancienne garde la photo, une borne future l'exclut
+    far_past = client.get("/api/photos", params={"date_from": "1990-01-01"}).json()["photos"]
+    assert any(p["id"] == photo_id for p in far_past)
+    future = client.get("/api/photos", params={"date_from": "2999-01-01"}).json()["photos"]
+    assert all(p["id"] != photo_id for p in future)
+    # caméra inexistante → vide
+    assert client.get("/api/photos", params={"camera": "Nikon Zzz"}).json()["photos"] == []
+
+
 def test_thumb_and_preview(client, photo_id):
     for kind in ("thumb", "preview"):
         r = client.get(f"/api/photos/{photo_id}/{kind}")
@@ -98,6 +112,20 @@ def test_save_edits_and_persistence(client, photo_id):
     assert client.put(f"/api/photos/{photo_id}/edits", json={"edits": e}).status_code == 200
     p = client.get(f"/api/photos/{photo_id}").json()
     assert p["edits"]["tone"]["exposure"] == 0.5
+
+
+def test_history_persistence(client, photo_id):
+    e = {"tone": {"exposure": 0.5}}
+    hist = {"steps": [{"label": "Réglages d'origine", "edits": {}},
+                      {"label": "Exposition +0.5", "edits": e}], "index": 1}
+    assert client.put(f"/api/photos/{photo_id}/edits",
+                      json={"edits": e, "history": hist}).status_code == 200
+    p = client.get(f"/api/photos/{photo_id}").json()
+    assert p["history"]["index"] == 1
+    assert [s["label"] for s in p["history"]["steps"]] == ["Réglages d'origine", "Exposition +0.5"]
+    # L'historique n'alourdit pas le listing du catalogue
+    listed = client.get("/api/photos").json()["photos"]
+    assert all("history" not in ph for ph in listed)
 
 
 def test_auto_adjust(client, photo_id):
@@ -167,6 +195,39 @@ def test_browse_import_dir(client):
     imp = client.post("/api/import/folder", json={"paths": ["sub/photo.jpg"]}).json()
     assert imp["results"][0]["status"] == "imported"
     assert client.get("/api/import/browse", params={"path": "../.."}).status_code in (403, 404)
+
+
+def test_albums_crud_and_membership(client, photo_id):
+    # création + unicité du nom
+    a = client.post("/api/albums", json={"name": "Vacances"}).json()
+    aid = a["id"]
+    assert a["count"] == 0 and a["cover"] is None
+    assert client.post("/api/albums", json={"name": "Vacances"}).status_code == 409
+
+    # ajout de la photo → l'album la liste, le count et la couverture suivent
+    assert client.post(f"/api/albums/{aid}/photos", json={"photo_ids": [photo_id]}).json()["count"] == 1
+    listed = client.get("/api/albums").json()["albums"]
+    me = next(al for al in listed if al["id"] == aid)
+    assert me["count"] == 1 and me["cover"] == photo_id
+    in_album = client.get("/api/photos", params={"album_id": aid}).json()["photos"]
+    assert [p["id"] for p in in_album] == [photo_id]
+
+    # ré-ajout idempotent (INSERT OR IGNORE)
+    assert client.post(f"/api/albums/{aid}/photos", json={"photo_ids": [photo_id]}).json()["count"] == 1
+
+    # renommage (avec contrôle d'unicité)
+    other = client.post("/api/albums", json={"name": "Autre"}).json()["id"]
+    assert client.patch(f"/api/albums/{aid}", json={"name": "Autre"}).status_code == 409
+    assert client.patch(f"/api/albums/{aid}", json={"name": "Été"}).json()["name"] == "Été"
+
+    # retrait de la photo → album vide
+    assert client.request("DELETE", f"/api/albums/{aid}/photos", json={"photo_ids": [photo_id]}).json()["count"] == 0
+    assert client.get("/api/photos", params={"album_id": aid}).json()["photos"] == []
+
+    # suppression de l'album (cascade album_photos) ; 404 sur album inexistant
+    assert client.delete(f"/api/albums/{aid}").json()["ok"]
+    assert client.delete(f"/api/albums/{other}").json()["ok"]
+    assert client.post(f"/api/albums/{aid}/photos", json={"photo_ids": [photo_id]}).status_code == 404
 
 
 def test_delete_photo(client):
