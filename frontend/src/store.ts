@@ -98,6 +98,7 @@ interface Store {
   showHelp: boolean;
   showImport: boolean;
   showExport: boolean;
+  showModels: boolean;            // dialog « Modèles IA » (téléchargement à la demande)
   showAlbums: boolean;            // panneau latéral Collections (grille)
   activeTool: Tool;
   selectedLocalId: string | null;
@@ -162,9 +163,10 @@ interface Store {
   bumpVersion(id: number): void;
 
   setUI(p: Partial<Pick<Store, "beforeAfter" | "showClipping" | "showInfo" | "showHelp" |
-    "showImport" | "showExport" | "showAlbums" | "activeTool" | "selectedLocalId" | "showMaskOverlay" |
+    "showImport" | "showExport" | "showModels" | "showAlbums" | "activeTool" | "selectedLocalId" | "showMaskOverlay" |
     "brushSize" | "brushErase" | "cropAspect" | "gridSize">>): void;
   notify(msg: string): void;
+  refreshAiAvailability(): Promise<void>;
 }
 
 export const useStore = create<Store>((set, get) => ({
@@ -201,6 +203,7 @@ export const useStore = create<Store>((set, get) => ({
   showHelp: false,
   showImport: false,
   showExport: false,
+  showModels: false,
   showAlbums: false,
   activeTool: "none",
   selectedLocalId: null,
@@ -232,8 +235,12 @@ export const useStore = create<Store>((set, get) => ({
       // Pas de photo à rouvrir → écran d'accueil listant les projets.
       set({ view: "home" });
     }
-    void api.autoMaskAvailable().then((a) =>
-      set({ aiSubjectAvailable: a.subject, aiPointAvailable: a.point, aiDenoiseAvailable: a.denoise }));
+    void get().refreshAiAvailability();
+  },
+
+  async refreshAiAvailability() {
+    const a = await api.autoMaskAvailable();
+    set({ aiSubjectAvailable: a.subject, aiPointAvailable: a.point, aiDenoiseAvailable: a.denoise });
   },
 
   async loadProjects() {

@@ -33,6 +33,16 @@ export type ExportEvent =
   | { type: "error"; id: number; error: string }
   | { type: "done"; folder: string };
 
+export interface ModelStatus {
+  available: boolean;
+  configured: boolean;
+  size: number;
+  downloading: boolean;
+  received: number;
+  total: number | null;
+  error: string | null;
+}
+
 export const api = {
   async listProjects(): Promise<Project[]> {
     return (await json<{ projects: Project[] }>(await fetch("/api/projects"))).projects;
@@ -223,6 +233,17 @@ export const api = {
     } catch {
       return { subject: false, point: false, denoise: false };
     }
+  },
+
+  async modelsStatus(): Promise<Record<string, ModelStatus>> {
+    return json(await fetch("/api/models/status"));
+  },
+
+  async modelsDownload(feature: string): Promise<void> {
+    await json(await fetch("/api/models/download", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feature }),
+    }));
   },
 
   async autoMask(id: number, edits: EditState, kind: string): Promise<LocalAdjust> {
