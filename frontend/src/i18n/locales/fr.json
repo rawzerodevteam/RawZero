@@ -25,6 +25,8 @@
     "wbFailed": "Pipette impossible : {{error}}"
   },
   "library": {
+    "allPhotos": "Toutes les photos",
+    "defaultProject": "Projet par défaut",
     "grid": "Grille",
     "gridTitle": "Grille (G)",
     "loupe": "Zoom",

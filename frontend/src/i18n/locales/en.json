@@ -25,6 +25,8 @@
     "wbFailed": "Eyedropper failed: {{error}}"
   },
   "library": {
+    "allPhotos": "All photos",
+    "defaultProject": "Default project",
     "grid": "Grid",
     "gridTitle": "Grid (G)",
     "loupe": "Loupe",

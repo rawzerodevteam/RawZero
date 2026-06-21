@@ -2,8 +2,13 @@ import { create } from "zustand";
 import { api, type PhotoFilters, type PhotoFacets } from "./api";
 import { ALL_PHOTOS_ID, defaultEdits, mergeEdits, type Album, type EditState, type HistoryData, type HistoryStep, type Photo, type Project } from "./types";
 import { describeEditChange } from "./lib/historyLabel";
+import i18n from "./i18n";
 
 const INITIAL_LABEL = "Réglages d'origine";
+
+// Nom du projet par défaut créé côté backend (db.py) : on le ré-étiquette à l'affichage selon
+// la langue. Un projet renommé par l'utilisateur ne correspond plus et garde son nom.
+const DEFAULT_PROJECT_NAME = "Projet par défaut";
 
 /** Reconstruit la timeline d'historique (chronologique) à partir des piles undo/redo + libellés. */
 export function historyTimeline(s: Pick<Store,
@@ -244,11 +249,12 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   async loadProjects() {
-    const real = await api.listProjects();
+    const real = (await api.listProjects()).map((p) =>
+      p.name === DEFAULT_PROJECT_NAME ? { ...p, name: i18n.t("library.defaultProject") } : p);
     // Projet virtuel « Toutes les photos » : regroupe tout le catalogue (project_id = 0 côté API).
     const total = real.reduce((n, p) => n + (p.count ?? 0), 0);
     const cover = real.find((p) => p.cover)?.cover ?? null;
-    const all: Project = { id: ALL_PHOTOS_ID, name: "Toutes les photos", count: total, cover };
+    const all: Project = { id: ALL_PHOTOS_ID, name: i18n.t("library.allPhotos"), count: total, cover };
     const projects = [all, ...real];
     let cur = get().currentProjectId;
     if (cur === null || !projects.some((p) => p.id === cur)) cur = ALL_PHOTOS_ID;

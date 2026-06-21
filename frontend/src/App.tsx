@@ -6,6 +6,7 @@ import { ImportPanel } from "./components/ImportPanel";
 import { ModelsDialog } from "./components/ModelsDialog";
 import { ShortcutsOverlay } from "./components/ShortcutsOverlay";
 import { useGlobalShortcuts } from "./shortcuts";
+import i18n from "./i18n";
 import { useStore } from "./store";
 import { DevelopView } from "./views/DevelopView";
 import { HomeView } from "./views/HomeView";
@@ -19,9 +20,18 @@ export function App() {
   const showModels = useStore((s) => s.showModels);
   const toast = useStore((s) => s.toast);
   const init = useStore((s) => s.init);
+  const loadProjects = useStore((s) => s.loadProjects);
   useGlobalShortcuts();
 
   useEffect(() => { void init(); }, [init]);
+
+  // Les noms virtuels « Toutes les photos » / « Projet par défaut » sont localisés dans
+  // loadProjects → on recharge la liste quand la langue change pour les mettre à jour.
+  useEffect(() => {
+    const onLang = () => { void loadProjects(); };
+    i18n.on("languageChanged", onLang);
+    return () => { i18n.off("languageChanged", onLang); };
+  }, [loadProjects]);
 
   return (
     <div className="app">
