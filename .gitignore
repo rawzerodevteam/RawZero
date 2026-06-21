@@ -21,3 +21,14 @@ CLAUDE.md
 étude.md
 TEST_OPTIMISATION.md
 Notes.md
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/
+
+# sidecar PyInstaller (backend figé pour le bundle Tauri)
+backend/build/
+backend/dist/
+
+# outillage local Claude Code
+.claude/
