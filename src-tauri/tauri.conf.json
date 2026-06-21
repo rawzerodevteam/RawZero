@@ -15,7 +15,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis", "deb", "rpm"],
     "resources": {
       "../backend/dist/rawstudio-backend": "backend",
       "../frontend/dist": "frontend-dist"
@@ -27,6 +27,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "windows": {
+      "nsis": {
+        "installMode": "both",
+        "languages": ["French", "English"],
+        "displayLanguageSelector": true,
+        "installerHooks": "installer-hooks.nsh"
+      }
+    },
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }

@@ -5,10 +5,18 @@ DATA_DIR / IMPORT_DIR / STATIC_DIR / PORT avant de spawn ce process, puis attend
 /api/health réponde avant d'ouvrir la fenêtre.
 """
 import os
+import sys
 
-import uvicorn
+# Build fenêtré (PyInstaller console=False) : sys.stdout/stderr valent None. Le logging
+# d'uvicorn (et de la stdlib) appelle .isatty()/.write() dessus → crash. On les redirige
+# vers le vide AVANT d'importer app.main, qui configure déjà le logging.
+for _name in ("stdout", "stderr"):
+    if getattr(sys, _name) is None:
+        setattr(sys, _name, open(os.devnull, "w"))
 
-from app.main import app
+import uvicorn  # noqa: E402
+
+from app.main import app  # noqa: E402
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8756"))
