@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useStore } from "../store";
 import { ALL_PHOTOS_ID } from "../types";
 
 /** Sélecteur de projet (dossier d'import) en haut à gauche : changer / créer / renommer / supprimer. */
 export function ProjectMenu() {
+  const { t } = useTranslation();
   const projects = useStore((s) => s.projects);
   const currentProjectId = useStore((s) => s.currentProjectId);
   const setProject = useStore((s) => s.setProject);
@@ -27,33 +29,33 @@ export function ProjectMenu() {
   const realCount = projects.filter((p) => p.id !== ALL_PHOTOS_ID).length;
 
   const create = () => {
-    const name = window.prompt("Nom du nouveau projet ?", "Nouveau projet");
+    const name = window.prompt(t("home.promptProjectName"), t("home.newProject"));
     if (name && name.trim()) void createProject(name.trim());
     setOpen(false);
   };
   const rename = () => {
     if (!current || !isReal) return;
-    const name = window.prompt("Renommer le projet", current.name);
+    const name = window.prompt(t("project.renamePrompt"), current.name);
     if (name && name.trim()) void renameProject(current.id, name.trim());
     setOpen(false);
   };
   const remove = () => {
     if (!current || !isReal) return;
-    if (realCount <= 1) { notify("Impossible de supprimer le dernier projet"); setOpen(false); return; }
-    if (window.confirm(`Supprimer le projet « ${current.name} » et toutes ses photos du catalogue ? (les fichiers importés sont conservés)`))
+    if (realCount <= 1) { notify(t("project.cantDeleteLast")); setOpen(false); return; }
+    if (window.confirm(t("project.confirmDelete", { name: current.name })))
       void deleteProject(current.id);
     setOpen(false);
   };
 
   return (
     <div className="project-menu" ref={ref}>
-      <button className="project-home" title="Accueil (tous les projets)" onClick={() => setView("home")}>🏠</button>
-      <button className="project-trigger" onClick={() => setOpen((v) => !v)} title="Projet (dossier d'import)">
-        📁 <span className="pm-name">{current?.name ?? "Projet"}</span> ▾
+      <button className="project-home" title={t("project.homeTitle")} onClick={() => setView("home")}>🏠</button>
+      <button className="project-trigger" onClick={() => setOpen((v) => !v)} title={t("project.triggerTitle")}>
+        📁 <span className="pm-name">{current?.name ?? t("import.defaultProject")}</span> ▾
       </button>
       {open && (
         <div className="project-dropdown">
-          <div className="pm-head">Projets</div>
+          <div className="pm-head">{t("home.projects")}</div>
           {projects.map((p) => (
             <button key={p.id} className={"pm-item" + (p.id === currentProjectId ? " active" : "")}
               onClick={() => { void setProject(p.id); setOpen(false); }}>
@@ -62,9 +64,9 @@ export function ProjectMenu() {
             </button>
           ))}
           <div className="pm-sep" />
-          <button className="pm-item" onClick={create}>＋ Nouveau projet</button>
-          <button className="pm-item" onClick={rename} disabled={!isReal}>✎ Renommer</button>
-          <button className="pm-item danger" onClick={remove} disabled={!isReal || realCount <= 1}>🗑 Supprimer</button>
+          <button className="pm-item" onClick={create}>＋ {t("home.newProject")}</button>
+          <button className="pm-item" onClick={rename} disabled={!isReal}>✎ {t("project.rename")}</button>
+          <button className="pm-item danger" onClick={remove} disabled={!isReal || realCount <= 1}>🗑 {t("common.delete")}</button>
         </div>
       )}
     </div>

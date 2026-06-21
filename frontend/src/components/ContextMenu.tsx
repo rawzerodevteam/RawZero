@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useStore } from "../store";
 
 /** Menu contextuel (clic droit sur une vignette) : actions par lot sur la sélection. */
 export function ContextMenu() {
+  const { t } = useTranslation();
   const menu = useStore((s) => s.contextMenu);
   const selection = useStore((s) => s.selection);
   const currentId = useStore((s) => s.currentId);
@@ -41,34 +43,34 @@ export function ContextMenu() {
   return (
     <div className="ctx-backdrop" onClick={close} onContextMenu={(e) => { e.preventDefault(); close(); }}>
       <div className="context-menu" style={{ left, top }} onClick={(e) => e.stopPropagation()}>
-        <div className="ctx-head">{count} photo{count > 1 ? "s" : ""}</div>
-        <button onClick={act(() => { setExportIds(ids); setUI({ showExport: true }); })}>⤒ Exporter{count > 1 ? ` (${count})` : ""}</button>
-        <button disabled={target === null} onClick={act(() => { if (target !== null) void openDevelop(target); })}>✎ Développer</button>
+        <div className="ctx-head">{t("home.photoCount", { count })}</div>
+        <button onClick={act(() => { setExportIds(ids); setUI({ showExport: true }); })}>⤒ {t("export.title")}{count > 1 ? ` (${count})` : ""}</button>
+        <button disabled={target === null} onClick={act(() => { if (target !== null) void openDevelop(target); })}>✎ {t("ctx.develop")}</button>
         <div className="ctx-sep" />
-        <button onClick={() => setAlbumOpen((v) => !v)}>📚 Ajouter à l'album {albumOpen ? "▾" : "▸"}</button>
+        <button onClick={() => setAlbumOpen((v) => !v)}>📚 {t("ctx.addToAlbum")} {albumOpen ? "▾" : "▸"}</button>
         {albumOpen && (
           <div className="ctx-sub">
             {albums.map((a) => (
               <button key={a.id} onClick={act(() => void addToAlbum(a.id, ids))}>{a.name}</button>
             ))}
             <button className="ctx-new" onClick={act(() => {
-              const name = window.prompt("Nom du nouvel album ?", "Nouvel album");
+              const name = window.prompt(t("home.promptAlbumName"), t("home.newAlbum"));
               if (name && name.trim()) void createAlbum(name.trim()).then((id) => { if (id) void addToAlbum(id, ids); });
-            })}>＋ Nouvel album…</button>
+            })}>＋ {t("ctx.newAlbum")}</button>
           </div>
         )}
         {currentAlbumId !== null && (
-          <button onClick={act(() => void removeFromAlbum(currentAlbumId, ids))}>📕 Retirer de l'album</button>
+          <button onClick={act(() => void removeFromAlbum(currentAlbumId, ids))}>📕 {t("ctx.removeFromAlbum")}</button>
         )}
         <div className="ctx-sep" />
-        <button onClick={act(() => patchSelection({ flag: "pick" }))}>⚑ Retenir</button>
-        <button onClick={act(() => patchSelection({ flag: "reject" }))}>✕ Rejeter</button>
-        <button onClick={act(() => patchSelection({ flag: "none" }))}>○ Neutre</button>
+        <button onClick={act(() => patchSelection({ flag: "pick" }))}>⚑ {t("ctx.pick")}</button>
+        <button onClick={act(() => patchSelection({ flag: "reject" }))}>✕ {t("ctx.reject")}</button>
+        <button onClick={act(() => patchSelection({ flag: "none" }))}>○ {t("ctx.neutral")}</button>
         <div className="ctx-sep" />
         <button className="danger" onClick={act(() => {
-          if (window.confirm(`Retirer ${count} photo${count > 1 ? "s" : ""} du catalogue ? (les fichiers importés sont conservés)`))
+          if (window.confirm(t("ctx.confirmRemove", { count })))
             void removeSelection(false);
-        })}>🗑 Retirer du catalogue</button>
+        })}>🗑 {t("ctx.removeFromCatalog")}</button>
       </div>
     </div>
   );

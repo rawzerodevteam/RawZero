@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   title: string;
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function PanelSection({ title, children, defaultOpen = true, onReset }: Props) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
   return (
     <section className="panel-section">
@@ -17,7 +19,7 @@ export function PanelSection({ title, children, defaultOpen = true, onReset }: P
         {onReset && (
           <button
             className="mini-btn"
-            title="Réinitialiser la section"
+            title={t("section.reset")}
             onClick={(ev) => { ev.stopPropagation(); onReset(); }}
           >
             ↺

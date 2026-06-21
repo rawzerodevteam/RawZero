@@ -1,14 +1,16 @@
+import { useTranslation } from "react-i18next";
 import { CurveEditor } from "../components/CurveEditor";
 import { PanelSection } from "../components/PanelSection";
 import { useStore } from "../store";
 
 export function CurvePanel() {
+  const { t } = useTranslation();
   const edits = useStore((s) => s.edits);
   const updateEdits = useStore((s) => s.updateEdits);
   if (!edits) return null;
   return (
     <PanelSection
-      title="Courbe de tonalité"
+      title={t("curve.title")}
       defaultOpen={false}
       onReset={() => updateEdits((e) => {
         e.curve.points = [[0, 0], [1, 1]];
@@ -18,7 +20,7 @@ export function CurvePanel() {
       })}
     >
       <CurveEditor />
-      <p className="hint">Clic : ajouter un point · glisser : déplacer · double-clic : supprimer</p>
+      <p className="hint">{t("curve.hint")}</p>
     </PanelSection>
   );
 }

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 /** Histogramme RGB + luminance calculé côté client depuis le rendu courant. */
 export function Histogram({ src }: { src: string | null }) {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [clip, setClip] = useState({ lo: false, hi: false });
 
@@ -59,8 +61,8 @@ export function Histogram({ src }: { src: string | null }) {
   return (
     <div className="histogram">
       <canvas ref={canvasRef} width={280} height={110} />
-      <span className={"clip-dot left" + (clip.lo ? " on" : "")} title="Écrêtage des ombres" />
-      <span className={"clip-dot right" + (clip.hi ? " on" : "")} title="Écrêtage des hautes lumières" />
+      <span className={"clip-dot left" + (clip.lo ? " on" : "")} title={t("histogram.clipLow")} />
+      <span className={"clip-dot right" + (clip.hi ? " on" : "")} title={t("histogram.clipHigh")} />
     </div>
   );
 }

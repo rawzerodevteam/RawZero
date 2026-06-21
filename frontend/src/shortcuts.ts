@@ -1,28 +1,30 @@
 import { useEffect } from "react";
+import i18n from "./i18n";
 import { useStore } from "./store";
 
+// [touches littérales, clé i18n de la description]
 export const SHORTCUTS: [string, string][] = [
-  ["← / →", "Photo précédente / suivante"],
-  ["0 – 5", "Note en étoiles"],
-  ["P / X / U", "Drapeau : retenue / rejetée / neutre"],
-  ["6 / 7 / 8 / 9", "Label couleur : rouge / jaune / vert / bleu"],
-  ["G", "Grille (bibliothèque)"],
-  ["E", "Zoom (tri rapide)"],
-  ["D", "Mode développement"],
-  ["Ctrl/Maj + clic", "Sélection multiple (clic droit pour exporter…)"],
-  ["Z", "Zoom ajusté ↔ 100 %"],
-  ["Espace + glisser", "Se déplacer dans l'image (quel que soit l'outil)"],
-  ["\\", "Avant / après"],
-  ["J", "Alertes d'écrêtage"],
-  ["R", "Outil recadrage"],
-  ["O", "Afficher le masque local sélectionné"],
-  ["Ctrl+Z / Ctrl+Shift+Z", "Annuler / rétablir"],
-  ["Ctrl+Shift+C / Ctrl+Shift+V", "Copier / coller les réglages"],
-  ["Ctrl+E", "Exporter"],
-  ["I", "Infos EXIF"],
-  ["Suppr", "Retirer du catalogue"],
-  ["Échap", "Fermer / quitter l'outil"],
-  ["?", "Cette aide"],
+  ["← / →", "shortcuts.list.prevNext"],
+  ["0 – 5", "shortcuts.list.rating"],
+  ["P / X / U", "shortcuts.list.flags"],
+  ["6 / 7 / 8 / 9", "shortcuts.list.colorLabels"],
+  ["G", "shortcuts.list.grid"],
+  ["E", "shortcuts.list.loupe"],
+  ["D", "shortcuts.list.develop"],
+  ["Ctrl/Maj + clic", "shortcuts.list.multiSelect"],
+  ["Z", "shortcuts.list.zoomToggle"],
+  ["Espace + glisser", "shortcuts.list.pan"],
+  ["\\", "shortcuts.list.beforeAfter"],
+  ["J", "shortcuts.list.clipping"],
+  ["R", "shortcuts.list.cropTool"],
+  ["O", "shortcuts.list.showMask"],
+  ["Ctrl+Z / Ctrl+Shift+Z", "shortcuts.list.undoRedo"],
+  ["Ctrl+Shift+C / Ctrl+Shift+V", "shortcuts.list.copyPaste"],
+  ["Ctrl+E", "shortcuts.list.export"],
+  ["I", "shortcuts.list.exif"],
+  ["Suppr", "shortcuts.list.removeCatalog"],
+  ["Échap", "shortcuts.list.escape"],
+  ["?", "shortcuts.list.help"],
 ];
 
 function isTyping(): boolean {
@@ -91,7 +93,7 @@ export function handleGlobalKey(ev: KeyboardEvent) {
       return;
     case "Delete": case "Backspace":
       if (s.currentId !== null &&
-          window.confirm("Retirer cette photo du catalogue ? (le fichier importé sera conservé sur le disque)")) {
+          window.confirm(i18n.t("shortcuts.confirmRemoveCurrent"))) {
         void s.removeCurrent(false);
       }
       return;

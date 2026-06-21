@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { useStore } from "../store";
 import { chooseExportDir, ensureWritable, fsAccessSupported, loadExportDir, writeFile } from "../lib/exportDir";
@@ -17,6 +18,7 @@ function triggerDownload(url: string, name: string) {
 }
 
 export function ExportDialog() {
+  const { t } = useTranslation();
   const photos = useStore((s) => s.photos);
   const currentId = useStore((s) => s.currentId);
   const exportIds = useStore((s) => s.exportIds);
@@ -68,7 +70,7 @@ export function ExportDialog() {
         if (!target) return;
         setDir(target);
       }
-      if (!(await ensureWritable(target))) { notify("Accès au dossier refusé"); return; }
+      if (!(await ensureWritable(target))) { notify(t("export.dirDenied")); return; }
     }
     setBusy(true);
     setErrors([]);
@@ -102,7 +104,7 @@ export function ExportDialog() {
     setDoneCount(ok);
     setBusy(false);
     if (ok > 0 && !errs.length) {
-      notify(`${ok} photo${ok > 1 ? "s" : ""} exportée${ok > 1 ? "s" : ""}` + (dirName ? ` → ${dirName}` : ""));
+      notify(t("export.exported", { count: ok }) + (dirName ? ` → ${dirName}` : ""));
       close();
     }
   };
@@ -115,29 +117,29 @@ export function ExportDialog() {
     <div className="modal-backdrop" onClick={busy ? undefined : close}>
       <div className="modal export-modal" onClick={(ev) => ev.stopPropagation()}>
         <header>
-          <h2>Exporter</h2>
+          <h2>{t("export.title")}</h2>
           <button className="mini-btn" onClick={close} disabled={busy}>✕</button>
         </header>
 
         <div className="form-row">
-          <label>Photos</label>
+          <label>{t("export.photos")}</label>
           <select value={scope} onChange={(ev) => setScope(ev.target.value as Scope)} disabled={busy}>
-            {hasSelection && <option value="selection">Sélection — {selectionIds.length}</option>}
-            <option value="current">Photo courante</option>
-            <option value="all">Toutes les photos affichées (sauf rejetées) — {photos.filter((p) => p.flag !== "reject").length}</option>
+            {hasSelection && <option value="selection">{t("export.selection")} — {selectionIds.length}</option>}
+            <option value="current">{t("export.current")}</option>
+            <option value="all">{t("export.allDisplayed")} — {photos.filter((p) => p.flag !== "reject").length}</option>
           </select>
         </div>
 
         {fsAccessSupported && (
           <div className="form-row">
-            <label>Destination</label>
-            <button className="btn" onClick={() => void pickFolder()} disabled={busy}>📁 {dirName ? "Changer…" : "Choisir…"}</button>
-            <span className="dim folder-name">{dirName || "Demandé à l'export"}</span>
+            <label>{t("export.destination")}</label>
+            <button className="btn" onClick={() => void pickFolder()} disabled={busy}>📁 {dirName ? t("export.change") : t("export.choose")}</button>
+            <span className="dim folder-name">{dirName || t("export.askOnExport")}</span>
           </div>
         )}
 
         <div className="form-row">
-          <label>Format</label>
+          <label>{t("export.format")}</label>
           <select value={format} onChange={(ev) => setFormat(ev.target.value)} disabled={busy}>
             <option value="jpeg">JPEG</option>
             <option value="png">PNG</option>
@@ -146,16 +148,16 @@ export function ExportDialog() {
         </div>
         {format === "jpeg" && (
           <div className="form-row">
-            <label>Qualité</label>
+            <label>{t("export.quality")}</label>
             <input type="range" min={50} max={100} value={quality} disabled={busy}
               onChange={(ev) => setQuality(Number(ev.target.value))} />
             <span className="slider-value">{quality}</span>
           </div>
         )}
         <div className="form-row">
-          <label>Taille max.</label>
+          <label>{t("export.maxSize")}</label>
           <select value={maxSize} onChange={(ev) => setMaxSize(Number(ev.target.value))} disabled={busy}>
-            <option value={0}>Pleine résolution</option>
+            <option value={0}>{t("export.fullRes")}</option>
             <option value={4096}>4096 px</option>
             <option value={2560}>2560 px</option>
             <option value={2048}>2048 px</option>
@@ -163,8 +165,8 @@ export function ExportDialog() {
           </select>
         </div>
         <div className="form-row">
-          <label>Suffixe</label>
-          <input type="text" value={suffix} placeholder="-web (optionnel)" disabled={busy}
+          <label>{t("export.suffix")}</label>
+          <input type="text" value={suffix} placeholder={t("export.suffixPlaceholder")} disabled={busy}
             onChange={(ev) => setSuffix(ev.target.value)} />
         </div>
 
@@ -177,13 +179,13 @@ export function ExportDialog() {
 
         <div className="row-actions modal-actions">
           <button className="btn primary" disabled={busy || !ids.length} onClick={() => void run()}>
-            {busy ? "Export en cours…" : `Exporter ${ids.length} photo${ids.length > 1 ? "s" : ""}`}
+            {busy ? t("export.exporting") : t("export.exportN", { count: ids.length })}
           </button>
-          {!busy && <button className="btn" onClick={close}>Fermer</button>}
+          {!busy && <button className="btn" onClick={close}>{t("common.close")}</button>}
         </div>
 
         {!busy && doneCount > 0 && (
-          <p className="export-done">✓ {doneCount} fichier{doneCount > 1 ? "s" : ""} exporté{doneCount > 1 ? "s" : ""}{dirName ? ` dans « ${dirName} »` : ""}.</p>
+          <p className="export-done">✓ {t("export.doneCount", { count: doneCount })}{dirName ? " " + t("export.inFolder", { dir: dirName }) : ""}.</p>
         )}
         {errors.length > 0 && (
           <p className="error">

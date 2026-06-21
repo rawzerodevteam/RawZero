@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useStore } from "../store";
 
 const W = 252, H = 200, PAD = 8;
@@ -46,14 +47,15 @@ const fromSvg = (sx: number, sy: number): [number, number] => [
 ];
 
 const CHANNELS = [
-  { key: "points", label: "RVB", color: "#d8d8d8" },
-  { key: "r", label: "R", color: "#e5484d" },
-  { key: "g", label: "V", color: "#5bb98b" },
-  { key: "b", label: "B", color: "#5b8def" },
+  { key: "points", label: "curve.ch.rgb", color: "#d8d8d8" },
+  { key: "r", label: "curve.ch.r", color: "#e5484d" },
+  { key: "g", label: "curve.ch.g", color: "#5bb98b" },
+  { key: "b", label: "curve.ch.b", color: "#5b8def" },
 ] as const;
 type ChannelKey = (typeof CHANNELS)[number]["key"];
 
 export function CurveEditor() {
+  const { t } = useTranslation();
   const [channel, setChannel] = useState<ChannelKey>("points");
   const points = useStore((s) => s.edits?.curve[channel]) ?? [[0, 0], [1, 1]] as [number, number][];
   const updateEdits = useStore((s) => s.updateEdits);
@@ -125,7 +127,7 @@ export function CurveEditor() {
           style={channel === c.key ? { color: c.color, borderColor: c.color } : undefined}
           onClick={() => { setChannel(c.key); setDragIdx(null); }}
         >
-          {c.label}
+          {t(c.label)}
         </button>
       ))}
     </div>

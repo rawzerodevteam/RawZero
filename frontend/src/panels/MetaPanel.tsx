@@ -1,27 +1,29 @@
+import { useTranslation } from "react-i18next";
 import { PanelSection } from "../components/PanelSection";
 import { useStore } from "../store";
 
 function fmtDate(s: string): string {
   if (!s) return "—";
   const d = new Date(s);
-  return isNaN(d.getTime()) ? s : d.toLocaleString("fr-FR");
+  return isNaN(d.getTime()) ? s : d.toLocaleString();
 }
 
 export function MetaPanel() {
+  const { t } = useTranslation();
   const photo = useStore((s) => s.photos.find((p) => p.id === s.currentId));
   if (!photo) return null;
 
   const rows: [string, string][] = [
-    ["Fichier", photo.filename],
-    ["Dimensions", photo.width && photo.height ? `${photo.width} × ${photo.height}` : "—"],
-    ["Capturée le", fmtDate(photo.captured_at)],
-    ["Importée le", fmtDate(photo.imported_at)],
-    ["Boîtier", photo.camera || "—"],
-    ["Objectif", photo.lens || "—"],
+    [t("meta.file"), photo.filename],
+    [t("meta.dimensions"), photo.width && photo.height ? `${photo.width} × ${photo.height}` : "—"],
+    [t("meta.captured"), fmtDate(photo.captured_at)],
+    [t("meta.imported"), fmtDate(photo.imported_at)],
+    [t("meta.camera"), photo.camera || "—"],
+    [t("meta.lens"), photo.lens || "—"],
     ["ISO", photo.iso ? String(photo.iso) : "—"],
-    ["Ouverture", photo.aperture ? `f/${photo.aperture}` : "—"],
-    ["Vitesse", photo.shutter || "—"],
-    ["Focale", photo.focal ? `${photo.focal} mm` : "—"],
+    [t("meta.aperture"), photo.aperture ? `f/${photo.aperture}` : "—"],
+    [t("meta.shutter"), photo.shutter || "—"],
+    [t("meta.focal"), photo.focal ? `${photo.focal} mm` : "—"],
   ];
 
   return (

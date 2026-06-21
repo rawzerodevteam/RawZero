@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { EditSlider } from "../components/EditSlider";
 import { PanelSection } from "../components/PanelSection";
@@ -5,6 +6,7 @@ import { useStore } from "../store";
 import { defaultEdits, mergeEdits } from "../types";
 
 export function BasicPanel() {
+  const { t } = useTranslation();
   const edits = useStore((s) => s.edits);
   const currentId = useStore((s) => s.currentId);
   const updateEdits = useStore((s) => s.updateEdits);
@@ -23,32 +25,32 @@ export function BasicPanel() {
         e.wb.temp = suggested.wb.temp;
         e.wb.tint = suggested.wb.tint;
       });
-      notify("Auto : exposition et balance des blancs ajustées");
+      notify(t("basic.autoDone"));
     } catch (err) {
-      notify(`Auto impossible : ${err}`);
+      notify(t("basic.autoFailed", { error: String(err) }));
     }
   };
 
   return (
     <PanelSection
-      title="Basique"
+      title={t("basic.title")}
       onReset={() => updateEdits((e) => { e.wb = d.wb; e.tone = d.tone; e.presence = d.presence; })}
     >
       <div className="row-actions">
-        <button className="btn" onClick={() => void auto()}>Auto</button>
+        <button className="btn" onClick={() => void auto()}>{t("basic.auto")}</button>
         <button
           className="btn"
           onClick={() => updateEdits((e) => { e.presence.saturation = e.presence.saturation <= -100 ? 0 : -100; })}
         >
-          N&B
+          {t("basic.bw")}
         </button>
       </div>
       <h4 className="h4-row">
-        Balance des blancs
+        {t("basic.wb")}
         <button
           className={"pipette-btn" + (activeTool === "wb" ? " active" : "")}
-          title="Pipette : cliquer une zone neutre (grise) de l'image"
-          aria-label="Pipette balance des blancs"
+          title={t("basic.wbPipette")}
+          aria-label={t("basic.wbPipetteAria")}
           onClick={() => setUI({ activeTool: activeTool === "wb" ? "none" : "wb" })}
         >
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
@@ -59,21 +61,21 @@ export function BasicPanel() {
           </svg>
         </button>
       </h4>
-      <EditSlider label="Température" value={edits.wb.temp} min={-100} max={100} apply={(e, v) => { e.wb.temp = v; }} />
-      <EditSlider label="Teinte" value={edits.wb.tint} min={-100} max={100} apply={(e, v) => { e.wb.tint = v; }} />
-      <h4>Tonalité</h4>
-      <EditSlider label="Exposition" value={edits.tone.exposure} min={-5} max={5} step={0.05}
+      <EditSlider label={t("adj.temperature")} value={edits.wb.temp} min={-100} max={100} apply={(e, v) => { e.wb.temp = v; }} />
+      <EditSlider label={t("adj.tint")} value={edits.wb.tint} min={-100} max={100} apply={(e, v) => { e.wb.tint = v; }} />
+      <h4>{t("basic.tone")}</h4>
+      <EditSlider label={t("adj.exposure")} value={edits.tone.exposure} min={-5} max={5} step={0.05}
         fmt={(v) => (v > 0 ? "+" : "") + v.toFixed(2)} apply={(e, v) => { e.tone.exposure = v; }} />
-      <EditSlider label="Contraste" value={edits.tone.contrast} min={-100} max={100} apply={(e, v) => { e.tone.contrast = v; }} />
-      <EditSlider label="Hautes lumières" value={edits.tone.highlights} min={-100} max={100} apply={(e, v) => { e.tone.highlights = v; }} />
-      <EditSlider label="Ombres" value={edits.tone.shadows} min={-100} max={100} apply={(e, v) => { e.tone.shadows = v; }} />
-      <EditSlider label="Blancs" value={edits.tone.whites} min={-100} max={100} apply={(e, v) => { e.tone.whites = v; }} />
-      <EditSlider label="Noirs" value={edits.tone.blacks} min={-100} max={100} apply={(e, v) => { e.tone.blacks = v; }} />
-      <h4>Présence</h4>
-      <EditSlider label="Clarté" value={edits.presence.clarity} min={-100} max={100} apply={(e, v) => { e.presence.clarity = v; }} />
-      <EditSlider label="Dehaze" value={edits.presence.dehaze} min={-100} max={100} apply={(e, v) => { e.presence.dehaze = v; }} />
-      <EditSlider label="Vibrance" value={edits.presence.vibrance} min={-100} max={100} apply={(e, v) => { e.presence.vibrance = v; }} />
-      <EditSlider label="Saturation" value={edits.presence.saturation} min={-100} max={100} apply={(e, v) => { e.presence.saturation = v; }} />
+      <EditSlider label={t("adj.contrast")} value={edits.tone.contrast} min={-100} max={100} apply={(e, v) => { e.tone.contrast = v; }} />
+      <EditSlider label={t("adj.highlights")} value={edits.tone.highlights} min={-100} max={100} apply={(e, v) => { e.tone.highlights = v; }} />
+      <EditSlider label={t("adj.shadows")} value={edits.tone.shadows} min={-100} max={100} apply={(e, v) => { e.tone.shadows = v; }} />
+      <EditSlider label={t("adj.whites")} value={edits.tone.whites} min={-100} max={100} apply={(e, v) => { e.tone.whites = v; }} />
+      <EditSlider label={t("adj.blacks")} value={edits.tone.blacks} min={-100} max={100} apply={(e, v) => { e.tone.blacks = v; }} />
+      <h4>{t("basic.presence")}</h4>
+      <EditSlider label={t("adj.clarity")} value={edits.presence.clarity} min={-100} max={100} apply={(e, v) => { e.presence.clarity = v; }} />
+      <EditSlider label={t("adj.dehaze")} value={edits.presence.dehaze} min={-100} max={100} apply={(e, v) => { e.presence.dehaze = v; }} />
+      <EditSlider label={t("adj.vibrance")} value={edits.presence.vibrance} min={-100} max={100} apply={(e, v) => { e.presence.vibrance = v; }} />
+      <EditSlider label={t("adj.saturation")} value={edits.presence.saturation} min={-100} max={100} apply={(e, v) => { e.presence.saturation = v; }} />
     </PanelSection>
   );
 }

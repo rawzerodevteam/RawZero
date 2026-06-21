@@ -1,16 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { useStore } from "../store";
 import type { ImportResult } from "../types";
 
 type Tab = "upload" | "folder";
 
-const STATUS_LABELS: Record<ImportResult["status"], string> = {
-  imported: "importée", duplicate: "doublon ignoré", ignored: "format non géré",
-  error: "erreur", pending: "en attente", uploading: "envoi…",
-};
-
 export function ImportPanel() {
+  const { t } = useTranslation();
   const setUI = useStore((s) => s.setUI);
   const loadPhotos = useStore((s) => s.loadPhotos);
   const loadProjects = useStore((s) => s.loadProjects);
@@ -25,15 +22,15 @@ export function ImportPanel() {
     <div className="modal-backdrop" onClick={busy ? undefined : close}>
       <div className="modal import-modal" onClick={(ev) => ev.stopPropagation()}>
         <header>
-          <h2>Importer dans « {project?.name ?? "Projet"} »</h2>
+          <h2>{t("import.title", { name: project?.name ?? t("import.defaultProject") })}</h2>
           <button className="mini-btn" onClick={close} disabled={busy}>✕</button>
         </header>
         <div className="hsl-tabs">
           <button className={"tab" + (tab === "upload" ? " active" : "")} onClick={() => setTab("upload")}>
-            Depuis cet ordinateur
+            {t("import.fromComputer")}
           </button>
           <button className={"tab" + (tab === "folder" ? " active" : "")} onClick={() => setTab("folder")}>
-            Dossier /import
+            {t("import.folderTab")}
           </button>
         </div>
         {tab === "upload"
@@ -44,7 +41,7 @@ export function ImportPanel() {
             {results.map((r, i) => (
               <li key={i} className={"st-" + r.status}>
                 <span className="name">{r.filename}</span>
-                <span className="status">{STATUS_LABELS[r.status]}{r.reason ? ` (${r.reason})` : ""}</span>
+                <span className="status">{t(`import.status.${r.status}`)}{r.reason ? ` (${r.reason})` : ""}</span>
               </li>
             ))}
           </ul>
@@ -62,6 +59,7 @@ interface TabProps {
 }
 
 function UploadTab({ busy, setBusy, setResults, onDone }: TabProps) {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const projectId = useStore((s) => s.currentProjectId);
@@ -107,13 +105,14 @@ function UploadTab({ busy, setBusy, setResults, onDone }: TabProps) {
           ev.target.value = "";
         }}
       />
-      <p>{busy ? "Import en cours…" : "Déposer des fichiers ici ou cliquer pour choisir"}</p>
-      <p className="hint">RAW (CR2/CR3, NEF, ARW, RAF, ORF, RW2, DNG…) ou JPEG / PNG / TIFF</p>
+      <p>{busy ? t("import.uploading") : t("import.dropzone")}</p>
+      <p className="hint">{t("import.formats")}</p>
     </div>
   );
 }
 
 function FolderTab({ busy, setBusy, setResults, onDone }: TabProps) {
+  const { t } = useTranslation();
   const [path, setPath] = useState("");
   const [listing, setListing] = useState<Awaited<ReturnType<typeof api.browseImport>> | null>(null);
   const [error, setError] = useState("");
@@ -142,21 +141,16 @@ function FolderTab({ busy, setBusy, setResults, onDone }: TabProps) {
   };
 
   if (error) return <p className="error">{error}</p>;
-  if (!listing) return <p className="hint">Chargement…</p>;
+  if (!listing) return <p className="hint">{t("common.loading")}</p>;
   if (!listing.available) {
-    return (
-      <p className="hint">
-        Aucun dossier d'import monté. Déposez vos fichiers dans <code>./import</code> à côté du
-        docker-compose.yml (monté en lecture seule dans le conteneur), puis rouvrez cet onglet.
-      </p>
-    );
+    return <p className="hint">{t("import.noFolder")}</p>;
   }
 
   return (
     <div className="folder-browser">
       <div className="row-actions">
         <button className="btn small" disabled={!path} onClick={() => browse(path.split("/").slice(0, -1).join("/"))}>
-          ↑ Dossier parent
+          ↑ {t("import.parentDir")}
         </button>
         <span className="dim">/{path}</span>
         <button
@@ -164,7 +158,7 @@ function FolderTab({ busy, setBusy, setResults, onDone }: TabProps) {
           disabled={busy || !listing.files.length}
           onClick={() => void importPaths(listing.files.map((f) => f.path))}
         >
-          Tout importer ({listing.files.length})
+          {t("import.importAll", { count: listing.files.length })}
         </button>
       </div>
       <ul className="browser-list">
@@ -172,11 +166,11 @@ function FolderTab({ busy, setBusy, setResults, onDone }: TabProps) {
           <li key={d.path} className="dir" onClick={() => browse(d.path)}>📁 {d.name}</li>
         ))}
         {listing.files.map((f) => (
-          <li key={f.path} className="file" onClick={() => void importPaths([f.path])} title="Cliquer pour importer">
-            🖼 {f.name} <span className="dim">{(f.size / 1024 / 1024).toFixed(1)} Mo</span>
+          <li key={f.path} className="file" onClick={() => void importPaths([f.path])} title={t("import.clickToImport")}>
+            🖼 {f.name} <span className="dim">{t("common.sizeMb", { mb: (f.size / 1024 / 1024).toFixed(1) })}</span>
           </li>
         ))}
-        {!listing.dirs.length && !listing.files.length && <li className="dim">Dossier vide</li>}
+        {!listing.dirs.length && !listing.files.length && <li className="dim">{t("import.emptyFolder")}</li>}
       </ul>
     </div>
   );

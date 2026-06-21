@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useStore } from "../store";
 import type { EditState } from "../types";
 
@@ -17,6 +18,7 @@ interface Props {
  *  Double-clic sur le libellé = retour à la valeur par défaut.
  *  Clic sur la valeur = saisie numérique directe. */
 export function EditSlider({ label, value, min, max, step = 1, reset = 0, fmt, apply }: Props) {
+  const { t } = useTranslation();
   const updateEdits = useStore((s) => s.updateEdits);
   const startDrag = useStore((s) => s.startDrag);
   const endDrag = useStore((s) => s.endDrag);
@@ -47,7 +49,7 @@ export function EditSlider({ label, value, min, max, step = 1, reset = 0, fmt, a
 
   return (
     <div className="slider-row">
-      <span className="slider-label" onDoubleClick={doReset} title="Double-clic : réinitialiser">
+      <span className="slider-label" onDoubleClick={doReset} title={t("slider.resetHint")}>
         {label}
       </span>
       <input
@@ -78,7 +80,7 @@ export function EditSlider({ label, value, min, max, step = 1, reset = 0, fmt, a
           }}
         />
       ) : (
-        <span className="slider-value" onClick={beginEdit} title="Cliquer pour saisir une valeur">
+        <span className="slider-value" onClick={beginEdit} title={t("slider.enterValue")}>
           {fmt ? fmt(value) : (Math.round(value * 100) / 100).toString()}
         </span>
       )}

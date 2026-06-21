@@ -1,25 +1,23 @@
+import { useTranslation } from "react-i18next";
 import { EditSlider } from "../components/EditSlider";
 import { PanelSection } from "../components/PanelSection";
 import { useStore, type Tool } from "../store";
 import { defaultLocalAdjust, type LocalAdjustValues } from "../types";
-
-const TYPE_LABELS: Record<string, string> = {
-  linear: "Dégradé linéaire", radial: "Filtre radial", brush: "Pinceau", ai: "Sujet (IA)",
-  lumrange: "Plage de luminance", colorrange: "Plage de couleur",
-};
 
 const RANGE_DEFAULTS: Record<string, Record<string, number>> = {
   lumrange: { lo: 0.25, hi: 0.75, smooth: 0.1 },
   colorrange: { hue: 0, range: 30, smooth: 15, sat_min: 0.15 },
 };
 
-const TOOLS: { tool: Tool; label: string; hint: string }[] = [
-  { tool: "linear", label: "▤ Linéaire", hint: "Glisser sur l'image pour tracer le dégradé" },
-  { tool: "radial", label: "◎ Radial", hint: "Glisser depuis le centre de l'ellipse" },
-  { tool: "brush", label: "✎ Pinceau", hint: "Peindre directement sur l'image" },
+// label/hint = clés i18n (cf. local.tool.*) ; icon reste littéral.
+const TOOLS: { tool: Tool; icon: string; label: string; hint: string }[] = [
+  { tool: "linear", icon: "▤", label: "local.tool.linear", hint: "local.tool.linearHint" },
+  { tool: "radial", icon: "◎", label: "local.tool.radial", hint: "local.tool.radialHint" },
+  { tool: "brush", icon: "✎", label: "local.tool.brush", hint: "local.tool.brushHint" },
 ];
 
 export function LocalPanel() {
+  const { t } = useTranslation();
   const edits = useStore((s) => s.edits);
   const updateEdits = useStore((s) => s.updateEdits);
   const activeTool = useStore((s) => s.activeTool);
@@ -52,21 +50,21 @@ export function LocalPanel() {
   };
 
   return (
-    <PanelSection title="Retouches locales" defaultOpen={false}>
+    <PanelSection title={t("local.title")} defaultOpen={false}>
       <div className="row-actions">
-        {TOOLS.map(({ tool, label, hint }) => (
+        {TOOLS.map(({ tool, icon, label, hint }) => (
           <button
             key={tool}
             className={"btn" + (activeTool === tool ? " active" : "")}
-            title={hint}
+            title={t(hint)}
             onClick={() => setUI({ activeTool: activeTool === tool ? "none" : tool })}
           >
-            {label}
+            {icon} {t(label)}
           </button>
         ))}
       </div>
-      {activeTool !== "none" && activeTool !== "crop" && (
-        <p className="hint">{TOOLS.find((t) => t.tool === activeTool)?.hint}</p>
+      {TOOLS.some((x) => x.tool === activeTool) && (
+        <p className="hint">{t(TOOLS.find((x) => x.tool === activeTool)!.hint)}</p>
       )}
       {(aiSubjectAvailable || aiPointAvailable) && (
         <div className="row-actions ai-actions">
@@ -74,41 +72,39 @@ export function LocalPanel() {
             <button
               className={"btn ai-mask" + (activeTool === "pointmask" ? " active" : "") + (aiMaskBusy ? " busy" : "")}
               disabled={aiMaskBusy}
-              title="Cliquez ensuite sur l'élément à sélectionner dans l'image"
+              title={t("local.pointTitle")}
               onClick={() => setUI({ activeTool: activeTool === "pointmask" ? "none" : "pointmask" })}
             >
-              {aiMaskBusy ? "Calcul…" : "Sélection manuelle"}
+              {aiMaskBusy ? t("local.computing") : t("local.manualSelect")}
             </button>
           )}
           {aiSubjectAvailable && (
             <button
               className={"btn ai-mask" + (aiMaskBusy ? " busy" : "")}
               disabled={aiMaskBusy}
-              title="Détecte automatiquement le sujet principal et crée un masque"
+              title={t("local.subjectTitle")}
               onClick={() => void createAutoMask("subject")}
             >
-              {aiMaskBusy ? "Calcul…" : "Sélection automatique"}
+              {aiMaskBusy ? t("local.computing") : t("local.autoSelect")}
             </button>
           )}
         </div>
       )}
       <div className="row-actions">
-        <button className="btn" title="Cible une plage de luminosité (ombres, tons moyens, hautes lumières)"
-          onClick={() => addRangeMask("lumrange")}>◐ Plage luminance</button>
-        <button className="btn" title="Cible une plage de couleur (par teinte)"
-          onClick={() => addRangeMask("colorrange")}>◑ Plage couleur</button>
+        <button className="btn" title={t("local.lumRangeTitle")}
+          onClick={() => addRangeMask("lumrange")}>◐ {t("local.lumRange")}</button>
+        <button className="btn" title={t("local.colorRangeTitle")}
+          onClick={() => addRangeMask("colorrange")}>◑ {t("local.colorRange")}</button>
       </div>
       {activeTool === "pointmask" && (
         <p className="hint">
-          {selected?.type === "ai"
-            ? "Cliquez d'autres éléments pour les ajouter à ce masque. Échap pour terminer."
-            : "Cliquez sur l'élément à sélectionner. Un masque déjà sélectionné reçoit les clics suivants."}
+          {selected?.type === "ai" ? t("local.pointAddHint") : t("local.pointHint")}
         </p>
       )}
       {activeTool === "brush" && (
         <>
           <div className="slider-row">
-            <span className="slider-label">Taille</span>
+            <span className="slider-label">{t("local.brushSize")}</span>
             <input
               type="range" min={1} max={30} value={Math.round(brushSize * 100)}
               onChange={(ev) => setUI({ brushSize: Number(ev.target.value) / 100 })}
@@ -120,7 +116,7 @@ export function LocalPanel() {
               className={"btn small" + (brushErase ? " active" : "")}
               onClick={() => setUI({ brushErase: !brushErase })}
             >
-              Gomme
+              {t("local.eraser")}
             </button>
           </div>
         </>
@@ -137,8 +133,8 @@ export function LocalPanel() {
                 activeTool: l.type === "brush" && l.id !== selectedLocalId ? "brush" : "none",
               })}
             >
-              <span>{i + 1}. {TYPE_LABELS[l.type]}</span>
-              {l.invert && <span className="tag">inv.</span>}
+              <span>{i + 1}. {t(`local.type.${l.type}`)}</span>
+              {l.invert && <span className="tag">{t("local.invTag")}</span>}
             </li>
           ))}
         </ul>
@@ -154,19 +150,19 @@ export function LocalPanel() {
                 if (loc) loc.invert = !loc.invert;
               })}
             >
-              Inverser
+              {t("local.invert")}
             </button>
             <button
               className={"btn small" + (showMaskOverlay ? " active" : "")}
-              title="Afficher le masque (O)"
+              title={t("local.showMaskTitle")}
               onClick={() => setUI({ showMaskOverlay: !showMaskOverlay })}
             >
-              Masque (O)
+              {t("local.maskToggle")}
             </button>
-            <button className="btn small danger" onClick={removeSelected}>Supprimer</button>
+            <button className="btn small danger" onClick={removeSelected}>{t("common.delete")}</button>
           </div>
           {(selected.type === "radial" || selected.type === "brush") && (
-            <EditSlider label="Contour progressif" value={(selected.params.feather ?? 0.5) * 100}
+            <EditSlider label={t("local.feather")} value={(selected.params.feather ?? 0.5) * 100}
               min={0} max={100} reset={50}
               apply={(e, v) => {
                 const loc = e.locals.find((l) => l.id === selected.id);
@@ -174,7 +170,7 @@ export function LocalPanel() {
               }} />
           )}
           {selected.type === "ai" && (
-            <EditSlider label="Dureté" value={selected.params.hardness ?? 0}
+            <EditSlider label={t("local.hardness")} value={selected.params.hardness ?? 0}
               min={0} max={100} reset={0}
               apply={(e, v) => {
                 const loc = e.locals.find((l) => l.id === selected.id);
@@ -183,42 +179,42 @@ export function LocalPanel() {
           )}
           {selected.type === "lumrange" && (
             <>
-              <ParamSlider id={selected.id} label="Min" pk="lo" value={selected.params.lo ?? 0.25}
+              <ParamSlider id={selected.id} label={t("local.min")} pk="lo" value={selected.params.lo ?? 0.25}
                 min={0} max={1} step={0.01} reset={0.25} fmt={(v) => v.toFixed(2)} />
-              <ParamSlider id={selected.id} label="Max" pk="hi" value={selected.params.hi ?? 0.75}
+              <ParamSlider id={selected.id} label={t("local.max")} pk="hi" value={selected.params.hi ?? 0.75}
                 min={0} max={1} step={0.01} reset={0.75} fmt={(v) => v.toFixed(2)} />
-              <ParamSlider id={selected.id} label="Transition" pk="smooth" value={selected.params.smooth ?? 0.1}
+              <ParamSlider id={selected.id} label={t("local.transition")} pk="smooth" value={selected.params.smooth ?? 0.1}
                 min={0.01} max={0.5} step={0.01} reset={0.1} fmt={(v) => v.toFixed(2)} />
             </>
           )}
           {selected.type === "colorrange" && (
             <>
-              <ParamSlider id={selected.id} label="Teinte" pk="hue" value={selected.params.hue ?? 0}
+              <ParamSlider id={selected.id} label={t("hsl.hue")} pk="hue" value={selected.params.hue ?? 0}
                 min={0} max={360} step={1} reset={0} fmt={(v) => `${Math.round(v)}°`} />
-              <ParamSlider id={selected.id} label="Plage" pk="range" value={selected.params.range ?? 30}
+              <ParamSlider id={selected.id} label={t("local.range")} pk="range" value={selected.params.range ?? 30}
                 min={0} max={120} step={1} reset={30} fmt={(v) => `${Math.round(v)}°`} />
-              <ParamSlider id={selected.id} label="Transition" pk="smooth" value={selected.params.smooth ?? 15}
+              <ParamSlider id={selected.id} label={t("local.transition")} pk="smooth" value={selected.params.smooth ?? 15}
                 min={1} max={60} step={1} reset={15} fmt={(v) => `${Math.round(v)}°`} />
-              <ParamSlider id={selected.id} label="Saturation min" pk="sat_min" value={selected.params.sat_min ?? 0.15}
+              <ParamSlider id={selected.id} label={t("local.satMin")} pk="sat_min" value={selected.params.sat_min ?? 0.15}
                 min={0} max={1} step={0.01} reset={0.15} fmt={(v) => v.toFixed(2)} />
             </>
           )}
-          <LocalSlider id={selected.id} label="Exposition" k="exposure" min={-3} max={3} step={0.05}
+          <LocalSlider id={selected.id} label={t("adj.exposure")} k="exposure" min={-3} max={3} step={0.05}
             fmt={(v) => (v > 0 ? "+" : "") + v.toFixed(2)} value={selected.adjust.exposure} />
-          <LocalSlider id={selected.id} label="Contraste" k="contrast" value={selected.adjust.contrast} />
-          <LocalSlider id={selected.id} label="Hautes lumières" k="highlights" value={selected.adjust.highlights} />
-          <LocalSlider id={selected.id} label="Ombres" k="shadows" value={selected.adjust.shadows} />
-          <LocalSlider id={selected.id} label="Température" k="temp" value={selected.adjust.temp} />
-          <LocalSlider id={selected.id} label="Teinte" k="tint" value={selected.adjust.tint} />
-          <LocalSlider id={selected.id} label="Saturation" k="saturation" value={selected.adjust.saturation} />
-          <LocalSlider id={selected.id} label="Clarté" k="clarity" value={selected.adjust.clarity} />
-          <LocalSlider id={selected.id} label="Netteté" k="sharpness" value={selected.adjust.sharpness} />
+          <LocalSlider id={selected.id} label={t("adj.contrast")} k="contrast" value={selected.adjust.contrast} />
+          <LocalSlider id={selected.id} label={t("adj.highlights")} k="highlights" value={selected.adjust.highlights} />
+          <LocalSlider id={selected.id} label={t("adj.shadows")} k="shadows" value={selected.adjust.shadows} />
+          <LocalSlider id={selected.id} label={t("adj.temperature")} k="temp" value={selected.adjust.temp} />
+          <LocalSlider id={selected.id} label={t("adj.tint")} k="tint" value={selected.adjust.tint} />
+          <LocalSlider id={selected.id} label={t("adj.saturation")} k="saturation" value={selected.adjust.saturation} />
+          <LocalSlider id={selected.id} label={t("adj.clarity")} k="clarity" value={selected.adjust.clarity} />
+          <LocalSlider id={selected.id} label={t("local.sharpness")} k="sharpness" value={selected.adjust.sharpness} />
           <div className="row-actions">
             <button className="btn small" onClick={() => updateEdits((e) => {
               const loc = e.locals.find((l) => l.id === selected.id);
               if (loc) loc.adjust = defaultLocalAdjust();
             })}>
-              Réinitialiser les réglages
+              {t("local.resetAdjust")}
             </button>
           </div>
         </div>

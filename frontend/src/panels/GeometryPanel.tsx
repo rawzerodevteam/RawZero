@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { EditSlider } from "../components/EditSlider";
 import { PanelSection } from "../components/PanelSection";
 import { useStore } from "../store";
@@ -8,6 +9,7 @@ const ASPECTS: [string, number | null][] = [
 ];
 
 export function GeometryPanel() {
+  const { t } = useTranslation();
   const edits = useStore((s) => s.edits);
   const updateEdits = useStore((s) => s.updateEdits);
   const activeTool = useStore((s) => s.activeTool);
@@ -19,7 +21,7 @@ export function GeometryPanel() {
 
   return (
     <PanelSection
-      title="Géométrie"
+      title={t("geometry.title")}
       defaultOpen={false}
       onReset={() => {
         updateEdits((e) => { e.geometry = defaultEdits().geometry; });
@@ -27,36 +29,36 @@ export function GeometryPanel() {
       }}
     >
       <div className="row-actions">
-        <button className="btn" title="Rotation 90° anti-horaire"
+        <button className="btn" title={t("geometry.rotateCcw")}
           onClick={() => updateEdits((e) => { e.geometry.rotate = (e.geometry.rotate + 270) % 360; })}>
           ⟲ 90°
         </button>
-        <button className="btn" title="Rotation 90° horaire"
+        <button className="btn" title={t("geometry.rotateCw")}
           onClick={() => updateEdits((e) => { e.geometry.rotate = (e.geometry.rotate + 90) % 360; })}>
           ⟳ 90°
         </button>
-        <button className={"btn" + (g.flip_h ? " active" : "")} title="Miroir horizontal"
+        <button className={"btn" + (g.flip_h ? " active" : "")} title={t("geometry.flipH")}
           onClick={() => updateEdits((e) => { e.geometry.flip_h = !e.geometry.flip_h; })}>
           ⇋ H
         </button>
-        <button className={"btn" + (g.flip_v ? " active" : "")} title="Miroir vertical"
+        <button className={"btn" + (g.flip_v ? " active" : "")} title={t("geometry.flipV")}
           onClick={() => updateEdits((e) => { e.geometry.flip_v = !e.geometry.flip_v; })}>
           ⇵ V
         </button>
       </div>
-      <EditSlider label="Redresser" value={g.straighten} min={-10} max={10} step={0.1}
+      <EditSlider label={t("geometry.straighten")} value={g.straighten} min={-10} max={10} step={0.1}
         fmt={(v) => v.toFixed(1) + "°"} apply={(e, v) => { e.geometry.straighten = v; }} />
-      <h4>Recadrage</h4>
+      <h4>{t("geometry.crop")}</h4>
       <div className="row-actions">
         <button
           className={"btn" + (activeTool === "crop" ? " active" : "")}
           onClick={() => setUI({ activeTool: activeTool === "crop" ? "none" : "crop" })}
         >
-          {activeTool === "crop" ? "Terminer (R)" : "Recadrer (R)"}
+          {activeTool === "crop" ? t("geometry.cropDone") : t("geometry.cropStart")}
         </button>
         <button className="btn"
           onClick={() => updateEdits((e) => { e.geometry.crop = { x: 0, y: 0, w: 1, h: 1 }; })}>
-          Annuler le recadrage
+          {t("geometry.cropClear")}
         </button>
       </div>
       {activeTool === "crop" && (
@@ -67,7 +69,7 @@ export function GeometryPanel() {
               className={"btn small" + (cropAspect === ratio ? " active" : "")}
               onClick={() => setCropAspect(ratio)}
             >
-              {label}
+              {label === "Libre" ? t("crop.free") : label}
             </button>
           ))}
         </div>

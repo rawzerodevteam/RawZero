@@ -1,7 +1,9 @@
+import { useTranslation } from "react-i18next";
 import { useStore } from "../store";
 
 /** Deux onglets principaux : Bibliothèque (grille/zoom) et Développement. */
 export function ModeTabs({ className = "" }: { className?: string }) {
+  const { t } = useTranslation();
   const view = useStore((s) => s.view);
   const currentId = useStore((s) => s.currentId);
   const photos = useStore((s) => s.photos);
@@ -14,9 +16,9 @@ export function ModeTabs({ className = "" }: { className?: string }) {
   return (
     <div className={"mode-tabs " + className}>
       <button className={"mode-tab" + (inLibrary ? " active" : "")}
-        onClick={() => { if (!inLibrary) setView("grid"); }}>Bibliothèque</button>
+        onClick={() => { if (!inLibrary) setView("grid"); }}>{t("nav.library")}</button>
       <button className={"mode-tab" + (!inLibrary ? " active" : "")} disabled={devTarget === null}
-        onClick={() => { if (devTarget !== null) void openDevelop(devTarget); }}>Développement</button>
+        onClick={() => { if (devTarget !== null) void openDevelop(devTarget); }}>{t("nav.develop")}</button>
     </div>
   );
 }

@@ -1,11 +1,14 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../api";
+import { LanguageSwitcher } from "../components/LanguageSwitcher";
 import { parseDragIds, hasDragIds } from "../lib/dragPhotos";
 import { useStore } from "../store";
 import { ALL_PHOTOS_ID } from "../types";
 
 /** Écran d'accueil : tous les projets affichés en grandes icônes (couverture + nom + compte). */
 export function HomeView() {
+  const { t } = useTranslation();
   const projects = useStore((s) => s.projects);
   const albums = useStore((s) => s.albums);
   const versions = useStore((s) => s.editsVersion);
@@ -22,12 +25,12 @@ export function HomeView() {
   const openAlbum = (id: number) => { void setAlbum(id); };
 
   const create = () => {
-    const name = window.prompt("Nom du nouveau projet ?", "Nouveau projet");
+    const name = window.prompt(t("home.promptProjectName"), t("home.newProject"));
     if (name && name.trim()) void createProject(name.trim());
   };
 
   const createAlb = () => {
-    const name = window.prompt("Nom du nouvel album ?", "Nouvel album");
+    const name = window.prompt(t("home.promptAlbumName"), t("home.newAlbum"));
     if (name && name.trim()) void createAlbum(name.trim());
   };
 
@@ -44,10 +47,12 @@ export function HomeView() {
       <header className="home-header">
         <strong className="brand">RawStudio</strong>
         <span className="spacer" />
-        <button className="btn" onClick={() => setUI({ showImport: true })}>⤓ Importer</button>
+        <LanguageSwitcher />
+        <button className="btn" onClick={() => setUI({ showModels: true })}>{t("models.button")}</button>
+        <button className="btn" onClick={() => setUI({ showImport: true })}>⤓ {t("home.import")}</button>
       </header>
       <div className="home-body">
-        <h1 className="home-title">Projets</h1>
+        <h1 className="home-title">{t("home.projects")}</h1>
         <div className="project-grid">
           {projects.map((p) => (
             <button key={p.id} className="project-card" onClick={() => open(p.id)}>
@@ -58,20 +63,20 @@ export function HomeView() {
               </div>
               <div className="project-card-meta">
                 <span className="project-card-name" title={p.name}>{p.name}</span>
-                <span className="project-card-count">{p.count ?? 0} photo{(p.count ?? 0) > 1 ? "s" : ""}</span>
+                <span className="project-card-count">{t("home.photoCount", { count: p.count ?? 0 })}</span>
               </div>
             </button>
           ))}
           <button className="project-card new" onClick={create}>
             <div className="project-cover"><span className="project-cover-empty">＋</span></div>
             <div className="project-card-meta">
-              <span className="project-card-name">Nouveau projet</span>
+              <span className="project-card-name">{t("home.newProject")}</span>
             </div>
           </button>
         </div>
 
-        <h1 className="home-title">Albums</h1>
-        <p className="home-hint">Collections transverses aux projets — glissez-y des photos depuis la grille.</p>
+        <h1 className="home-title">{t("home.albums")}</h1>
+        <p className="home-hint">{t("home.albumsHint")}</p>
         <div className="project-grid">
           {albums.map((a) => (
             <button
@@ -89,14 +94,14 @@ export function HomeView() {
               </div>
               <div className="project-card-meta">
                 <span className="project-card-name" title={a.name}>{a.name}</span>
-                <span className="project-card-count">{a.count ?? 0} photo{(a.count ?? 0) > 1 ? "s" : ""}</span>
+                <span className="project-card-count">{t("home.photoCount", { count: a.count ?? 0 })}</span>
               </div>
             </button>
           ))}
           <button className="project-card new" onClick={createAlb}>
             <div className="project-cover"><span className="project-cover-empty">＋</span></div>
             <div className="project-card-meta">
-              <span className="project-card-name">Nouvel album</span>
+              <span className="project-card-name">{t("home.newAlbum")}</span>
             </div>
           </button>
         </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { Filmstrip } from "../components/Filmstrip";
 import { Histogram } from "../components/Histogram";
@@ -84,6 +85,7 @@ function useRenderedImage(): string | null {
 }
 
 export function DevelopView() {
+  const { t } = useTranslation();
   const photo = useStore((s) => s.photos.find((p) => p.id === s.currentId));
   const edits = useStore((s) => s.edits);
   const dirty = useStore((s) => s.dirty);
@@ -99,7 +101,7 @@ export function DevelopView() {
   const [showDiff, setShowDiff] = useState(false);
   const src = useRenderedImage();
 
-  if (!photo) return <div className="empty-state"><p>Aucune photo sélectionnée.</p></div>;
+  if (!photo) return <div className="empty-state"><p>{t("develop.noPhoto")}</p></div>;
 
   return (
     <div className="develop">
@@ -107,31 +109,31 @@ export function DevelopView() {
         <div className="toolbar">
           <ModeTabs />
           <span className="name">{photo.filename}</span>
-          {dirty && <span className="dim" title="Sauvegarde automatique en cours">●</span>}
-          {(photo.edited || dirty) && <span className="edited-chip" title="Photo retouchée">Modifiée</span>}
+          {dirty && <span className="dim" title={t("develop.autosaving")}>●</span>}
+          {(photo.edited || dirty) && <span className="edited-chip" title={t("develop.editedTitle")}>{t("develop.edited")}</span>}
           <span className="spacer" />
           <StarRating small value={photo.rating} onChange={setRating} />
           <button className={"btn small" + (beforeAfter ? " active" : "")}
-            title="Avant / après (\\)" onClick={() => setUI({ beforeAfter: !beforeAfter })}>
-            {beforeAfter ? "Avant" : "Après"}
+            title={t("develop.beforeAfterTitle")} onClick={() => setUI({ beforeAfter: !beforeAfter })}>
+            {beforeAfter ? t("develop.before") : t("develop.after")}
           </button>
           <button className={"btn small" + (showClipping ? " active" : "")}
-            title="Alertes d'écrêtage (J)" onClick={() => setUI({ showClipping: !showClipping })}>
+            title={t("develop.clippingTitle")} onClick={() => setUI({ showClipping: !showClipping })}>
             ▲▼
           </button>
-          <button className="btn small" title="Copier les réglages (Ctrl+Maj+C)" onClick={copyEdits}>⧉ Copier</button>
-          <button className="btn small" title="Coller les réglages (Ctrl+Maj+V)" onClick={pasteEdits}>⧉ Coller</button>
-          <button className="btn small" title="Tout réinitialiser" onClick={resetEdits}>↺</button>
+          <button className="btn small" title={t("develop.copyTitle")} onClick={copyEdits}>⧉ {t("develop.copy")}</button>
+          <button className="btn small" title={t("develop.pasteTitle")} onClick={pasteEdits}>⧉ {t("develop.paste")}</button>
+          <button className="btn small" title={t("develop.resetTitle")} onClick={resetEdits}>↺</button>
           <button className={"btn small" + (gpuPreview ? " active" : "")}
-            title="Aperçu GPU temps réel (WB, expo, HL/ombres, blancs/noirs, contraste, courbe, HSL, vibrance/sat, clarté, dehaze, réduction de bruit, netteté, vignette)"
+            title={t("develop.gpuTitle")}
             onClick={() => setGpuPreview((v) => !v)}>⚡ GPU</button>
-          <button className="btn small" title="Mesurer l'écart aperçu GPU ↔ rendu Python"
+          <button className="btn small" title={t("develop.diffTitle")}
             onClick={() => setShowDiff(true)}>Δ</button>
-          <button className="btn small" title="Exporter (Ctrl+E)" onClick={() => setUI({ showExport: true })}>⤒</button>
+          <button className="btn small" title={t("develop.exportTitle")} onClick={() => setUI({ showExport: true })}>⤒</button>
         </div>
         <div className="develop-viewer">
-          {edits ? <ImageViewer src={src} interactive gpu={gpuPreview} /> : <div className="viewer-empty">Chargement…</div>}
-          {beforeAfter && <div className="before-badge">AVANT</div>}
+          {edits ? <ImageViewer src={src} interactive gpu={gpuPreview} /> : <div className="viewer-empty">{t("common.loading")}</div>}
+          {beforeAfter && <div className="before-badge">{t("develop.beforeBadge")}</div>}
           {showInfo && <ExifOverlay />}
           <CropBar />
         </div>
@@ -161,6 +163,7 @@ const CROP_ASPECTS: [string, number | null][] = [
 
 /** Barre flottante de ratios de recadrage, visible uniquement quand l'outil crop est actif. */
 function CropBar() {
+  const { t } = useTranslation();
   const activeTool = useStore((s) => s.activeTool);
   const cropAspect = useStore((s) => s.cropAspect);
   const setCropAspect = useStore((s) => s.setCropAspect);
@@ -168,17 +171,17 @@ function CropBar() {
   if (activeTool !== "crop") return null;
   return (
     <div className="crop-toolbar">
-      <span className="dim">Ratio</span>
+      <span className="dim">{t("crop.ratio")}</span>
       {CROP_ASPECTS.map(([label, ratio]) => (
         <button
           key={label}
           className={"btn small" + (cropAspect === ratio ? " active" : "")}
           onClick={() => setCropAspect(ratio)}
         >
-          {label}
+          {label === "Libre" ? t("crop.free") : label}
         </button>
       ))}
-      <button className="btn small primary" onClick={() => setUI({ activeTool: "none" })}>Terminer</button>
+      <button className="btn small primary" onClick={() => setUI({ activeTool: "none" })}>{t("crop.done")}</button>
     </div>
   );
 }

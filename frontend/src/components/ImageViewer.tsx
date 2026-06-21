@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { useStore } from "../store";
 import { useGpuPreview } from "../gpu/useGpuPreview";
@@ -19,6 +20,7 @@ function isTyping(): boolean {
 }
 
 export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const glCanvasRef = useRef<HTMLCanvasElement>(null);
   const [natural, setNatural] = useState({ w: 0, h: 0 });
@@ -169,10 +171,12 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
     setUI({ activeTool: "none" });
     try {
       const { temp, tint } = await api.pickWhiteBalance(currentId, edits, nx, ny);
-      updateEdits((e) => { e.wb.temp = temp; e.wb.tint = tint; }, true, "Balance des blancs (pipette)");
-      notify(`Balance des blancs : ${temp >= 0 ? "+" : ""}${temp} / ${tint >= 0 ? "+" : ""}${tint}`);
+      updateEdits((e) => { e.wb.temp = temp; e.wb.tint = tint; }, true, t("viewer.wbHistory"));
+      notify(t("viewer.wbDone", {
+        temp: `${temp >= 0 ? "+" : ""}${temp}`, tint: `${tint >= 0 ? "+" : ""}${tint}`,
+      }));
     } catch (err) {
-      notify(`Pipette impossible : ${err}`);
+      notify(t("viewer.wbFailed", { error: String(err) }));
     }
   };
 
@@ -327,10 +331,10 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
           )}
         </div>
       )}
-      {gpu && gpuState.error && <div className="viewer-empty">Aperçu GPU indisponible : {gpuState.error}</div>}
-      {gpu && !gpuState.error && !gpuState.ready && <div className="viewer-empty">Chargement de la base…</div>}
-      {!gpu && !src && <div className="viewer-empty">Chargement…</div>}
-      <div className="zoom-indicator">{zoomScale <= 1.001 ? "Ajusté" : Math.round(s * 100) + " %"}</div>
+      {gpu && gpuState.error && <div className="viewer-empty">{t("viewer.gpuUnavailable", { error: gpuState.error })}</div>}
+      {gpu && !gpuState.error && !gpuState.ready && <div className="viewer-empty">{t("viewer.loadingBase")}</div>}
+      {!gpu && !src && <div className="viewer-empty">{t("common.loading")}</div>}
+      <div className="zoom-indicator">{zoomScale <= 1.001 ? t("viewer.fitted") : Math.round(s * 100) + " %"}</div>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { Filmstrip } from "../components/Filmstrip";
 import { ImageViewer } from "../components/ImageViewer";
@@ -8,7 +9,7 @@ import { StarRating } from "../components/StarRating";
 import { useThumbSelection } from "../components/useThumbSelection";
 import { setDragIds, parseDragIds, hasDragIds } from "../lib/dragPhotos";
 import { useStore } from "../store";
-import { COLOR_HEX, COLOR_VALUES, FLAG_LABELS } from "../types";
+import { COLOR_HEX, COLOR_VALUES } from "../types";
 
 export function LibraryView() {
   const view = useStore((s) => s.view);
@@ -27,6 +28,7 @@ export function LibraryView() {
 }
 
 function LeftRail() {
+  const { t } = useTranslation();
   const view = useStore((s) => s.view);
   const currentId = useStore((s) => s.currentId);
   const photos = useStore((s) => s.photos);
@@ -38,22 +40,23 @@ function LeftRail() {
   return (
     <nav className="left-rail">
       <button className={"rail-btn" + (view === "grid" ? " active" : "")}
-        onClick={() => setView("grid")} title="Grille (G)">▦<span>Grille</span></button>
+        onClick={() => setView("grid")} title={t("library.gridTitle")}>▦<span>{t("library.grid")}</span></button>
       <button className={"rail-btn" + (view === "loupe" ? " active" : "")} disabled={zoomTarget === null}
         onClick={() => { if (zoomTarget !== null) { if (currentId === null) selectPhoto(zoomTarget); setView("loupe"); } }}
-        title="Zoom (E)">⊙<span>Zoom</span></button>
+        title={t("library.loupeTitle")}>⊙<span>{t("library.loupe")}</span></button>
       <button className={"rail-btn" + (showAlbums ? " active" : "")}
-        onClick={() => setUI({ showAlbums: !showAlbums })} title="Albums (collections)">📚<span>Albums</span></button>
+        onClick={() => setUI({ showAlbums: !showAlbums })} title={t("library.albumsTitle")}>📚<span>{t("home.albums")}</span></button>
       <span className="rail-spacer" />
-      <button className="rail-btn" onClick={() => setUI({ showImport: true })} title="Importer">⤓<span>Importer</span></button>
+      <button className="rail-btn" onClick={() => setUI({ showImport: true })} title={t("home.import")}>⤓<span>{t("home.import")}</span></button>
       <button className="rail-btn export" onClick={() => setUI({ showExport: true })}
-        title="Exporter (Ctrl+E)">⤒<span>Exporter</span></button>
+        title={t("develop.exportTitle")}>⤒<span>{t("export.title")}</span></button>
     </nav>
   );
 }
 
 /** Panneau latéral « Collections » : liste des albums, navigation, DnD, renommage/suppression. */
 function Collections() {
+  const { t } = useTranslation();
   const showAlbums = useStore((s) => s.showAlbums);
   const albums = useStore((s) => s.albums);
   const currentAlbumId = useStore((s) => s.currentAlbumId);
@@ -67,18 +70,18 @@ function Collections() {
   const [dropId, setDropId] = useState<number | null>(null);
 
   if (!showAlbums) return null;
-  const projectName = projects.find((p) => p.id === currentProjectId)?.name ?? "Projet";
+  const projectName = projects.find((p) => p.id === currentProjectId)?.name ?? t("import.defaultProject");
 
   const create = () => {
-    const name = window.prompt("Nom du nouvel album ?", "Nouvel album");
+    const name = window.prompt(t("home.promptAlbumName"), t("home.newAlbum"));
     if (name && name.trim()) void createAlbum(name.trim()).then((id) => { if (id) void setAlbum(id); });
   };
   const rename = (id: number, cur: string) => {
-    const name = window.prompt("Renommer l'album", cur);
+    const name = window.prompt(t("library.renameAlbumPrompt"), cur);
     if (name && name.trim() && name.trim() !== cur) void renameAlbum(id, name.trim());
   };
   const remove = (id: number, name: string) => {
-    if (window.confirm(`Supprimer l'album « ${name} » ? (les photos restent dans le catalogue)`))
+    if (window.confirm(t("library.confirmDeleteAlbum", { name })))
       void deleteAlbum(id);
   };
   const onDrop = (id: number) => (ev: React.DragEvent) => {
@@ -91,18 +94,18 @@ function Collections() {
   return (
     <aside className="collections">
       <div className="collections-head">
-        <span>Collections</span>
-        <button className="coll-add" title="Nouvel album" onClick={create}>＋</button>
+        <span>{t("library.collections")}</span>
+        <button className="coll-add" title={t("home.newAlbum")} onClick={create}>＋</button>
       </div>
       <button
         className={"coll-item source" + (currentAlbumId === null ? " active" : "")}
         onClick={() => void setAlbum(null)}
-        title="Revenir au projet courant"
+        title={t("library.backToProject")}
       >
         <span className="coll-name">📁 {projectName}</span>
       </button>
       <div className="coll-sep" />
-      {albums.length === 0 && <p className="coll-empty">Aucun album. Créez-en un puis glissez-y des photos.</p>}
+      {albums.length === 0 && <p className="coll-empty">{t("library.noAlbums")}</p>}
       {albums.map((a) => (
         <div
           key={a.id}
@@ -115,8 +118,8 @@ function Collections() {
           <span className="coll-name" title={a.name}>📚 {a.name}</span>
           <span className="coll-count">{a.count ?? 0}</span>
           <span className="coll-actions">
-            <button title="Renommer" onClick={(e) => { e.stopPropagation(); rename(a.id, a.name); }}>✎</button>
-            <button title="Supprimer" onClick={(e) => { e.stopPropagation(); remove(a.id, a.name); }}>🗑</button>
+            <button title={t("project.rename")} onClick={(e) => { e.stopPropagation(); rename(a.id, a.name); }}>✎</button>
+            <button title={t("common.delete")} onClick={(e) => { e.stopPropagation(); remove(a.id, a.name); }}>🗑</button>
           </span>
         </div>
       ))}
@@ -125,6 +128,7 @@ function Collections() {
 }
 
 function Toolbar() {
+  const { t } = useTranslation();
   const filters = useStore((s) => s.filters);
   const setFilters = useStore((s) => s.setFilters);
   const resetFilters = useStore((s) => s.resetFilters);
@@ -146,23 +150,23 @@ function Toolbar() {
       <ProjectMenu />
       <ModeTabs />
       {currentAlbum && (
-        <span className="album-chip" title="Album affiché">
+        <span className="album-chip" title={t("library.albumShown")}>
           📚 {currentAlbum.name}
-          <button title="Quitter l'album" onClick={() => void setAlbum(null)}>✕</button>
+          <button title={t("library.leaveAlbum")} onClick={() => void setAlbum(null)}>✕</button>
         </span>
       )}
-      <span className="dim">{photos.length} photo{photos.length > 1 ? "s" : ""}</span>
+      <span className="dim">{t("home.photoCount", { count: photos.length })}</span>
       <span className="sep" />
-      <label>Note ≥</label>
+      <label>{t("library.ratingGte")}</label>
       <StarRating small value={filters.minRating} onChange={(v) => setFilters({ minRating: v })} />
-      <label>Drapeau</label>
+      <label>{t("library.flag")}</label>
       <select value={filters.flag} onChange={(ev) => setFilters({ flag: ev.target.value })}>
-        <option value="">Tous</option>
-        <option value="pick">Retenues</option>
-        <option value="reject">Rejetées</option>
-        <option value="none">Sans drapeau</option>
+        <option value="">{t("library.flagAll")}</option>
+        <option value="pick">{t("library.flagPick")}</option>
+        <option value="reject">{t("library.flagReject")}</option>
+        <option value="none">{t("library.flagNone")}</option>
       </select>
-      <label>Label</label>
+      <label>{t("library.label")}</label>
       <div className="color-filter">
         {COLOR_VALUES.map((c) => (
           <span
@@ -173,43 +177,43 @@ function Toolbar() {
           />
         ))}
       </div>
-      <label>Tri</label>
+      <label>{t("library.sort")}</label>
       <select value={filters.sort} onChange={(ev) => setFilters({ sort: ev.target.value })}>
-        <option value="captured_asc">Date de capture ↑</option>
-        <option value="captured_desc">Date de capture ↓</option>
-        <option value="imported_desc">Import récent</option>
-        <option value="rating_desc">Note ↓</option>
-        <option value="filename">Nom de fichier</option>
+        <option value="captured_asc">{t("library.sortCapturedAsc")}</option>
+        <option value="captured_desc">{t("library.sortCapturedDesc")}</option>
+        <option value="imported_desc">{t("library.sortImportedDesc")}</option>
+        <option value="rating_desc">{t("library.sortRatingDesc")}</option>
+        <option value="filename">{t("library.sortFilename")}</option>
       </select>
       <span className="exif-filter">
         <button
           className={"btn" + (exifActive ? " active" : "")}
-          title="Filtres EXIF (caméra, objectif, ISO, dates)"
+          title={t("library.exifFilterTitle")}
           onClick={() => setShowExif((v) => !v)}
         >
           ⚲ EXIF{exifActive ? " •" : ""}
         </button>
         {showExif && (
           <div className="exif-filter-pop" onPointerDown={(e) => e.stopPropagation()}>
-            <label>Caméra</label>
+            <label>{t("meta.camera")}</label>
             <select value={filters.camera} onChange={(ev) => setFilters({ camera: ev.target.value })}>
-              <option value="">Toutes</option>
+              <option value="">{t("library.allFem")}</option>
               {facets.cameras.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <label>Objectif</label>
+            <label>{t("meta.lens")}</label>
             <select value={filters.lens} onChange={(ev) => setFilters({ lens: ev.target.value })}>
-              <option value="">Tous</option>
+              <option value="">{t("library.flagAll")}</option>
               {facets.lenses.map((l) => <option key={l} value={l}>{l}</option>)}
             </select>
             <label>ISO</label>
             <div className="exif-range">
-              <input type="number" min={0} placeholder="min" value={filters.isoMin || ""}
+              <input type="number" min={0} placeholder={t("library.minPh")} value={filters.isoMin || ""}
                 onChange={(ev) => setFilters({ isoMin: Number(ev.target.value) || 0 })} />
               <span>–</span>
-              <input type="number" min={0} placeholder="max" value={filters.isoMax || ""}
+              <input type="number" min={0} placeholder={t("library.maxPh")} value={filters.isoMax || ""}
                 onChange={(ev) => setFilters({ isoMax: Number(ev.target.value) || 0 })} />
             </div>
-            <label>Dates de capture</label>
+            <label>{t("library.captureDates")}</label>
             <div className="exif-range">
               <input type="date" value={filters.dateFrom}
                 onChange={(ev) => setFilters({ dateFrom: ev.target.value })} />
@@ -218,27 +222,28 @@ function Toolbar() {
                 onChange={(ev) => setFilters({ dateTo: ev.target.value })} />
             </div>
             {exifActive && (
-              <button className="btn exif-reset" onClick={() => resetFilters()}>Réinitialiser les filtres</button>
+              <button className="btn exif-reset" onClick={() => resetFilters()}>{t("library.resetFilters")}</button>
             )}
           </div>
         )}
       </span>
       <span className="spacer" />
       {view === "grid" && (
-        <label className="grid-size" title="Taille des vignettes">
+        <label className="grid-size" title={t("library.thumbSize")}>
           ▦
           <input type="range" min={140} max={460} step={10} value={gridSize}
             onChange={(ev) => setUI({ gridSize: Number(ev.target.value) })} />
         </label>
       )}
-      <button className="btn" onClick={() => setUI({ showImport: true })}>⤓ Importer</button>
-      <button className="btn" onClick={() => setUI({ showExport: true })}>⤒ Exporter</button>
-      <button className="btn" title="Raccourcis (?)" onClick={() => setUI({ showHelp: true })}>?</button>
+      <button className="btn" onClick={() => setUI({ showImport: true })}>⤓ {t("home.import")}</button>
+      <button className="btn" onClick={() => setUI({ showExport: true })}>⤒ {t("export.title")}</button>
+      <button className="btn" title={t("library.shortcutsTitle")} onClick={() => setUI({ showHelp: true })}>?</button>
     </div>
   );
 }
 
 function Grid() {
+  const { t } = useTranslation();
   const photos = useStore((s) => s.photos);
   const currentId = useStore((s) => s.currentId);
   const selection = useStore((s) => s.selection);
@@ -300,9 +305,9 @@ function Grid() {
   if (!photos.length) {
     return (
       <div className="empty-state">
-        <p>Aucune photo dans le catalogue (ou aucune ne passe les filtres).</p>
+        <p>{t("library.emptyCatalog")}</p>
         <button className="btn primary" onClick={() => setUI({ showImport: true })}>
-          Importer des photos
+          {t("library.importPhotos")}
         </button>
       </div>
     );
@@ -340,11 +345,11 @@ function Grid() {
             {p.flag === "reject" && <span className="badge reject">✕</span>}
             {p.color && <span className="badge color" style={{ background: COLOR_HEX[p.color] }} />}
             {!!p.is_raw && <span className="badge raw">RAW</span>}
-            {p.edited && <span className="badge edited" title="Photo retouchée">✎</span>}
+            {p.edited && <span className="badge edited" title={t("develop.editedTitle")}>✎</span>}
           </div>
           <div className="cell-meta">
             <span className="name" title={p.filename}>
-              {p.edited && <span className="edited-dot" title="Photo retouchée" />}
+              {p.edited && <span className="edited-dot" title={t("develop.editedTitle")} />}
               {p.filename}
             </span>
             <StarRating small value={p.rating}
@@ -357,6 +362,7 @@ function Grid() {
 }
 
 function Loupe() {
+  const { t } = useTranslation();
   const photo = useStore((s) => s.photos.find((p) => p.id === s.currentId));
   const versions = useStore((s) => s.editsVersion);
   const showInfo = useStore((s) => s.showInfo);
@@ -364,7 +370,7 @@ function Loupe() {
   const setFlag = useStore((s) => s.setFlag);
   const openDevelop = useStore((s) => s.openDevelop);
 
-  if (!photo) return <div className="empty-state"><p>Aucune photo sélectionnée.</p></div>;
+  if (!photo) return <div className="empty-state"><p>{t("develop.noPhoto")}</p></div>;
 
   return (
     <div className="loupe">
@@ -373,12 +379,12 @@ function Loupe() {
         {showInfo && <ExifOverlay />}
         <div className="loupe-bar">
           <span className="name">{photo.filename}</span>
-          {photo.edited && <span className="edited-chip" title="Photo retouchée">Modifiée</span>}
+          {photo.edited && <span className="edited-chip" title={t("develop.editedTitle")}>{t("develop.edited")}</span>}
           <StarRating value={photo.rating} onChange={setRating} />
-          <span className="flag-state">{FLAG_LABELS[photo.flag]}</span>
+          <span className="flag-state">{t(`library.flagState.${photo.flag}`)}</span>
           <button className="btn small" onClick={() => setFlag("pick")}>⚑ P</button>
           <button className="btn small" onClick={() => setFlag("reject")}>✕ X</button>
-          <button className="btn small" onClick={() => void openDevelop(photo.id)}>Développer (D)</button>
+          <button className="btn small" onClick={() => void openDevelop(photo.id)}>{t("library.developBtn")}</button>
         </div>
       </div>
       <Filmstrip />
@@ -401,7 +407,7 @@ export function ExifOverlay() {
       <strong>{photo.filename}</strong>
       {photo.width > 0 && <span>{photo.width} × {photo.height}</span>}
       {parts.map((p) => <span key={p}>{p}</span>)}
-      {photo.captured_at && <span>{new Date(photo.captured_at).toLocaleString("fr-FR")}</span>}
+      {photo.captured_at && <span>{new Date(photo.captured_at).toLocaleString()}</span>}
     </div>
   );
 }

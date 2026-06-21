@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { PanelSection } from "../components/PanelSection";
 import { historyTimeline, useStore } from "../store";
 
@@ -6,6 +7,7 @@ import { historyTimeline, useStore } from "../store";
  *  La timeline est dérivée des piles undo/redo (cf. historyTimeline) ; cliquer rejoue
  *  undo/redo jusqu'à l'étape voulue. L'étape la plus récente est en haut. */
 export function HistoryPanel() {
+  const { t } = useTranslation();
   const undoStack = useStore((s) => s.undoStack);
   const redoStack = useStore((s) => s.redoStack);
   const undoLabels = useStore((s) => s.undoLabels);
@@ -22,16 +24,16 @@ export function HistoryPanel() {
   if (!edits) return null;
 
   return (
-    <PanelSection title="Historique" defaultOpen={false}>
+    <PanelSection title={t("history.title")} defaultOpen={false}>
       {steps.length <= 1 ? (
-        <p className="hint">Aucune modification pour l'instant.</p>
+        <p className="hint">{t("history.empty")}</p>
       ) : (
         <ul className="local-list history-list">
           {steps.map((step, i) => i).reverse().map((i) => (
             <li
               key={i}
               className={i === index ? "selected" : (i > index ? "future" : "")}
-              title={i === index ? "Étape courante" : "Revenir à cette étape"}
+              title={i === index ? t("history.current") : t("history.goto")}
               onClick={() => jumpHistory(i)}
             >
               <span className="step-label">{steps[i].label}</span>
