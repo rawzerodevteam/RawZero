@@ -4,7 +4,8 @@ import { ALL_PHOTOS_ID, defaultEdits, mergeEdits, type Album, type EditState, ty
 import { describeEditChange } from "./lib/historyLabel";
 import i18n from "./i18n";
 
-const INITIAL_LABEL = "Réglages d'origine";
+// Libellé de l'étape « origine » de l'historique, dans la langue courante.
+const originLabel = () => i18n.t("history.origin");
 
 // Nom du projet par défaut créé côté backend (db.py) : on le ré-étiquette à l'affichage selon
 // la langue. Un projet renommé par l'utilisateur ne correspond plus et garde son nom.
@@ -14,10 +15,10 @@ const DEFAULT_PROJECT_NAME = "Projet par défaut";
 export function historyTimeline(s: Pick<Store,
   "undoStack" | "undoLabels" | "edits" | "currentLabel" | "redoStack" | "redoLabels">): HistoryData {
   if (!s.edits) return { steps: [], index: 0 };
-  const steps: HistoryStep[] = s.undoStack.map((edits, i) => ({ label: s.undoLabels[i] ?? "Modification", edits }));
+  const steps: HistoryStep[] = s.undoStack.map((edits, i) => ({ label: s.undoLabels[i] ?? i18n.t("history.change"), edits }));
   steps.push({ label: s.currentLabel, edits: s.edits });
   for (let k = s.redoStack.length - 1; k >= 0; k--)
-    steps.push({ label: s.redoLabels[k] ?? "Modification", edits: s.redoStack[k] });
+    steps.push({ label: s.redoLabels[k] ?? i18n.t("history.change"), edits: s.redoStack[k] });
   return { steps, index: s.undoStack.length };
 }
 
@@ -31,7 +32,7 @@ function loadHistory(raw: any, fallbackEdits: EditState): HistoryParts {
   const steps = Array.isArray(raw?.steps) ? raw.steps : null;
   const index = raw?.index;
   if (steps && steps.length && typeof index === "number" && index >= 0 && index < steps.length) {
-    const norm: HistoryStep[] = steps.map((s: any) => ({ label: String(s?.label ?? "Modification"), edits: mergeEdits(s?.edits) }));
+    const norm: HistoryStep[] = steps.map((s: any) => ({ label: String(s?.label ?? i18n.t("history.change")), edits: mergeEdits(s?.edits) }));
     return {
       edits: structuredClone(norm[index].edits),
       currentLabel: norm[index].label,
@@ -41,7 +42,7 @@ function loadHistory(raw: any, fallbackEdits: EditState): HistoryParts {
       redoLabels: norm.slice(index + 1).map((s) => s.label).reverse(),
     };
   }
-  return { edits: fallbackEdits, currentLabel: INITIAL_LABEL, undoStack: [], undoLabels: [], redoStack: [], redoLabels: [] };
+  return { edits: fallbackEdits, currentLabel: originLabel(), undoStack: [], undoLabels: [], redoStack: [], redoLabels: [] };
 }
 
 export type View = "home" | "grid" | "loupe" | "develop";
@@ -196,7 +197,7 @@ export const useStore = create<Store>((set, get) => ({
   redoStack: [],
   undoLabels: [],
   redoLabels: [],
-  currentLabel: INITIAL_LABEL,
+  currentLabel: originLabel(),
   dragBaseline: null,
   clipboard: null,
   editsVersion: {},
@@ -421,7 +422,7 @@ export const useStore = create<Store>((set, get) => ({
   async openDevelop(id) {
     await get().saveNow();
     set({ currentId: id, view: "develop", edits: null,
-          undoStack: [], redoStack: [], undoLabels: [], redoLabels: [], currentLabel: INITIAL_LABEL,
+          undoStack: [], redoStack: [], undoLabels: [], redoLabels: [], currentLabel: originLabel(),
           activeTool: "none", selectedLocalId: null, beforeAfter: false });
     try {
       const p = await api.getPhoto(id);
@@ -508,7 +509,7 @@ export const useStore = create<Store>((set, get) => ({
     set({ aiMaskBusy: true });
     try {
       const local = await api.autoMask(currentId, edits, kind);
-      get().updateEdits((e) => { e.locals.push(local); }, true, "Masque sujet (IA)");
+      get().updateEdits((e) => { e.locals.push(local); }, true, i18n.t("history.subjectMask"));
       set({ selectedLocalId: local.id, activeTool: "none", showMaskOverlay: true });
       get().notify("Masque « sujet » créé");
     } catch (err) {
@@ -534,10 +535,10 @@ export const useStore = create<Store>((set, get) => ({
         get().updateEdits((e) => {
           const loc = e.locals.find((l) => l.id === target.id);
           if (loc) loc.params = { ...loc.params, ref: local.params.ref };
-        }, true, "Élément ajouté au masque");
+        }, true, i18n.t("history.maskElementAdded"));
         get().notify("Élément ajouté au masque");
       } else {
-        get().updateEdits((e) => { e.locals.push(local); }, true, "Masque au clic");
+        get().updateEdits((e) => { e.locals.push(local); }, true, i18n.t("history.clickMask"));
         set({ selectedLocalId: local.id, showMaskOverlay: true });
         get().notify("Masque créé (clic)");
       }
@@ -595,7 +596,7 @@ export const useStore = create<Store>((set, get) => ({
       undoLabels: undoLabels.slice(0, -1),
       redoStack: [...get().redoStack, structuredClone(edits)],
       redoLabels: [...get().redoLabels, currentLabel],
-      currentLabel: undoLabels[undoLabels.length - 1] ?? INITIAL_LABEL,
+      currentLabel: undoLabels[undoLabels.length - 1] ?? originLabel(),
       dirty: true,
       dragBaseline: null,
     });
@@ -611,7 +612,7 @@ export const useStore = create<Store>((set, get) => ({
       redoLabels: redoLabels.slice(0, -1),
       undoStack: [...get().undoStack, structuredClone(edits)],
       undoLabels: [...get().undoLabels, currentLabel],
-      currentLabel: redoLabels[redoLabels.length - 1] ?? "Modification",
+      currentLabel: redoLabels[redoLabels.length - 1] ?? i18n.t("history.change"),
       dirty: true,
     });
     scheduleSave();
@@ -626,7 +627,7 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   resetEdits() {
-    get().updateEdits((e) => Object.assign(e, defaultEdits()), true, "Réinitialisation");
+    get().updateEdits((e) => Object.assign(e, defaultEdits()), true, i18n.t("history.reset"));
     get().notify("Réglages réinitialisés");
   },
 
@@ -634,7 +635,7 @@ export const useStore = create<Store>((set, get) => ({
     get().updateEdits((e) => {
       const merged = mergeEdits({ ...structuredClone(e), ...structuredClone(settings) });
       Object.assign(e, merged);
-    }, true, "Preset appliqué");
+    }, true, i18n.t("history.presetApplied"));
   },
 
   copyEdits() {
@@ -652,7 +653,7 @@ export const useStore = create<Store>((set, get) => ({
       const keep = e.geometry; // le recadrage reste propre à chaque photo
       Object.assign(e, structuredClone(c));
       e.geometry = keep;
-    }, true, "Réglages collés");
+    }, true, i18n.t("history.pasted"));
     get().notify("Réglages collés");
   },
 
