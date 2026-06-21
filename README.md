@@ -1,45 +1,67 @@
 # RawStudio
 
-A local, non-destructive **RAW photo editor** in the browser — inspired by Lightroom / Darktable.  
-Runs via a single PowerShell script (Windows, no Docker) **or** as a container (Podman / Docker).
+A local, non-destructive **RAW photo editor** — inspired by Lightroom / Darktable.
+Ships as a **desktop app** (Tauri) and runs as a **web app** (Podman / Docker).
 
-## Quick start
+> Architecture: a **FastAPI backend** + a **React/Vite frontend**. In the desktop app the
+> backend runs as an embedded sidecar; in Docker it serves the built frontend on one port.
+> The Tauri shell only wraps the same web app — so you develop in the browser.
+
+## Development (hot reload)
+
+### With Docker — recommended
+
+Backend (`uvicorn --reload`) + Vite dev server, code bind-mounted, both hot-reloading:
+
+```bash
+docker compose -f compose.dev.yaml up --build      # or: podman compose -f compose.dev.yaml up --build
+```
+
+Open **http://localhost:5173**. Edit a `.tsx` or `.py` → it reloads instantly. Rust/Tauri are
+not involved. `./data` (catalog, caches, exports, and `./data/models` for AI models) and
+`./import` are bind-mounted, so they persist.
+
+### Without Docker
+
+Two terminals — Python venv in `backend/.venv`, Node on PATH:
 
 ```powershell
-.\start.ps1
+# 1 — backend (reload) on :8000
+$env:STATIC_DIR=""; $env:DATA_DIR="$PWD\data"; $env:IMPORT_DIR="$PWD\import"
+backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --port 8000
+
+# 2 — frontend (hot reload) -> http://localhost:5173
+npm --prefix frontend run dev
+```
+
+Vite proxies `/api` and `/exports` to the backend on `:8000` (override with `VITE_API_PROXY`).
+
+To import large folders without the browser: drop files into `./import`, then use
+**Import → /import folder** in the app.
+
+## Build
+
+### Desktop installers (Tauri)
+
+Bundles the PyInstaller backend sidecar + the Vite frontend into a native installer:
+
+```powershell
+.\build-desktop.ps1      # Windows -> src-tauri\target\release\bundle\nsis\*.exe
+./build-desktop.sh       # Linux   -> .deb / .rpm
+```
+
+All targets at once (Windows `.exe` + Linux `.deb`/`.rpm`): push a `v*` tag — GitHub Actions
+(`.github/workflows/release.yml`) builds them per-OS and attaches them to a draft Release.
+
+### Web app image (Docker — production)
+
+Multi-stage `Containerfile` builds the frontend and serves API + UI on a single port:
+
+```bash
+docker compose up --build -d        # or: podman compose up --build -d
 ```
 
 Then open **http://localhost:8000**.
-
-### Run with Podman (or Docker)
-
-A multi-stage `Containerfile` builds the frontend and serves API + UI on one port.
-
-```bash
-# build + run with compose
-podman compose up --build -d        # or: docker compose up --build -d
-
-# …or build and run by hand
-podman build -t rawstudio .
-podman run -d --name rawstudio -p 8000:8000 \
-  -v ./data:/data:Z -v ./import:/import:Z rawstudio
-```
-
-Then open **http://localhost:8000**. The catalog/caches/exports live in `./data`
-and importable files go in `./import` (both bind-mounted, so they persist).
-AI models (subject/click masks, denoise) go in `./data/models` — without them
-those features are simply hidden.
-
-- The catalog, imported originals, caches, and exports are stored in `./data`.
-- To import large folders without going through the browser: drop your files into `./import`,
-  then use **Import → /import folder** in the app.
-
-### Options
-
-| Flag | Effect |
-|---|---|
-| `-Dev` | Backend with `--reload` + Vite hot reload on `:5173` |
-| `-Rebuild` | Force a frontend rebuild before serving |
 
 ## Features
 
@@ -86,9 +108,9 @@ those features are simply hidden.
 ## Running tests
 
 ```powershell
-# Backend (49 tests)
-.\.tools\python\python.exe -m pytest backend/tests
+# Backend
+backend\.venv\Scripts\python.exe -m pytest backend/tests
 
-# Frontend (43 tests)
-cd frontend && node ..\\.tools\node\node.exe ..\\.tools\node_modules\.bin\vitest run
+# Frontend
+npm --prefix frontend test
 ```
