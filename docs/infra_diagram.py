@@ -89,11 +89,12 @@ vertex("Build and packaging", BOX, 450, 410, 370, 180)
 n_docker = vertex("Docker dev env\n(hot reload)", DONE, 470, 440, 150, 50)
 n_installers = vertex("Windows / Linux\ninstallers (.exe/.deb/.rpm)", DONE, 650, 440, 150, 60)
 n_mac = vertex("todo (no issue yet)\nmacOS installer (.dmg)", TODO, 650, 510, 150, 60)
+n_updater = vertex("issue #14\nauto-updater (signed,\nchecks GitHub Releases)", DONE, 470, 510, 150, 60)
 edge(n_docker, n_installers)
 edge(n_docker, n_mac)
 
 # ---- LOCAL / future note ----
-vertex("Tauri shell bundles the frontend + sidecar together; CI builds and\npublishes the installers above to GitHub Releases.", LEGEND, 60, 620, 760, 60)
+vertex("Tauri shell bundles the frontend + sidecar together; CI builds, signs and\npublishes the installers above to GitHub Releases, which the app polls for updates.", LEGEND, 60, 620, 760, 60)
 
 # ---- CLOUD / Licensing (placed FIRST/left, right next to the LOCAL/CLOUD
 # gap, since it's the one with a cross-boundary dependency on Local storage
@@ -130,6 +131,8 @@ edge(n_site, n_ghrel, "will link to", EDGE_FUTURE, waypoints=[(1485, 460), (1485
 edge(n_installers, n_gha, "publishes via", EDGE, waypoints=[(860, 475), (860, 175), (1340, 175)], label_dx=-40, label_dy=-10)
 edge(n_cache, n_design, "will activate / verify", EDGE_FUTURE,
      waypoints=[(335, 605), (845, 605), (845, 265)], label_dx=0, label_dy=-10)
+edge(n_ghrel, n_updater, "checks latest.json", EDGE,
+     waypoints=[(1517, 285), (1517, 575), (620, 575)], label_dx=0, label_dy=-10)
 
 tree = ET.ElementTree(mxfile)
 ET.indent(tree, space="  ")
