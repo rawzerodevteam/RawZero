@@ -5,7 +5,9 @@ import {
   ACTION_DEFS, CATEGORIES, clearBinding, formatKey, getBinding,
   normalizeEvent, resetAllBindings, resetBinding, setBinding, useKeybindings,
 } from "../keybindings";
-import { ACCENT_PRESETS, DEFAULT_ACCENT, getAccent, resetAccent, setAccent } from "../theme";
+import {
+  ACCENT_PRESETS, DEFAULT_ACCENT, THEMES, getAccent, getThemeId, resetAccent, setAccent, setTheme,
+} from "../theme";
 import { useStore } from "../store";
 
 /** Onglet « Paramètres » : apparence (langue, couleur d'accent) + raccourcis clavier. */
@@ -15,6 +17,7 @@ export function SettingsView() {
   const setView = useStore((s) => s.setView);
   const [capturing, setCapturing] = useState<string | null>(null);
   const [accent, setAccentState] = useState(getAccent());
+  const [themeId, setThemeId] = useState(getThemeId());
 
   const onCapture = (id: string) => (ev: React.KeyboardEvent) => {
     ev.preventDefault();
@@ -45,6 +48,22 @@ export function SettingsView() {
           <div className="settings-field">
             <span className="settings-label">{t("settings.language")}</span>
             <LanguageSwitcher />
+          </div>
+          <div className="settings-field">
+            <span className="settings-label">{t("settings.theme")}</span>
+            <div className="theme-picker">
+              {THEMES.map((th) => (
+                <button
+                  key={th.id}
+                  className={"theme-swatch" + (themeId === th.id ? " active" : "")}
+                  style={{ background: th.vars["--bg-panel"], borderColor: th.vars["--border"], color: th.vars["--text"] }}
+                  onClick={() => { setTheme(th.id); setThemeId(th.id); }}
+                >
+                  <span className="theme-dot" style={{ background: th.vars["--bg-deep"] }} />
+                  {th.name}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="settings-field">
             <span className="settings-label">{t("settings.accent")}</span>

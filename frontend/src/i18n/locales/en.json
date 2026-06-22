@@ -60,6 +60,7 @@
     "confirmResetShortcuts": "Reset all shortcuts to their defaults?",
     "appearance": "Appearance",
     "language": "Language",
+    "theme": "Theme",
     "accent": "Accent color",
     "accentCustom": "Custom color",
     "shortcuts": "Keyboard shortcuts",

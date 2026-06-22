@@ -60,6 +60,7 @@
     "confirmResetShortcuts": "Réinitialiser tous les raccourcis à leurs valeurs par défaut ?",
     "appearance": "Apparence",
     "language": "Langue",
+    "theme": "Thème",
     "accent": "Couleur d'accent",
     "accentCustom": "Couleur personnalisée",
     "shortcuts": "Raccourcis clavier",

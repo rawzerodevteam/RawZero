@@ -1,10 +1,38 @@
-// Personnalisation de la couleur d'accent (variable CSS --accent), persistée en localStorage.
-// Point d'ancrage minimal du thème (cf. issue #4) : surcharge --accent / --accent-soft sur :root.
-const KEY = "rs.accent";
+// Personnalisation du thème : palette de base (presets) + couleur d'accent. Surcharge les
+// variables CSS de :root, persistée en localStorage. Les presets restent tous sombres pour
+// garder l'UI cohérente (cf. issue #4 : thèmes prédéfinis + accent personnalisable).
+const ACCENT_KEY = "rs.accent";
+const THEME_KEY = "rs.theme";
+
 export const DEFAULT_ACCENT = "#7aa2ff";
 export const ACCENT_PRESETS = ["#7aa2ff", "#5bb98b", "#e5a35b", "#e253a8", "#9d7bea", "#e5484d"];
 
-/** "#rrggbb" → "rgba(r, g, b, 0.18)" (teinte douce utilisée pour les fonds actifs). */
+export interface ThemeDef {
+  id: string;
+  name: string;
+  vars: {
+    "--bg": string; "--bg-deep": string; "--bg-panel": string; "--bg-raised": string;
+    "--border": string; "--text": string; "--text-dim": string;
+  };
+}
+
+export const THEMES: ThemeDef[] = [
+  { id: "slate", name: "Slate", vars: {
+    "--bg": "#1c1d22", "--bg-deep": "#141519", "--bg-panel": "#232429", "--bg-raised": "#2b2d33",
+    "--border": "#34363d", "--text": "#d8d9de", "--text-dim": "#8b8d96" } },
+  { id: "midnight", name: "Midnight", vars: {
+    "--bg": "#16181f", "--bg-deep": "#0f1116", "--bg-panel": "#1d2029", "--bg-raised": "#262a35",
+    "--border": "#2f333f", "--text": "#d6d9e2", "--text-dim": "#868a99" } },
+  { id: "graphite", name: "Graphite", vars: {
+    "--bg": "#1e1e1e", "--bg-deep": "#161616", "--bg-panel": "#262626", "--bg-raised": "#2f2f2f",
+    "--border": "#3a3a3a", "--text": "#dadada", "--text-dim": "#8c8c8c" } },
+  { id: "warm", name: "Warm", vars: {
+    "--bg": "#211e1b", "--bg-deep": "#181513", "--bg-panel": "#2a2521", "--bg-raised": "#332d28",
+    "--border": "#3e3833", "--text": "#e0dbd3", "--text-dim": "#9a9088" } },
+];
+export const DEFAULT_THEME = "slate";
+
+/** "#rrggbb" → "rgba(r, g, b, 0.18)" (teinte douce des fonds actifs). */
 function softFrom(hex: string): string {
   const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
   if (!m) return "rgba(122, 162, 255, 0.18)";
@@ -12,22 +40,34 @@ function softFrom(hex: string): string {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, 0.18)`;
 }
 
+// ---- Accent ----
 export function getAccent(): string {
-  return localStorage.getItem(KEY) || DEFAULT_ACCENT;
+  return localStorage.getItem(ACCENT_KEY) || DEFAULT_ACCENT;
 }
-
 export function applyAccent(hex: string): void {
-  const root = document.documentElement.style;
-  root.setProperty("--accent", hex);
-  root.setProperty("--accent-soft", softFrom(hex));
+  const r = document.documentElement.style;
+  r.setProperty("--accent", hex);
+  r.setProperty("--accent-soft", softFrom(hex));
 }
-
 export function setAccent(hex: string): void {
-  try { localStorage.setItem(KEY, hex); } catch { /* mode privé / quota */ }
+  try { localStorage.setItem(ACCENT_KEY, hex); } catch { /* mode privé / quota */ }
   applyAccent(hex);
 }
-
 export function resetAccent(): void {
-  try { localStorage.removeItem(KEY); } catch { /* ignore */ }
+  try { localStorage.removeItem(ACCENT_KEY); } catch { /* ignore */ }
   applyAccent(DEFAULT_ACCENT);
+}
+
+// ---- Palette (preset) ----
+export function getThemeId(): string {
+  return localStorage.getItem(THEME_KEY) || DEFAULT_THEME;
+}
+export function applyTheme(id: string): void {
+  const def = THEMES.find((t) => t.id === id) ?? THEMES[0];
+  const r = document.documentElement.style;
+  for (const [k, v] of Object.entries(def.vars)) r.setProperty(k, v);
+}
+export function setTheme(id: string): void {
+  try { localStorage.setItem(THEME_KEY, id); } catch { /* mode privé / quota */ }
+  applyTheme(id);
 }
