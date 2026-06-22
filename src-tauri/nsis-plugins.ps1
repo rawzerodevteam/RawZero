@@ -1,4 +1,4 @@
-# Dépose le plugin NSIS EnVar là où makensis (téléchargé par Tauri) le cherche, pour que
+﻿# Dépose le plugin NSIS EnVar là où makensis (téléchargé par Tauri) le cherche, pour que
 # installer-hooks.nsh puisse modifier le PATH sans risque de troncature. Idempotent : ne
 # retélécharge pas si le DLL est déjà présent. À lancer avant `tauri build` (Windows uniquement).
 $ErrorActionPreference = 'Stop'

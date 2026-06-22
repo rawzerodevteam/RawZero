@@ -43,7 +43,14 @@ To import large folders without the browser: drop files into `./import`, then us
 
 ### Desktop installers (Tauri)
 
-Bundles the PyInstaller backend sidecar + the Vite frontend into a native installer:
+Bundles the PyInstaller backend sidecar + the Vite frontend into a native installer.
+Prerequisites (Windows), install once then reopen the terminal:
+- `.\bootstrap.ps1` (dev toolchain)
+- **Rust**: `winget install Rustlang.Rustup`
+- **MSVC C++ build tools** (provides `link.exe` + Windows SDK, required by Rust's msvc target):
+  `winget install Microsoft.VisualStudio.2022.BuildTools --override "--passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"`
+
+PyInstaller is installed automatically into `.tools\venv` on first run.
 
 ```powershell
 .\scripts\build-desktop.ps1      # Windows -> src-tauri\target\release\bundle\nsis\*.exe
