@@ -1,0 +1,171 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="app.diagrams.net">
+  <diagram name="RawStudio infra">
+    <mxGraphModel dx="1600" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1180" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="n11" value="LEGEND" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9ca3af;dashed=1;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="360" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n12" value="shipped / done" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="50" width="150" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="n13" value="todo #N (GitHub issue)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="230" y="50" width="150" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="n14" value="LOCAL  —  Desktop App  (runs on the user's machine)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eff6ff;strokeColor=#3b82f6;dashed=1;dashPattern=8 4;fontSize=18;fontStyle=1;verticalAlign=top;align=left;spacingLeft=14;spacingTop=10;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="40" y="100" width="800" height="680" as="geometry" />
+        </mxCell>
+        <mxCell id="n15" value="CLOUD  —  Online Services  (hosted, shared by all users)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fafaf5;strokeColor=#9ca3af;dashed=1;dashPattern=8 4;fontSize=18;fontStyle=1;verticalAlign=top;align=left;spacingLeft=14;spacingTop=10;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="880" y="100" width="760" height="570" as="geometry" />
+        </mxCell>
+        <mxCell id="n16" value="Frontend (React/WebView)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9ca3af;fontSize=13;fontStyle=1;verticalAlign=top;align=left;spacingLeft=6;spacingTop=4;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="60" y="150" width="370" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="n17" value="Library, Import,&#10;Develop, Settings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="80" y="190" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n18" value="Export dialog" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="260" y="190" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n19" value="todo #6&#10;one-click export" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="260" y="260" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n20" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#6b7280;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n18" target="n19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n21" value="FastAPI sidecar" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9ca3af;fontSize=13;fontStyle=1;verticalAlign=top;align=left;spacingLeft=6;spacingTop=4;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="450" y="150" width="370" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="n22" value="Subject/click select, AI denoise,&#10;GPU diff, models manager" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="190" width="330" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n23" value="todo #1&#10;Inpainting (MI-GAN)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="260" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n24" value="todo #5&#10;finalize AI model links" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="650" y="260" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n25" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#6b7280;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n22" target="n23">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n26" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#6b7280;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n22" target="n24">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n27" value="Local storage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9ca3af;fontSize=13;fontStyle=1;verticalAlign=top;align=left;spacingLeft=6;spacingTop=4;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="60" y="410" width="370" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="n28" value="SQLite catalog +&#10;RAW files" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="80" y="450" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n29" value="todo #3&#10;license cache&#10;(offline grace period)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="260" y="450" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n30" value="Build and packaging" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9ca3af;fontSize=13;fontStyle=1;verticalAlign=top;align=left;spacingLeft=6;spacingTop=4;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="450" y="410" width="370" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="n31" value="Docker dev env&#10;(hot reload)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="440" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n32" value="Windows / Linux&#10;installers (.exe/.deb/.rpm)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="650" y="440" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n33" value="todo (no issue yet)&#10;macOS installer (.dmg)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="650" y="510" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n34" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#6b7280;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n31" target="n32">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n35" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#6b7280;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n31" target="n33">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n36" value="Tauri shell bundles the frontend + sidecar together; CI builds and&#10;publishes the installers above to GitHub Releases." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9ca3af;dashed=1;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="60" y="620" width="760" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n37" value="Licensing Server  (nothing built yet)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9ca3af;fontSize=13;fontStyle=1;verticalAlign=top;align=left;spacingLeft=6;spacingTop=4;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="900" y="195" width="330" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="n38" value="todo #3&#10;licensing system&#10;(plans, capabilities)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="915" y="235" width="145" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n39" value="todo #12&#10;set up licensing server" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1075" y="235" width="145" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n40" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#6b7280;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n38" target="n39">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n41" value="CI / CD" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9ca3af;fontSize=13;fontStyle=1;verticalAlign=top;align=left;spacingLeft=6;spacingTop=4;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="1250" y="195" width="370" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="n42" value="GitHub Actions&#10;(build + tests)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1265" y="235" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n43" value="GitHub Releases&#10;(.exe / .deb / .rpm)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1435" y="235" width="165" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n44" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#6b7280;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n42" target="n43">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n45" value="Website  (nothing built yet)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9ca3af;fontSize=13;fontStyle=1;verticalAlign=top;align=left;spacingLeft=6;spacingTop=4;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="900" y="385" width="720" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="n46" value="todo #8&#10;visual identity" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="920" y="435" width="140" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n47" value="todo #10&#10;apply identity" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="920" y="515" width="140" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n48" value="todo #9&#10;build website" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="435" width="140" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n49" value="todo #11&#10;website hosting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="515" width="140" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n50" value="Marketing&#10;Website" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;fontSize=12;fontStyle=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1430" y="495" width="110" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n51" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#6b7280;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n50" target="n46">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n52" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#6b7280;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n50" target="n48">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n53" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#6b7280;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n50" target="n47">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n54" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#6b7280;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n50" target="n49">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n55" value="will link to" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#ef4444;dashed=1;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n50" target="n43">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1485" y="460" />
+              <mxPoint x="1485" y="355" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="n56" value="publishes via" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#6b7280;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n32" target="n42">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-40" y="-10" as="offset" />
+            <Array as="points">
+              <mxPoint x="860" y="475" />
+              <mxPoint x="860" y="175" />
+              <mxPoint x="1340" y="175" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="n57" value="will activate / verify" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#ef4444;dashed=1;endArrow=block;endFill=1;jettySize=auto;" edge="1" parent="1" source="n29" target="n38">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="0" y="-10" as="offset" />
+            <Array as="points">
+              <mxPoint x="335" y="605" />
+              <mxPoint x="845" y="605" />
+              <mxPoint x="845" y="265" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
