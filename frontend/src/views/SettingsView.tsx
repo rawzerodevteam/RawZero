@@ -28,6 +28,7 @@ export function SettingsView() {
   const { t } = useTranslation();
   useKeybindings(); // re-rendu quand une touche change
   const setView = useStore((s) => s.setView);
+  const previousView = useStore((s) => s.previousView);
   const [capturing, setCapturing] = useState<string | null>(null);
   const [accent, setAccentState] = useState(getAccent());
   const [themeId, setThemeId] = useState(getThemeId());
@@ -48,7 +49,7 @@ export function SettingsView() {
   return (
     <div className="settings">
       <header className="settings-header">
-        <button className="btn" onClick={() => setView("grid")}>← {t("settings.back")}</button>
+        <button className="btn" onClick={() => setView(previousView)}>← {t("settings.back")}</button>
         <strong className="brand">{t("settings.title")}</strong>
         <span className="spacer" />
         <button className="btn" onClick={() => {

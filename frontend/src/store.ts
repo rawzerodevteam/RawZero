@@ -81,6 +81,7 @@ interface Store {
   facets: PhotoFacets;
   currentId: number | null;
   view: View;
+  previousView: View;
 
   selection: number[];            // multi-sélection (Ctrl/Maj+clic) pour les actions par lot
   exportIds: number[] | null;     // si défini, l'export porte sur ces ids (sinon courante/toutes)
@@ -186,6 +187,7 @@ export const useStore = create<Store>((set, get) => ({
   facets: { cameras: [], lenses: [] },
   currentId: null,
   view: "grid",
+  previousView: "home" as View,
 
   selection: [],
   exportIds: null,
@@ -378,6 +380,7 @@ export const useStore = create<Store>((set, get) => ({
 
   setView(v) {
     if (v !== "develop") set({ activeTool: "none", beforeAfter: false });
+    if (v === "settings") set({ previousView: get().view });
     set({ view: v });
   },
 
