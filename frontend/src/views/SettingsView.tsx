@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { isTauri } from "@tauri-apps/api/core";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check, type Update } from "@tauri-apps/plugin-updater";
 import { LanguageSwitcher } from "../components/LanguageSwitcher";
 import {
   ACTION_DEFS, CATEGORIES, clearBinding, formatKey, getBinding,
@@ -32,6 +35,31 @@ export function SettingsView() {
   const [accent, setAccentState] = useState(getAccent());
   const [themeId, setThemeId] = useState(getThemeId());
   const [customBg, setCustomBgState] = useState(getCustomBg());
+  const [updateStatus, setUpdateStatus] =
+    useState<"idle" | "checking" | "none" | "available" | "installing" | "ready" | "error">("idle");
+  const [updateInfo, setUpdateInfo] = useState<Update | null>(null);
+
+  const checkForUpdate = async () => {
+    setUpdateStatus("checking");
+    try {
+      const update = await check();
+      setUpdateInfo(update);
+      setUpdateStatus(update ? "available" : "none");
+    } catch {
+      setUpdateStatus("error");
+    }
+  };
+
+  const installUpdate = async () => {
+    if (!updateInfo) return;
+    setUpdateStatus("installing");
+    try {
+      await updateInfo.downloadAndInstall();
+      setUpdateStatus("ready");
+    } catch {
+      setUpdateStatus("error");
+    }
+  };
 
   const onCapture = (id: string) => (ev: React.KeyboardEvent) => {
     ev.preventDefault();
@@ -138,6 +166,30 @@ export function SettingsView() {
             </div>
           </div>
         </section>
+
+        {isTauri() && (
+          <section className="settings-section">
+            <h2>{t("settings.updates")}</h2>
+            <div className="settings-field">
+              {updateStatus === "ready" ? (
+                <button className="btn" onClick={() => relaunch()}>{t("settings.updateRestart")}</button>
+              ) : updateStatus === "available" ? (
+                <button className="btn" onClick={installUpdate}>
+                  {t("settings.updateInstall", { version: updateInfo?.version })}
+                </button>
+              ) : (
+                <button className="btn" disabled={updateStatus === "checking" || updateStatus === "installing"}
+                  onClick={checkForUpdate}>
+                  {t("settings.updateCheck")}
+                </button>
+              )}
+              {updateStatus === "checking" && <span className="settings-hint">{t("settings.updateChecking")}</span>}
+              {updateStatus === "none" && <span className="settings-hint">{t("settings.updateNone")}</span>}
+              {updateStatus === "installing" && <span className="settings-hint">{t("settings.updateInstalling")}</span>}
+              {updateStatus === "error" && <span className="settings-hint">{t("settings.updateError")}</span>}
+            </div>
+          </section>
+        )}
 
         <section className="settings-section">
           <h2>{t("settings.shortcuts")}</h2>

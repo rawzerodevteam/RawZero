@@ -74,7 +74,15 @@
     "captureHint": "Cliquez puis appuyez sur une touche",
     "pressKey": "Appuyez sur une touche…",
     "resetDefault": "Valeur par défaut",
-    "unassign": "Désassigner"
+    "unassign": "Désassigner",
+    "updates": "Mises à jour",
+    "updateCheck": "Vérifier les mises à jour",
+    "updateChecking": "Vérification…",
+    "updateNone": "Vous êtes à jour.",
+    "updateInstall": "Installer la mise à jour {{version}}",
+    "updateInstalling": "Téléchargement et installation…",
+    "updateRestart": "Redémarrer pour appliquer",
+    "updateError": "Impossible de vérifier les mises à jour."
   },
   "histogram": {
     "clipLow": "Écrêtage des ombres",

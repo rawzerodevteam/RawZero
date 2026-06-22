@@ -74,7 +74,15 @@
     "captureHint": "Click then press a key",
     "pressKey": "Press a key…",
     "resetDefault": "Default value",
-    "unassign": "Unassign"
+    "unassign": "Unassign",
+    "updates": "Updates",
+    "updateCheck": "Check for updates",
+    "updateChecking": "Checking…",
+    "updateNone": "You're up to date.",
+    "updateInstall": "Install update {{version}}",
+    "updateInstalling": "Downloading and installing…",
+    "updateRestart": "Restart to apply",
+    "updateError": "Couldn't check for updates."
   },
   "histogram": {
     "clipLow": "Shadow clipping",
