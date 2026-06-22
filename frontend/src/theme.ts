@@ -20,15 +20,21 @@ export const THEMES: ThemeDef[] = [
   { id: "slate", name: "Slate", vars: {
     "--bg": "#1c1d22", "--bg-deep": "#141519", "--bg-panel": "#232429", "--bg-raised": "#2b2d33",
     "--border": "#34363d", "--text": "#d8d9de", "--text-dim": "#8b8d96" } },
+  { id: "light", name: "Light", vars: {
+    "--bg": "#f4f5f7", "--bg-deep": "#e8eaee", "--bg-panel": "#ffffff", "--bg-raised": "#eceef2",
+    "--border": "#d4d8e0", "--text": "#1f2329", "--text-dim": "#697084" } },
+  { id: "nord", name: "Nord", vars: {
+    "--bg": "#2e3440", "--bg-deep": "#272c36", "--bg-panel": "#3b4252", "--bg-raised": "#434c5e",
+    "--border": "#4c566a", "--text": "#e5e9f0", "--text-dim": "#9aa3b5" } },
   { id: "midnight", name: "Midnight", vars: {
-    "--bg": "#16181f", "--bg-deep": "#0f1116", "--bg-panel": "#1d2029", "--bg-raised": "#262a35",
-    "--border": "#2f333f", "--text": "#d6d9e2", "--text-dim": "#868a99" } },
+    "--bg": "#0e1016", "--bg-deep": "#08090f", "--bg-panel": "#161922", "--bg-raised": "#1f2330",
+    "--border": "#2a2f3d", "--text": "#e3e6ef", "--text-dim": "#828aa0" } },
   { id: "graphite", name: "Graphite", vars: {
-    "--bg": "#1e1e1e", "--bg-deep": "#161616", "--bg-panel": "#262626", "--bg-raised": "#2f2f2f",
+    "--bg": "#1e1e1e", "--bg-deep": "#151515", "--bg-panel": "#262626", "--bg-raised": "#2f2f2f",
     "--border": "#3a3a3a", "--text": "#dadada", "--text-dim": "#8c8c8c" } },
   { id: "warm", name: "Warm", vars: {
     "--bg": "#211e1b", "--bg-deep": "#181513", "--bg-panel": "#2a2521", "--bg-raised": "#332d28",
-    "--border": "#3e3833", "--text": "#e0dbd3", "--text-dim": "#9a9088" } },
+    "--border": "#3e3833", "--text": "#e6dfd4", "--text-dim": "#a59a8c" } },
 ];
 export const DEFAULT_THEME = "slate";
 
