@@ -6,7 +6,8 @@ import {
   normalizeEvent, resetAllBindings, resetBinding, setBinding, useKeybindings,
 } from "../keybindings";
 import {
-  ACCENT_PRESETS, DEFAULT_ACCENT, THEMES, getAccent, getThemeId, resetAccent, setAccent, setTheme,
+  ACCENT_PRESETS, DEFAULT_ACCENT, THEMES, getAccent, getCustomBg, getThemeId, paletteFromBg,
+  resetAccent, setAccent, setCustomBg, setTheme,
 } from "../theme";
 import { useStore } from "../store";
 
@@ -18,6 +19,7 @@ export function SettingsView() {
   const [capturing, setCapturing] = useState<string | null>(null);
   const [accent, setAccentState] = useState(getAccent());
   const [themeId, setThemeId] = useState(getThemeId());
+  const [customBg, setCustomBgState] = useState(getCustomBg());
 
   const onCapture = (id: string) => (ev: React.KeyboardEvent) => {
     ev.preventDefault();
@@ -56,7 +58,7 @@ export function SettingsView() {
                 <button
                   key={th.id}
                   className={"theme-card" + (themeId === th.id ? " active" : "")}
-                  title={th.name}
+                  title={t(th.name)}
                   onClick={() => { setTheme(th.id); setThemeId(th.id); }}
                 >
                   <span className="theme-preview" style={{ background: th.vars["--bg"] }}>
@@ -65,9 +67,38 @@ export function SettingsView() {
                     <span className="theme-preview-line" style={{ background: th.vars["--text-dim"] }} />
                     <span className="theme-preview-dot" />
                   </span>
-                  <span className="theme-name">{th.name}</span>
+                  <span className="theme-name">{t(th.name)}</span>
                 </button>
               ))}
+              {(() => {
+                const cv = paletteFromBg(customBg);
+                return (
+                  <button
+                    className={"theme-card" + (themeId === "custom" ? " active" : "")}
+                    title={t("settings.themeCustom")}
+                    onClick={() => { setTheme("custom"); setThemeId("custom"); }}
+                  >
+                    <span className="theme-preview" style={{ background: cv["--bg"] }}>
+                      <span className="theme-preview-bar"
+                        style={{ background: cv["--bg-panel"], borderBottom: `1px solid ${cv["--border"]}` }} />
+                      <span className="theme-preview-line" style={{ background: cv["--text-dim"] }} />
+                      <input
+                        type="color"
+                        className="theme-preview-custom-input"
+                        value={customBg}
+                        title={t("settings.themeCustomPick")}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          setCustomBgState(e.target.value);
+                          setCustomBg(e.target.value);
+                          setThemeId("custom");
+                        }}
+                      />
+                    </span>
+                    <span className="theme-name">{t("settings.themeCustom")}</span>
+                  </button>
+                );
+              })()}
             </div>
           </div>
           <div className="settings-field">

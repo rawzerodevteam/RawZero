@@ -56,11 +56,11 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
   white-space: nowrap;
   transition: background 0.12s, border-color 0.12s;
 }
-.btn:hover:not(:disabled) { background: #34363f; border-color: #44464f; }
+.btn:hover:not(:disabled) { background: var(--bg-deep); border-color: var(--accent); }
 .btn:disabled { opacity: 0.45; cursor: default; }
 .btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #10131c; font-weight: 600; }
-.btn.primary:hover:not(:disabled) { background: #92b3ff; }
+.btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 85%, white); }
 .btn.small { padding: 3px 8px; font-size: 12px; }
 .btn.danger { color: var(--danger); }
 .btn.danger:hover:not(:disabled) { border-color: var(--danger); }
@@ -736,6 +736,10 @@ input[type="range"]:hover::-moz-range-thumb { background: var(--accent); }
 .theme-preview-bar { position: absolute; top: 0; left: 0; right: 0; height: 15px; }
 .theme-preview-line { position: absolute; left: 9px; top: 27px; width: 42px; height: 5px; border-radius: 3px; opacity: 0.85; }
 .theme-preview-dot { position: absolute; right: 9px; bottom: 9px; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
+.theme-preview-custom-input {
+  position: absolute; right: 7px; bottom: 7px; width: 18px; height: 18px;
+  padding: 0; border: 1px solid var(--border); border-radius: 50%; cursor: pointer;
+}
 .theme-name { display: block; padding: 5px 0; font-size: 12px; text-align: center; color: var(--text); background: var(--bg-raised); }
 .keybind-cat h3 { font-size: 13px; color: var(--text-dim); margin: 16px 0 8px; }
 .keybind-grid { display: grid; gap: 5px; }
