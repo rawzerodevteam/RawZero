@@ -39,6 +39,24 @@ Vite proxies `/api` and `/exports` to the backend on `:8000` (override with `VIT
 To import large folders without the browser: drop files into `./import`, then use
 **Import → /import folder** in the app.
 
+### Portable launcher (`start.ps1`)
+
+Alternative to the two methods above: runs with a portable Python/Node toolchain in
+`.tools/` (no Docker, no system-wide install). Modes:
+
+```powershell
+.\start.ps1            # normal: builds the frontend if stale, serves API + UI on one port (like Docker prod)
+.\start.ps1 -Dev        # dev: uvicorn --reload + Vite dev server (hot reload) -> http://localhost:5173
+.\start.ps1 -Rebuild    # forces a rebuild before launching (frontend, or the sidecar with -Tauri)
+.\start.ps1 -Tauri      # launches the real desktop shell (Rust + WebView) instead of a browser
+.\start.ps1 -NoBrowser  # any mode above, without auto-opening a browser tab
+.\start.ps1 -Port 8001  # any mode above, on a different backend port
+```
+
+`-Tauri` is slower to start (it builds the PyInstaller sidecar first) and is only needed to
+test native-shell-only code — currently just the auto-updater (Settings → Updates), which
+doesn't exist in the browser modes since it relies on the Tauri updater plugin.
+
 ## Build
 
 ### Desktop installers (Tauri)

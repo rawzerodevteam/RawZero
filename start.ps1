@@ -7,7 +7,11 @@
   sur un seul port via uvicorn (comme l'image Docker). Ctrl+C pour arrêter.
 
   -Dev      : uvicorn --reload + serveur Vite (hot reload) → http://localhost:5173
-  -Rebuild  : force le rebuild du frontend avant de lancer
+  -Tauri    : lance le vrai shell desktop (Rust + WebView) au lieu du navigateur — plus
+              lent à démarrer (build du sidecar PyInstaller), seulement nécessaire pour
+              tester du code natif (ex. l'auto-updater, qui n'existe pas hors de l'app
+              empaquetée).
+  -Rebuild  : force le rebuild du frontend (ou du sidecar avec -Tauri) avant de lancer
   -NoBrowser: ne pas ouvrir le navigateur automatiquement
   -Port     : port du backend (8000 par défaut)
 
@@ -15,9 +19,11 @@
   .\start.ps1            # lancement normal
   .\start.ps1 -Dev       # développement frontend avec hot reload
   .\start.ps1 -Rebuild   # après modification du frontend, sans -Dev
+  .\start.ps1 -Tauri     # shell desktop natif (pour tester l'auto-updater, etc.)
 #>
 param(
   [switch]$Dev,
+  [switch]$Tauri,
   [switch]$Rebuild,
   [switch]$NoBrowser,
   [int]$Port = 8000
@@ -94,7 +100,28 @@ function Open-WhenReady([string]$url, [string]$healthUrl) {
   } | Out-Null
 }
 
-if ($Dev) {
+if ($Tauri) {
+  # ---- Mode shell desktop natif : sidecar PyInstaller + tauri dev (Rust + WebView) ----
+  $venvPython = Join-Path $root "backend\.venv\Scripts\python.exe"
+  $pyinstaller = Join-Path $root "backend\.venv\Scripts\pyinstaller.exe"
+  if (-not (Test-Path $pyinstaller)) {
+    Write-Host "PyInstaller introuvable dans backend\.venv : pip install pyinstaller (dans ce venv)." -ForegroundColor Red
+    exit 1
+  }
+  $sidecarExe = Join-Path $root "backend\dist\rawstudio-backend\rawstudio-backend.exe"
+  # ponytail: juste "existe / -Rebuild", pas de détection de péremption (cas rare, pas besoin)
+  if ($Rebuild -or -not (Test-Path $sidecarExe)) {
+    Write-Host "Build du sidecar backend (PyInstaller)…" -ForegroundColor Cyan
+    Push-Location (Join-Path $root "backend")
+    & $pyinstaller --noconfirm rawstudio-backend.spec
+    Pop-Location
+    if ($LASTEXITCODE -ne 0) { exit 1 }
+  }
+  Write-Host "Shell Tauri (dev) — Ctrl+C pour arrêter" -ForegroundColor Cyan
+  Push-Location $front
+  & (Join-Path $nodeDir "npx.cmd") tauri dev
+  Pop-Location
+} elseif ($Dev) {
   # ---- Mode développement : backend --reload en arrière-plan + Vite au premier plan ----
   $env:STATIC_DIR = ""
   Write-Host "Backend (reload) : http://localhost:$Port — Frontend (Vite) : http://localhost:5173" -ForegroundColor Cyan
