@@ -118,10 +118,17 @@ if ($Tauri) {
     Pop-Location
     if ($LASTEXITCODE -ne 0) { exit 1 }
   }
+  # tauri.conf.json n'a pas de beforeDevCommand/devUrl (le shell sert frontendDist tel
+  # quel) -> pas de hot reload ici, il faut un build à jour avant de lancer.
+  if ($Rebuild -or (Test-FrontendStale $front $dist)) {
+    Write-Host "Build du frontend (sources modifiées)…" -ForegroundColor Cyan
+    Push-Location $front
+    & (Join-Path $nodeDir "npm.cmd") run build
+    if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
+    Pop-Location
+  }
   Write-Host "Shell Tauri (dev) — Ctrl+C pour arrêter" -ForegroundColor Cyan
-  Push-Location $front
-  & (Join-Path $nodeDir "npx.cmd") tauri dev
-  Pop-Location
+  & (Join-Path $nodeDir "npx.cmd") --prefix $front tauri dev
 } elseif ($Dev) {
   # ---- Mode développement : backend --reload en arrière-plan + Vite au premier plan ----
   $env:STATIC_DIR = ""

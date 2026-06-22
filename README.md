@@ -53,9 +53,11 @@ Alternative to the two methods above: runs with a portable Python/Node toolchain
 .\start.ps1 -Port 8001  # any mode above, on a different backend port
 ```
 
-`-Tauri` is slower to start (it builds the PyInstaller sidecar first) and is only needed to
-test native-shell-only code — currently just the auto-updater (Settings → Updates), which
-doesn't exist in the browser modes since it relies on the Tauri updater plugin.
+`-Tauri` is slower to start (it builds the PyInstaller sidecar and the frontend first — no
+hot reload, since `tauri.conf.json` has no `devUrl`/`beforeDevCommand`, it serves the built
+`frontend/dist` as-is) and is only needed to test native-shell-only code — currently just
+the auto-updater (Settings → Updates), which doesn't exist in the browser modes since it
+relies on the Tauri updater plugin.
 
 ## Build
 
