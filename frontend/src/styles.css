@@ -622,6 +622,17 @@ input[type="range"]:hover::-moz-range-thumb { background: var(--accent); }
 }
 .preset-apply:hover:not(:disabled) { background: var(--bg-raised); color: var(--accent); }
 .preset-apply:disabled { opacity: 0.5; cursor: default; }
+.preset-search {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 2px 0 6px;
+  padding: 5px 8px;
+  background: var(--bg-input, var(--bg-raised));
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 12.5px;
+}
 
 /* ---------- EXIF ---------- */
 .meta-table { width: 100%; border-collapse: collapse; font-size: 12px; }

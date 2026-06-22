@@ -273,7 +273,14 @@
     "saveFailed": "Enregistrement impossible : {{error}}",
     "confirmDelete": "Supprimer le preset « {{name}} » ?",
     "deleteFailed": "Suppression impossible : {{error}}",
-    "saveCurrent": "Enregistrer les réglages actuels"
+    "saveCurrent": "Enregistrer les réglages actuels",
+    "search": "Rechercher un preset…",
+    "import": "Importer",
+    "export": "Exporter ce preset",
+    "exportAll": "Exporter tout",
+    "imported_one": "{{count}} preset importé",
+    "imported_other": "{{count}} presets importés",
+    "invalidFile": "Fichier(s) invalide(s) : {{files}}"
   },
   "history": {
     "title": "Historique",

@@ -145,6 +145,20 @@ def test_presets(client):
     assert client.delete(f"/api/presets/{pid}").status_code == 200
 
 
+def test_preset_settings_sanitized(client):
+    # La géométrie, les masques locaux et les clés inconnues ne doivent jamais entrer en base.
+    r = client.post("/api/presets", json={"name": "Sale", "settings": {
+        "tone": {"contrast": 10},
+        "geometry": {"rotate": 90},
+        "locals": [{"id": "x"}],
+        "bidon": {"foo": 1},
+    }})
+    assert r.json()["settings"] == {"tone": {"contrast": 10}}
+    pid = r.json()["id"]
+    stored = next(p for p in client.get("/api/presets").json()["presets"] if p["id"] == pid)
+    assert stored["settings"] == {"tone": {"contrast": 10}}
+
+
 def test_export(client, photo_id):
     r = client.post("/api/export", json={"ids": [photo_id], "format": "jpeg",
                                          "quality": 90, "max_size": 0})

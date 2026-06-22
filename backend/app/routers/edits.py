@@ -207,11 +207,21 @@ BUILTIN_PRESETS: list[tuple[str, dict]] = [
 ]
 
 
+# Sections de rendu portées par un preset (la géométrie et les masques locaux restent propres à
+# chaque photo). Tout le reste est jeté à l'enregistrement, quelle que soit la source (save ou import).
+_PRESET_SECTIONS = ("wb", "tone", "presence", "curve", "hsl", "detail", "effects")
+
+
+def _sanitize_preset_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    return {k: settings[k] for k in _PRESET_SECTIONS
+            if isinstance(settings.get(k), dict) and settings[k]}
+
+
 def seed_presets() -> None:
     if db.query_one("SELECT id FROM presets LIMIT 1") is None:
         for name, settings in BUILTIN_PRESETS:
             db.execute("INSERT INTO presets (name, settings, builtin) VALUES (?,?,1)",
-                       (name, json.dumps(settings)))
+                       (name, json.dumps(_sanitize_preset_settings(settings))))
 
 
 @router.get("/presets")
@@ -229,9 +239,10 @@ class PresetBody(BaseModel):
 @router.post("/presets")
 def create_preset(body: PresetBody):
     name = body.name.strip()[:60] or "Preset"
+    settings = _sanitize_preset_settings(body.settings)
     pid = db.execute("INSERT INTO presets (name, settings, builtin) VALUES (?,?,0)",
-                     (name, json.dumps(body.settings)))
-    return {"id": pid, "name": name, "builtin": False, "settings": body.settings}
+                     (name, json.dumps(settings)))
+    return {"id": pid, "name": name, "builtin": False, "settings": settings}
 
 
 @router.delete("/presets/{preset_id}")

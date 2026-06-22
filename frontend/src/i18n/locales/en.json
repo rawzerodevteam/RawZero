@@ -273,7 +273,14 @@
     "saveFailed": "Save failed: {{error}}",
     "confirmDelete": "Delete preset “{{name}}”?",
     "deleteFailed": "Delete failed: {{error}}",
-    "saveCurrent": "Save current settings"
+    "saveCurrent": "Save current settings",
+    "search": "Search presets…",
+    "import": "Import",
+    "export": "Export this preset",
+    "exportAll": "Export all",
+    "imported_one": "{{count}} preset imported",
+    "imported_other": "{{count}} presets imported",
+    "invalidFile": "Invalid file(s): {{files}}"
   },
   "history": {
     "title": "History",
