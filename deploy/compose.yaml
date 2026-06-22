@@ -1,12 +1,13 @@
 # RawStudio — orchestration Podman (podman-compose) / Docker Compose.
-#   podman compose up -d        (ou : podman-compose up -d)
-#   podman compose up --build   pour reconstruire l'image après modif du code
+#   podman compose -f deploy/compose.yaml up -d        (ou : podman-compose ...)
+#   podman compose -f deploy/compose.yaml up --build   pour reconstruire l'image
 # Puis ouvrir http://localhost:8000
+# Contexte de build = racine du dépôt (..) ; les chemins de volumes sont relatifs à ce fichier.
 services:
   rawstudio:
     build:
-      context: .
-      dockerfile: Containerfile
+      context: ..
+      dockerfile: deploy/Containerfile
     image: localhost/rawstudio:latest
     container_name: rawstudio
     ports:
@@ -14,7 +15,7 @@ services:
     volumes:
       # Catalogue, originaux, caches, exports — persistés sur l'hôte (cf. DATA_DIR).
       # Les modèles ONNX (masques IA / débruitage) se déposent dans ./data/models.
-      - ./data:/data:Z
+      - ../data:/data:Z
       # Dépôt de fichiers à importer via « Import → /import » dans l'app.
-      - ./import:/import:Z
+      - ../import:/import:Z
     restart: unless-stopped

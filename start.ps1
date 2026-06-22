@@ -31,16 +31,10 @@ $nodeDir = Join-Path $root ".tools\node"
 $front   = Join-Path $root "frontend"
 $dist    = Join-Path $front "dist"
 
-# ---- Vérification des prérequis (on n'installe rien sans confirmation) ----
-if (-not (Test-Path $python)) {
-  Write-Host "Python portable introuvable : $python" -ForegroundColor Red
-  Write-Host "À installer (par exemple) : .tools\uv.exe venv .tools\venv --python 3.12"
-  Write-Host "puis : .tools\venv\Scripts\python.exe -m pip install -r backend\requirements-dev.txt"
-  exit 1
-}
-if (-not (Test-Path (Join-Path $nodeDir "node.exe"))) {
-  Write-Host "Node portable introuvable : $nodeDir" -ForegroundColor Red
-  Write-Host "Télécharger https://nodejs.org/dist/v22.17.1/node-v22.17.1-win-x64.zip et l'extraire en .tools\node"
+# ---- Vérification des prérequis (l'installation se fait via bootstrap.ps1) ----
+if (-not (Test-Path $python) -or -not (Test-Path (Join-Path $nodeDir "node.exe"))) {
+  Write-Host "Outillage portable introuvable (.tools manquant ou incomplet)." -ForegroundColor Red
+  Write-Host "Lancer d'abord l'installation : .\bootstrap.ps1" -ForegroundColor Yellow
   exit 1
 }
 

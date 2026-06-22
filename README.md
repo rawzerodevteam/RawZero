@@ -9,32 +9,32 @@ Ships as a **desktop app** (Tauri) and runs as a **web app** (Podman / Docker).
 
 ## Development (hot reload)
 
-### With Docker — recommended
+### Without Docker — recommended (Windows, zero prerequisites)
+
+One-time setup from a fresh clone. `bootstrap.ps1` installs a self-contained toolchain into
+`.tools\` (uv + Python 3.12 + venv + backend deps, portable Node, frontend `node_modules`) —
+nothing touches the system or the global PATH:
+
+```powershell
+.\bootstrap.ps1          # one-time install (re-run with -Force to rebuild from scratch)
+.\start.ps1 -Dev         # backend (uvicorn --reload) + Vite dev server, both hot-reloading
+```
+
+Open **http://localhost:5173**. Edit a `.tsx` or `.py` → it reloads instantly. Rust/Tauri are
+not involved. `.\start.ps1` (no `-Dev`) instead builds the frontend and serves API + UI on a
+single port (**http://localhost:8000**), like the Docker image.
+
+### With Docker
 
 Backend (`uvicorn --reload`) + Vite dev server, code bind-mounted, both hot-reloading:
 
 ```bash
-docker compose -f compose.dev.yaml up --build      # or: podman compose -f compose.dev.yaml up --build
+docker compose -f deploy/compose.dev.yaml up --build   # or: podman compose -f deploy/compose.dev.yaml up --build
 ```
 
-Open **http://localhost:5173**. Edit a `.tsx` or `.py` → it reloads instantly. Rust/Tauri are
-not involved. `./data` (catalog, caches, exports, and `./data/models` for AI models) and
-`./import` are bind-mounted, so they persist.
-
-### Without Docker
-
-Two terminals — Python venv in `backend/.venv`, Node on PATH:
-
-```powershell
-# 1 — backend (reload) on :8000
-$env:STATIC_DIR=""; $env:DATA_DIR="$PWD\data"; $env:IMPORT_DIR="$PWD\import"
-backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --port 8000
-
-# 2 — frontend (hot reload) -> http://localhost:5173
-npm --prefix frontend run dev
-```
-
-Vite proxies `/api` and `/exports` to the backend on `:8000` (override with `VITE_API_PROXY`).
+Open **http://localhost:5173**. `./data` (catalog, caches, exports, and `./data/models` for AI
+models) and `./import` are bind-mounted, so they persist. Vite proxies `/api` and `/exports` to
+the backend on `:8000` (override with `VITE_API_PROXY`).
 
 To import large folders without the browser: drop files into `./import`, then use
 **Import → /import folder** in the app.
@@ -46,8 +46,8 @@ To import large folders without the browser: drop files into `./import`, then us
 Bundles the PyInstaller backend sidecar + the Vite frontend into a native installer:
 
 ```powershell
-.\build-desktop.ps1      # Windows -> src-tauri\target\release\bundle\nsis\*.exe
-./build-desktop.sh       # Linux   -> .deb / .rpm
+.\scripts\build-desktop.ps1      # Windows -> src-tauri\target\release\bundle\nsis\*.exe
+./scripts/build-desktop.sh       # Linux   -> .deb / .rpm
 ```
 
 All targets at once (Windows `.exe` + Linux `.deb`/`.rpm`): push a `v*` tag — GitHub Actions
@@ -55,10 +55,10 @@ All targets at once (Windows `.exe` + Linux `.deb`/`.rpm`): push a `v*` tag — 
 
 ### Web app image (Docker — production)
 
-Multi-stage `Containerfile` builds the frontend and serves API + UI on a single port:
+Multi-stage `deploy/Containerfile` builds the frontend and serves API + UI on a single port:
 
 ```bash
-docker compose up --build -d        # or: podman compose up --build -d
+docker compose -f deploy/compose.yaml up --build -d   # or: podman compose -f deploy/compose.yaml up --build -d
 ```
 
 Then open **http://localhost:8000**.
@@ -109,8 +109,8 @@ Then open **http://localhost:8000**.
 
 ```powershell
 # Backend
-backend\.venv\Scripts\python.exe -m pytest backend/tests
+.tools\venv\Scripts\python.exe -m pytest backend/tests
 
 # Frontend
-npm --prefix frontend test
+.tools\node\npm.cmd --prefix frontend test
 ```

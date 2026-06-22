@@ -2,7 +2,8 @@
 # Build complet de l'app desktop Tauri : sidecar backend (PyInstaller) + frontend (Vite)
 # + bundle Tauri (.deb/.rpm). À relancer après toute modif de backend/app ou frontend/src.
 set -euo pipefail
-cd "$(dirname "$0")"
+# Ce script vit dans scripts/ ; on opère depuis la racine du dépôt (dossier parent).
+cd "$(dirname "$0")/.."
 
 echo "== 1/3 : sidecar backend (PyInstaller) =="
 ( cd backend && .venv/bin/pyinstaller --noconfirm rawstudio-backend.spec )

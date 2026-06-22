@@ -15,12 +15,12 @@ __pycache__/
 .pytest_cache/
 .venv/
 
-#md
-AMELIORATIONS.md
+# notes de travail privées (jamais versionnées)
+AMELIORATION.md
 CLAUDE.md
 étude.md
 TEST_OPTIMISATION.md
-Notes.md
+Notes
 
 # Tauri / Rust
 src-tauri/target/
