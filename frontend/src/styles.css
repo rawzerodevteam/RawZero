@@ -725,18 +725,13 @@ input[type="range"]:hover::-moz-range-thumb { background: var(--accent); }
   width: 32px; height: 26px; padding: 0; background: none;
   border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
 }
-.theme-picker { display: flex; flex-wrap: wrap; gap: 10px; }
-.theme-card {
-  width: 96px; padding: 0; border: 1px solid var(--border); border-radius: 8px;
-  background: none; cursor: pointer; overflow: hidden; transition: outline-color 0.1s;
+.theme-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.theme-swatch {
+  display: flex; align-items: center; gap: 7px; padding: 6px 11px;
+  border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font: inherit;
 }
-.theme-card:hover { border-color: var(--accent); }
-.theme-card.active { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
-.theme-preview { display: block; position: relative; height: 50px; }
-.theme-preview-bar { position: absolute; top: 0; left: 0; right: 0; height: 15px; }
-.theme-preview-line { position: absolute; left: 9px; top: 27px; width: 42px; height: 5px; border-radius: 3px; opacity: 0.85; }
-.theme-preview-dot { position: absolute; right: 9px; bottom: 9px; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
-.theme-name { display: block; padding: 5px 0; font-size: 12px; text-align: center; color: var(--text); background: var(--bg-raised); }
+.theme-swatch.active { outline: 2px solid var(--accent); outline-offset: 1px; }
+.theme-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
 .keybind-cat h3 { font-size: 13px; color: var(--text-dim); margin: 16px 0 8px; }
 .keybind-grid { display: grid; gap: 5px; }
 .keybind-row { display: grid; grid-template-columns: 1fr 160px auto; align-items: center; gap: 10px; }
