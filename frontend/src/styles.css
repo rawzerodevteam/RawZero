@@ -66,15 +66,18 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
 .btn.danger:hover:not(:disabled) { border-color: var(--danger); }
 
 .mini-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
   color: var(--text-dim);
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 4px 7px;
   border-radius: 4px;
-  font-size: 13px;
 }
 .mini-btn:hover { color: var(--text); background: var(--bg-raised); }
+.mini-btn:disabled { color: var(--text-dim); opacity: 0.4; cursor: default; }
 
 .row-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
 
@@ -736,10 +739,7 @@ input[type="range"]:hover::-moz-range-thumb { background: var(--accent); }
 .theme-preview-bar { position: absolute; top: 0; left: 0; right: 0; height: 15px; }
 .theme-preview-line { position: absolute; left: 9px; top: 27px; width: 42px; height: 5px; border-radius: 3px; opacity: 0.85; }
 .theme-preview-dot { position: absolute; right: 9px; bottom: 9px; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
-.theme-preview-custom-input {
-  position: absolute; right: 7px; bottom: 7px; width: 18px; height: 18px;
-  padding: 0; border: 1px solid var(--border); border-radius: 50%; cursor: pointer;
-}
+.settings-hex { color: var(--text-dim); font-size: 12px; }
 .theme-name { display: block; padding: 5px 0; font-size: 12px; text-align: center; color: var(--text); background: var(--bg-raised); }
 .keybind-cat h3 { font-size: 13px; color: var(--text-dim); margin: 16px 0 8px; }
 .keybind-grid { display: grid; gap: 5px; }

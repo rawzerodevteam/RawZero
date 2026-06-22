@@ -11,6 +11,18 @@ import {
 } from "../theme";
 import { useStore } from "../store";
 
+// Icônes SVG (currentColor) : évite le rendu 2 couleurs (franges ClearType) des glyphes texte ✕/↺.
+const IconReset = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+    <path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5V6h-3.5" strokeLinejoin="round" />
+  </svg>
+);
+const IconClose = () => (
+  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+    <path d="M2 2l12 12M14 2L2 14" />
+  </svg>
+);
+
 /** Onglet « Paramètres » : apparence (langue, couleur d'accent) + raccourcis clavier. */
 export function SettingsView() {
   const { t } = useTranslation();
@@ -82,18 +94,6 @@ export function SettingsView() {
                       <span className="theme-preview-bar"
                         style={{ background: cv["--bg-panel"], borderBottom: `1px solid ${cv["--border"]}` }} />
                       <span className="theme-preview-line" style={{ background: cv["--text-dim"] }} />
-                      <input
-                        type="color"
-                        className="theme-preview-custom-input"
-                        value={customBg}
-                        title={t("settings.themeCustomPick")}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => {
-                          setCustomBgState(e.target.value);
-                          setCustomBg(e.target.value);
-                          setThemeId("custom");
-                        }}
-                      />
                     </span>
                     <span className="theme-name">{t("settings.themeCustom")}</span>
                   </button>
@@ -101,6 +101,23 @@ export function SettingsView() {
               })()}
             </div>
           </div>
+          {themeId === "custom" && (
+            <div className="settings-field">
+              <span className="settings-label">{t("settings.themeCustomPick")}</span>
+              <div className="accent-picker">
+                <input
+                  type="color"
+                  value={customBg}
+                  title={t("settings.themeCustomPick")}
+                  onChange={(e) => {
+                    setCustomBgState(e.target.value);
+                    setCustomBg(e.target.value);
+                  }}
+                />
+                <code className="settings-hex">{customBg}</code>
+              </div>
+            </div>
+          )}
           <div className="settings-field">
             <span className="settings-label">{t("settings.accent")}</span>
             <div className="accent-picker">
@@ -117,7 +134,7 @@ export function SettingsView() {
                 onChange={(e) => pickAccent(e.target.value)} />
               <button className="mini-btn" title={t("settings.resetDefault")}
                 disabled={accent.toLowerCase() === DEFAULT_ACCENT}
-                onClick={() => { resetAccent(); setAccentState(DEFAULT_ACCENT); }}>↺</button>
+                onClick={() => { resetAccent(); setAccentState(DEFAULT_ACCENT); }}><IconReset /></button>
             </div>
           </div>
         </section>
@@ -146,9 +163,9 @@ export function SettingsView() {
                       </button>
                       <span className="keybind-actions">
                         <button className="mini-btn" title={t("settings.resetDefault")} disabled={!overridden}
-                          onClick={() => resetBinding(a.id)}>↺</button>
+                          onClick={() => resetBinding(a.id)}><IconReset /></button>
                         <button className="mini-btn" title={t("settings.unassign")} disabled={!cur}
-                          onClick={() => clearBinding(a.id)}>✕</button>
+                          onClick={() => clearBinding(a.id)}><IconClose /></button>
                       </span>
                     </div>
                   );
