@@ -61,12 +61,18 @@ jobs:
         run: ./src-tauri/nsis-plugins.ps1
 
       # tauri-action lance beforeBuildCommand (build Vite), compile le shell Rust, bundle les
-      # installateurs et, si tagName est fourni, les attache à une Release GitHub.
+      # installateurs et, si tagName est fourni, les attache à une Release GitHub. Avec les
+      # secrets TAURI_SIGNING_* (issue #14), il signe aussi chaque binaire et publie
+      # latest.json -- manifeste lu par l'updater intégré à l'app (tauri.conf.json ->
+      # plugins.updater). Secrets à générer une fois via `npx tauri signer generate`.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
           releaseName: 'RawStudio ${{ github.ref_name }}'
           releaseDraft: true
           prerelease: false
+          includeUpdaterJson: true
