@@ -29,6 +29,9 @@ export const THEMES: ThemeDef[] = [
   { id: "warm", name: "Warm", vars: {
     "--bg": "#211e1b", "--bg-deep": "#181513", "--bg-panel": "#2a2521", "--bg-raised": "#332d28",
     "--border": "#3e3833", "--text": "#e0dbd3", "--text-dim": "#9a9088" } },
+  { id: "nord", name: "Nord", vars: {
+    "--bg": "#2e3440", "--bg-deep": "#272c36", "--bg-panel": "#3b4252", "--bg-raised": "#434c5e",
+    "--border": "#4c566a", "--text": "#e5e9f0", "--text-dim": "#9aa3b5" } },
 ];
 export const DEFAULT_THEME = "slate";
 

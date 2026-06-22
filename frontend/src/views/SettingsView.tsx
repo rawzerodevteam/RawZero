@@ -55,12 +55,17 @@ export function SettingsView() {
               {THEMES.map((th) => (
                 <button
                   key={th.id}
-                  className={"theme-swatch" + (themeId === th.id ? " active" : "")}
-                  style={{ background: th.vars["--bg-panel"], borderColor: th.vars["--border"], color: th.vars["--text"] }}
+                  className={"theme-card" + (themeId === th.id ? " active" : "")}
+                  title={th.name}
                   onClick={() => { setTheme(th.id); setThemeId(th.id); }}
                 >
-                  <span className="theme-dot" style={{ background: th.vars["--bg-deep"] }} />
-                  {th.name}
+                  <span className="theme-preview" style={{ background: th.vars["--bg"] }}>
+                    <span className="theme-preview-bar"
+                      style={{ background: th.vars["--bg-panel"], borderBottom: `1px solid ${th.vars["--border"]}` }} />
+                    <span className="theme-preview-line" style={{ background: th.vars["--text-dim"] }} />
+                    <span className="theme-preview-dot" />
+                  </span>
+                  <span className="theme-name">{th.name}</span>
                 </button>
               ))}
             </div>
