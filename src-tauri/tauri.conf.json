@@ -16,6 +16,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "deb", "rpm"],
+    "createUpdaterArtifacts": true,
     "resources": {
       "../backend/dist/rawstudio-backend": "backend",
       "../frontend/dist": "frontend-dist"
