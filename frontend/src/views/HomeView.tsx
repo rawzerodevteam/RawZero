@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
-import { LanguageSwitcher } from "../components/LanguageSwitcher";
 import { parseDragIds, hasDragIds } from "../lib/dragPhotos";
 import { useStore } from "../store";
 import { ALL_PHOTOS_ID } from "../types";
@@ -47,7 +46,7 @@ export function HomeView() {
       <header className="home-header">
         <strong className="brand">RawStudio</strong>
         <span className="spacer" />
-        <LanguageSwitcher />
+        <button className="btn" onClick={() => setView("settings")}>⚙ {t("settings.title")}</button>
         <button className="btn" onClick={() => setUI({ showModels: true })}>{t("models.button")}</button>
         <button className="btn" onClick={() => setUI({ showImport: true })}>⤓ {t("home.import")}</button>
       </header>

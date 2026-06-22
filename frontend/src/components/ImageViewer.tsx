@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
+import { actionForEvent } from "../keybindings";
 import { useStore } from "../store";
 import { useGpuPreview } from "../gpu/useGpuPreview";
 import { useMaskSuppressed } from "../lib/useMaskSuppressed";
@@ -125,16 +126,16 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
     const setSpace = (on: boolean) => { spaceRef.current = on; setSpaceHeld(on); };
     const onKeyDown = (ev: KeyboardEvent) => {
       if (isTyping()) return;
-      if (ev.ctrlKey || ev.metaKey || ev.altKey) return; // laisse passer Ctrl+Z, etc.
-      if (ev.key === " ") {
+      const action = actionForEvent(ev);
+      if (action === "pan") {
         ev.preventDefault();        // pas de scroll de page ni d'activation d'un bouton focalisé
         if (!ev.repeat) setSpace(true);
-      } else if (ev.key.toLowerCase() === "z") {
+      } else if (action === "zoom-toggle") {
         ev.preventDefault();
         toggleZoom(lastPointer.current.x, lastPointer.current.y);
       }
     };
-    const onKeyUp = (ev: KeyboardEvent) => { if (ev.key === " ") setSpace(false); };
+    const onKeyUp = (ev: KeyboardEvent) => { if (actionForEvent(ev) === "pan") setSpace(false); };
     const onBlur = () => setSpace(false); // évite un état « Espace bloqué » si le focus part
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);

@@ -45,7 +45,7 @@ function loadHistory(raw: any, fallbackEdits: EditState): HistoryParts {
   return { edits: fallbackEdits, currentLabel: originLabel(), undoStack: [], undoLabels: [], redoStack: [], redoLabels: [] };
 }
 
-export type View = "home" | "grid" | "loupe" | "develop";
+export type View = "home" | "grid" | "loupe" | "develop" | "settings";
 export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "wb" | "pointmask";
 
 let saveTimer: number | undefined;

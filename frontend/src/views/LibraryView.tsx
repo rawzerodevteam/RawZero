@@ -140,12 +140,14 @@ function Toolbar() {
   const albums = useStore((s) => s.albums);
   const currentAlbumId = useStore((s) => s.currentAlbumId);
   const setAlbum = useStore((s) => s.setAlbum);
+  const setView = useStore((s) => s.setView);
   const currentAlbum = albums.find((a) => a.id === currentAlbumId);
   const [showExif, setShowExif] = useState(false);
   const exifActive = !!(filters.camera || filters.lens || filters.isoMin || filters.isoMax
     || filters.dateFrom || filters.dateTo);
   return (
     <div className="toolbar">
+      <button className="btn small" title={t("settings.title")} onClick={() => setView("settings")}>⚙</button>
       <strong className="brand">RawStudio</strong>
       <ProjectMenu />
       <ModeTabs />

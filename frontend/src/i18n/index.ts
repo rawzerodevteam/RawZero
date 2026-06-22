@@ -30,10 +30,11 @@ void i18n
   .use(initReactI18next)
   .init({
     resources,
-    fallbackLng: "fr",
+    fallbackLng: "en",                                  // anglais par défaut
     supportedLngs: LANGS,
     interpolation: { escapeValue: false },
-    detection: { order: ["localStorage", "navigator"], caches: ["localStorage"] },
+    // On ne suit pas la langue du navigateur : défaut = anglais, sauf choix explicite mémorisé.
+    detection: { order: ["localStorage"], caches: ["localStorage"] },
   });
 
 export default i18n;

@@ -11,6 +11,7 @@ import { useStore } from "./store";
 import { DevelopView } from "./views/DevelopView";
 import { HomeView } from "./views/HomeView";
 import { LibraryView } from "./views/LibraryView";
+import { SettingsView } from "./views/SettingsView";
 
 export function App() {
   const view = useStore((s) => s.view);
@@ -35,7 +36,7 @@ export function App() {
 
   return (
     <div className="app">
-      {view === "home" ? <HomeView /> : view === "develop" ? <DevelopView /> : <LibraryView />}
+      {view === "home" ? <HomeView /> : view === "settings" ? <SettingsView /> : view === "develop" ? <DevelopView /> : <LibraryView />}
       {showImport && <ImportPanel />}
       {showExport && <ExportDialog />}
       {showModels && <ModelsDialog />}

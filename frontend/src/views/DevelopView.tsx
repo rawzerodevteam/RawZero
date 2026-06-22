@@ -93,6 +93,7 @@ export function DevelopView() {
   const showClipping = useStore((s) => s.showClipping);
   const showInfo = useStore((s) => s.showInfo);
   const setUI = useStore((s) => s.setUI);
+  const setView = useStore((s) => s.setView);
   const setRating = useStore((s) => s.setRating);
   const copyEdits = useStore((s) => s.copyEdits);
   const pasteEdits = useStore((s) => s.pasteEdits);
@@ -107,6 +108,7 @@ export function DevelopView() {
     <div className="develop">
       <div className="develop-main">
         <div className="toolbar">
+          <button className="btn small" title={t("settings.title")} onClick={() => setView("settings")}>⚙</button>
           <ModeTabs />
           <span className="name">{photo.filename}</span>
           {dirty && <span className="dim" title={t("develop.autosaving")}>●</span>}
