@@ -38,7 +38,8 @@ $front   = Join-Path $root "frontend"
 $dist    = Join-Path $front "dist"
 
 # ---- Vérification des prérequis (on n'installe rien sans confirmation) ----
-if (-not (Test-Path $python)) {
+# -Tauri ne sert pas le backend via le Python portable : il utilise backend\.venv (PyInstaller).
+if (-not $Tauri -and -not (Test-Path $python)) {
   Write-Host "Python portable introuvable : $python" -ForegroundColor Red
   Write-Host "À installer (par exemple) : .tools\uv.exe venv .tools\venv --python 3.12"
   Write-Host "puis : .tools\venv\Scripts\python.exe -m pip install -r backend\requirements-dev.txt"
