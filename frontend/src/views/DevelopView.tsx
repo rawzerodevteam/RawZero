@@ -108,7 +108,7 @@ export function DevelopView() {
     <div className="develop">
       <div className="develop-main">
         <div className="toolbar">
-          <button className="btn small" title={t("settings.title")} onClick={() => setView("settings")}>⚙</button>
+          <button className="btn small" title={t("project.homeTitle")} onClick={() => setView("home")}>🏠</button>
           <ModeTabs />
           <span className="name">{photo.filename}</span>
           {dirty && <span className="dim" title={t("develop.autosaving")}>●</span>}
@@ -132,6 +132,7 @@ export function DevelopView() {
           <button className="btn small" title={t("develop.diffTitle")}
             onClick={() => setShowDiff(true)}>Δ</button>
           <button className="btn small" title={t("develop.exportTitle")} onClick={() => setUI({ showExport: true })}>⤒</button>
+          <button className="btn small" title={t("settings.title")} onClick={() => setView("settings")}>⚙</button>
         </div>
         <div className="develop-viewer">
           {edits ? <ImageViewer src={src} interactive gpu={gpuPreview} /> : <div className="viewer-empty">{t("common.loading")}</div>}

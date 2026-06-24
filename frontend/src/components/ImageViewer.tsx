@@ -78,7 +78,9 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
     img.src = src;
   }, [src, gpu]);
 
-  const fitScale = nat.w && cont.w
+  // Garde sur les 4 dimensions : si la hauteur du conteneur est momentanément 0 (mesure pas
+  // encore faite), cont.h/nat.h vaudrait 0 et l'image collapserait à 0×0 (aperçu « cassé »).
+  const fitScale = nat.w && nat.h && cont.w && cont.h
     ? Math.min(cont.w / nat.w, cont.h / nat.h, 3)
     : 1;
   const s = fitScale * zoomScale;

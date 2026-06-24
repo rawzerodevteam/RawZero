@@ -148,28 +148,33 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
   background: var(--bg-panel);
   border: 2px solid transparent;
   border-radius: var(--radius);
-  overflow: hidden;
+  /* clip (et non hidden) : un élément de grille avec overflow:hidden voit sa taille minimale
+     automatique tomber à 0 → la rangée s'effondre (cellule réduite à ~4px, image écrasée).
+     overflow:clip découpe à l'identique (coins arrondis) SANS cet effet de bord. */
+  overflow: clip;
   cursor: pointer;
   transition: border-color 0.1s;
-  /* Le navigateur saute le layout/paint des cellules hors écran (grosses grilles fluides),
-     tout en les gardant dans le DOM → le rectangle de sélection continue de les atteindre. */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 240px;
 }
 .cell:hover { border-color: var(--border); }
 .cell.current { border-color: var(--accent); }
 .cell.rejected { opacity: 0.45; }
 .cell-img {
   position: relative;
-  aspect-ratio: 3 / 2;            /* colle au format photo dominant → pas de bandes sur les paysages */
+  /* Boîte 3:2 par le hack padding-top (ratio = hauteur/largeur = 2/3) plutôt que `aspect-ratio` :
+     fonctionne sur TOUT moteur de rendu, y compris d'anciennes WebView, sans risque de collapse. */
+  padding-top: 66.667%;
   background: var(--bg-deep);
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 /* contain → l'image entière est toujours visible (jamais rognée ni déformée) ;
-   bandes neutres autour des formats qui ne sont pas 3:2. */
-.cell-img img { width: 100%; height: 100%; object-fit: contain; display: block; }
+   bandes neutres autour des formats qui ne sont pas 3:2. L'image remplit la boîte en absolu. */
+.cell-img img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
 .badge {
   position: absolute;
   top: 6px;
@@ -217,6 +222,17 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
 .loupe { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .loupe-main { flex: 1; position: relative; display: flex; flex-direction: column; min-height: 0; }
 .loupe-main .viewer { flex: 1; }
+/* Aperçu loupe : zone qui occupe toute la place dispo, image contenue (jamais collapsée). */
+.loupe-image {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+.loupe-image img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 .loupe-bar {
   display: flex;
   align-items: center;

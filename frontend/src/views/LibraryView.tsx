@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { Filmstrip } from "../components/Filmstrip";
-import { ImageViewer } from "../components/ImageViewer";
 import { ModeTabs } from "../components/ModeTabs";
 import { ProjectMenu } from "../components/ProjectMenu";
 import { StarRating } from "../components/StarRating";
@@ -30,20 +29,13 @@ export function LibraryView() {
 function LeftRail() {
   const { t } = useTranslation();
   const view = useStore((s) => s.view);
-  const currentId = useStore((s) => s.currentId);
-  const photos = useStore((s) => s.photos);
   const setView = useStore((s) => s.setView);
-  const selectPhoto = useStore((s) => s.selectPhoto);
   const setUI = useStore((s) => s.setUI);
   const showAlbums = useStore((s) => s.showAlbums);
-  const zoomTarget = currentId ?? photos[0]?.id ?? null;
   return (
     <nav className="left-rail">
       <button className={"rail-btn" + (view === "grid" ? " active" : "")}
         onClick={() => setView("grid")} title={t("library.gridTitle")}>▦<span>{t("library.grid")}</span></button>
-      <button className={"rail-btn" + (view === "loupe" ? " active" : "")} disabled={zoomTarget === null}
-        onClick={() => { if (zoomTarget !== null) { if (currentId === null) selectPhoto(zoomTarget); setView("loupe"); } }}
-        title={t("library.loupeTitle")}>⊙<span>{t("library.loupe")}</span></button>
       <button className={"rail-btn" + (showAlbums ? " active" : "")}
         onClick={() => setUI({ showAlbums: !showAlbums })} title={t("library.albumsTitle")}>📚<span>{t("home.albums")}</span></button>
       <span className="rail-spacer" />
@@ -147,7 +139,6 @@ function Toolbar() {
     || filters.dateFrom || filters.dateTo);
   return (
     <div className="toolbar">
-      <button className="btn small" title={t("settings.title")} onClick={() => setView("settings")}>⚙</button>
       <strong className="brand">RawStudio</strong>
       <ProjectMenu />
       <ModeTabs />
@@ -240,6 +231,7 @@ function Toolbar() {
       <button className="btn" onClick={() => setUI({ showImport: true })}>⤓ {t("home.import")}</button>
       <button className="btn" onClick={() => setUI({ showExport: true })}>⤒ {t("export.title")}</button>
       <button className="btn" title={t("library.shortcutsTitle")} onClick={() => setUI({ showHelp: true })}>?</button>
+      <button className="btn small" title={t("settings.title")} onClick={() => setView("settings")}>⚙</button>
     </div>
   );
 }
@@ -377,7 +369,11 @@ function Loupe() {
   return (
     <div className="loupe">
       <div className="loupe-main">
-        <ImageViewer src={api.previewUrl(photo.id, versions[photo.id] ?? 0)} />
+        {/* Aperçu robuste : l'image est forcée à se contenir dans la zone (object-fit), sans
+            calcul de boîte JS (qui pouvait collapser à 0 si le conteneur n'était pas mesuré). */}
+        <div className="loupe-image">
+          <img src={api.previewUrl(photo.id, versions[photo.id] ?? 0)} alt={photo.filename} draggable={false} />
+        </div>
         {showInfo && <ExifOverlay />}
         <div className="loupe-bar">
           <span className="name">{photo.filename}</span>
