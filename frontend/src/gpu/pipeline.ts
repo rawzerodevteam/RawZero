@@ -412,7 +412,6 @@ export class GpuPipeline {
   workW = 0;
   workH = 0;
   fullLong = 1;
-  private presentPx = new Uint8Array(4);
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
@@ -987,13 +986,12 @@ export class GpuPipeline {
       gl.uniform1i(this.u("final", "u_showClip"), showClip ? 1 : 0);
     });
     if (ovlLoc && finOut) this.maskOverlay(ovlLoc, finOut, W, H);
-    gl.finish();
-
-    // Force la présentation du canvas : sur certains pilotes le drawing buffer
-    // n'est pas recomposé sur la page sans une lecture (readPixels) ou un rAF.
-    // Quasi gratuit ici (1 px, après gl.finish()), et indispensable pour que
-    // l'aperçu s'actualise à chaque édition.
-    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.presentPx);
+    // NE PAS appeler gl.finish()/readPixels ici : ils BLOQUENT le thread principal jusqu'à la
+    // fin de TOUTES les passes GPU (des dizaines de ms à 1600 px) → le slider lague en mode GPU.
+    // render() est désormais appelé dans un requestAnimationFrame (useGpuPreview), qui garantit
+    // la recomposition du canvas après la frame. Un simple flush (non bloquant) suffit à pousser
+    // les commandes vers le GPU.
+    gl.flush();
   }
 }
 

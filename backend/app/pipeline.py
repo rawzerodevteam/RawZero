@@ -415,13 +415,28 @@ def _apply_vignette(img: np.ndarray, vignette: float) -> np.ndarray:
     return img * gain[..., None]
 
 
-def _apply_grain(img: np.ndarray, grain: float) -> np.ndarray:
+_GRAIN_MAX = 1400  # bord long max de la grille de grain : borne le coût et fixe la « taille réelle »
+
+def _apply_grain(img: np.ndarray, grain: float, scale: float, seed: int) -> np.ndarray:
     if grain <= 0:
         return img
     g = grain / 100.0
-    rng = np.random.default_rng(1234)
-    noise = rng.standard_normal(img.shape[:2]).astype(np.float32) * 0.05 * g
-    return img + noise[..., None]
+    h, w = img.shape[:2]
+    long_edge = max(h, w)
+    # Grille de grain à résolution « pleine image » (≈ bord long / scale), bornée à _GRAIN_MAX.
+    # À seed égal, preview et export dérivent la MÊME grille (puis la redimensionnent) → grain
+    # d'apparence identique, indépendant de la taille de rendu (fini le motif fixe + la fréquence
+    # qui variait avec scale). La graine vient du photo_id ⇒ motif différent par photo.
+    gl = min(max(int(round(long_edge / max(scale, 1e-3))), 8), _GRAIN_MAX)
+    if long_edge == h:
+        gh, gw = gl, max(int(round(gl * w / h)), 1)
+    else:
+        gw, gh = gl, max(int(round(gl * h / w)), 1)
+    rng = np.random.default_rng((int(seed) & 0xFFFFFFFF) or 1234)
+    noise = rng.standard_normal((gh, gw)).astype(np.float32)
+    if (gh, gw) != (h, w):
+        noise = cv2.resize(noise, (w, h), interpolation=cv2.INTER_LINEAR)
+    return img + noise[..., None] * (0.05 * g)
 
 
 # ---------------------------------------------------------------- retouches locales
@@ -451,7 +466,8 @@ def _apply_local(img: np.ndarray, local: dict, scale: float) -> np.ndarray:
 
 def apply_pipeline(base: np.ndarray, edits: dict, scale: float = 1.0,
                    skip_crop: bool = False,
-                   denoised_base: Optional[np.ndarray] = None) -> np.ndarray:
+                   denoised_base: Optional[np.ndarray] = None,
+                   seed: int = 0) -> np.ndarray:
     """base : float32 RGB 0..1 pleine image (avant géométrie). Renvoie float32 0..1.
 
     `denoised_base` : version débruitée par IA de `base` (mêmes dimensions). Si fournie et
@@ -481,13 +497,13 @@ def apply_pipeline(base: np.ndarray, edits: dict, scale: float = 1.0,
                           float(det.get("defringe_green", 0.0)), scale)
     img = _apply_sharpen(img, float(det["sharpen_amount"]), float(det["sharpen_radius"]), scale)
     img = _apply_vignette(img, float(fx["vignette"]))
-    img = _apply_grain(img, float(fx["grain"]))
+    img = _apply_grain(img, float(fx["grain"]), scale, seed)
     return np.clip(img, 0.0, 1.0)
 
 
 def render_array(base: np.ndarray, edits: dict, max_size: int, full_long_edge: int,
                  show_mask: str = "", skip_crop: bool = False,
-                 denoised_base: Optional[np.ndarray] = None) -> np.ndarray:
+                 denoised_base: Optional[np.ndarray] = None, seed: int = 0) -> np.ndarray:
     """Pipeline + redimensionnement final ; renvoie uint8 RGB."""
     h, w = base.shape[:2]
     long_edge = max(h, w)
@@ -505,7 +521,7 @@ def render_array(base: np.ndarray, edits: dict, max_size: int, full_long_edge: i
 
     scale = max(working.shape[:2]) / max(full_long_edge, 1)
     out = apply_pipeline(working, edits, scale=scale, skip_crop=skip_crop,
-                         denoised_base=denoised_base)
+                         denoised_base=denoised_base, seed=seed)
     if show_mask:
         out = _overlay_mask(out, edits, show_mask)
 

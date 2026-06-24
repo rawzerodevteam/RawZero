@@ -10,6 +10,17 @@ from . import config
 _conn: Optional[sqlite3.Connection] = None
 _lock = threading.Lock()
 
+# O3 — séparation lecture/écriture. L'écriture passe par la connexion unique `_conn`
+# sérialisée par `_lock` ; la lecture utilise une connexion **par thread** (thread-local)
+# en WAL, où les lecteurs ne bloquent pas (ni ne sont bloqués par) l'écrivain. Plus de
+# verrou global sur les lectures ⇒ l'UI n'attend plus derrière un export / refresh de previews.
+# Chaque thread a sa propre connexion → pas d'entrelacement de curseurs (le risque qui
+# imposait jusqu'ici de sérialiser aussi les lectures sur la connexion partagée).
+_read_local = threading.local()
+_read_conns: list[sqlite3.Connection] = []
+_read_conns_lock = threading.Lock()
+_db_generation = 0   # incrémenté à reset_for_tests : invalide les conns de lecture héritées
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS photos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,20 +117,39 @@ def _migrate(conn: sqlite3.Connection) -> None:
     else:
         default_id = row[0]
     conn.execute("UPDATE photos SET project_id=? WHERE project_id IS NULL", (default_id,))
+    # Index du listing courant (filtre projet + tri/borne captured_at, cf. B6) : créé ici
+    # car project_id est ajouté par migration (absent du CREATE TABLE).
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_photos_project_captured "
+                 "ON photos(project_id, captured_at, id)")
+
+
+def _read_conn() -> sqlite3.Connection:
+    """Connexion de lecture propre au thread courant (WAL, pas de verrou global)."""
+    get_conn()                     # garantit schéma + migrations (sur la connexion d'écriture)
+    conn: Optional[sqlite3.Connection] = getattr(_read_local, "conn", None)
+    if conn is not None and getattr(_read_local, "gen", -1) != _db_generation:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        conn = None
+    if conn is None:
+        conn = sqlite3.connect(str(config.DB_PATH), check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON")
+        _read_local.conn = conn
+        _read_local.gen = _db_generation
+        with _read_conns_lock:
+            _read_conns.append(conn)
+    return conn
 
 
 def query(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
-    # La connexion est partagée entre threads (endpoints sync dans le threadpool) :
-    # on sérialise AUSSI les lectures, sinon des execute() concurrents entremêlent
-    # les curseurs et un fetch peut renvoyer None (→ faux 404). Le verrou n'est tenu
-    # que le temps de la requête, jamais pendant le calcul du pipeline.
-    with _lock:
-        return get_conn().execute(sql, params).fetchall()
+    return _read_conn().execute(sql, params).fetchall()
 
 
 def query_one(sql: str, params: tuple = ()) -> Optional[sqlite3.Row]:
-    with _lock:
-        return get_conn().execute(sql, params).fetchone()
+    return _read_conn().execute(sql, params).fetchone()
 
 
 def execute(sql: str, params: tuple = ()) -> int:
@@ -160,8 +190,17 @@ def photo_to_dict(row: sqlite3.Row, with_edits: bool = False) -> dict[str, Any]:
 
 
 def reset_for_tests() -> None:
-    """Ferme la connexion (les tests changent DATA_DIR)."""
-    global _conn
+    """Ferme les connexions (les tests changent DATA_DIR)."""
+    global _conn, _db_generation
     if _conn is not None:
         _conn.close()
         _conn = None
+    with _read_conns_lock:
+        for c in _read_conns:
+            try:
+                c.close()
+            except Exception:
+                pass
+        _read_conns.clear()
+    # Invalide les connexions de lecture héritées par d'autres threads (recréées au prochain accès).
+    _db_generation += 1

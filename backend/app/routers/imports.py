@@ -1,8 +1,11 @@
 """Import : upload navigateur + dossier monté (/import en Docker)."""
 import hashlib
 import logging
+import os
 import re
 import shutil
+import sqlite3
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -32,9 +35,8 @@ def _resolve_project(project_id: int | None) -> int:
     return row["id"] if row else 0
 
 
-def import_bytes_or_file(filename: str, src: Path | None = None,
-                         data: bytes | None = None, project_id: int | None = None) -> dict:
-    """Copie dans la bibliothèque, déduplique par hash, indexe, génère les previews."""
+def import_bytes_or_file(filename: str, src: Path, project_id: int | None = None) -> dict:
+    """Copie `src` dans la bibliothèque, déduplique par hash, indexe, génère les previews."""
     project_id = _resolve_project(project_id)
     filename = _safe_name(filename)
     ext = Path(filename).suffix.lower()
@@ -42,12 +44,9 @@ def import_bytes_or_file(filename: str, src: Path | None = None,
         return {"filename": filename, "status": "ignored", "reason": "format non supporté"}
 
     sha = hashlib.sha1()
-    if src is not None:
-        with open(src, "rb") as f:
-            for chunk in iter(lambda: f.read(1 << 20), b""):
-                sha.update(chunk)
-    else:
-        sha.update(data or b"")
+    with open(src, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            sha.update(chunk)
     digest = sha.hexdigest()
 
     existing = db.query_one("SELECT id FROM photos WHERE hash=?", (digest,))
@@ -63,21 +62,27 @@ def import_bytes_or_file(filename: str, src: Path | None = None,
     while dest.exists():
         dest = dest_dir / f"{Path(filename).stem}-{i}{ext}"
         i += 1
-    if src is not None:
-        shutil.copy2(src, dest)
-    else:
-        dest.write_bytes(data or b"")
+    shutil.copy2(src, dest)
 
     meta = raw_loader.read_exif(dest)
     width, height = raw_loader.image_dimensions(dest)
-    photo_id = db.execute(
-        """INSERT INTO photos (filename, relpath, hash, ext, is_raw, width, height,
-           captured_at, imported_at, camera, lens, iso, aperture, shutter, focal, project_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (dest.name, str(sub / dest.name).replace("\\", "/"), digest, ext,
-         int(raw_loader.is_raw(dest)), width, height,
-         meta["captured_at"], now.isoformat(), meta["camera"], meta["lens"],
-         meta["iso"], meta["aperture"], meta["shutter"], meta["focal"], project_id))
+    try:
+        photo_id = db.execute(
+            """INSERT INTO photos (filename, relpath, hash, ext, is_raw, width, height,
+               captured_at, imported_at, camera, lens, iso, aperture, shutter, focal, project_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (dest.name, str(sub / dest.name).replace("\\", "/"), digest, ext,
+             int(raw_loader.is_raw(dest)), width, height,
+             meta["captured_at"], now.isoformat(), meta["camera"], meta["lens"],
+             meta["iso"], meta["aperture"], meta["shutter"], meta["focal"], project_id))
+    except sqlite3.IntegrityError:
+        # Course TOCTOU : un import concurrent du même fichier a gagné la course
+        # (le check `existing` plus haut puis l'INSERT ne sont pas atomiques) et a
+        # déjà inséré ce hash → on retire la copie orpheline et on renvoie « duplicate ».
+        dest.unlink(missing_ok=True)
+        row = db.query_one("SELECT id FROM photos WHERE hash=?", (digest,))
+        return {"filename": filename, "status": "duplicate",
+                "id": row["id"] if row else None}
     try:
         previews.generate_initial_previews(photo_id, dest, meta.get("_orientation"))
     except Exception as e:
@@ -90,13 +95,25 @@ def import_bytes_or_file(filename: str, src: Path | None = None,
 @router.post("/import/upload")
 async def import_upload(files: list[UploadFile], project_id: int = Form(0)):
     results = []
+    config.ensure_dirs()
     for f in files:
-        data = await f.read()
+        # Streamé vers un fichier temporaire (même volume que la bibliothèque) plutôt que
+        # `await f.read()` qui matérialisait tout le RAW (40-80 Mo) en RAM d'un coup.
+        tmp: Path | None = None
         try:
-            results.append(import_bytes_or_file(f.filename or "photo", data=data, project_id=project_id))
+            fd, tmp_name = tempfile.mkstemp(dir=config.DATA_DIR, suffix=".upload")
+            tmp = Path(tmp_name)
+            with os.fdopen(fd, "wb") as out:
+                while chunk := await f.read(1 << 20):
+                    out.write(chunk)
+            results.append(import_bytes_or_file(f.filename or "photo", src=tmp, project_id=project_id))
         except Exception as e:
             log.exception("Import upload échoué : %s", f.filename)
             results.append({"filename": f.filename, "status": "error", "reason": str(e)})
+        finally:
+            if tmp is not None:
+                tmp.unlink(missing_ok=True)
+            await f.close()
     return {"results": results}
 
 

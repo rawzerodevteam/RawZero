@@ -105,13 +105,25 @@ export function useGpuPreview(
     return () => { ctrl.abort(); if (url) URL.revokeObjectURL(url); };
   }, [active, ready, currentId, nrAi]);
 
-  // Rendu à chaque changement de réglage / d'état (synchrone, sans réseau)
+  // Rendu à chaque changement de réglage / d'état (sans réseau), COALESCÉ sur une frame
+  // d'animation. Appeler render() synchroniquement à chaque event de slider (>60×/s) empile
+  // les passes plus vite que le GPU ne les draine : la file de commandes WebGL sature et le
+  // prochain appel gl.* BLOQUE le thread principal → le slider lague. En ne rendant qu'une
+  // fois par frame (rAF, aligné au compositeur), on ne devance jamais le GPU.
+  const rafRef = useRef<number>();
   useEffect(() => {
     if (!active || !pipeRef.current || !ready || !edits) return;
-    const ovl = beforeAfter || skipCrop ? null : maskOverlayId;
-    pipeRef.current.render(beforeAfter ? defaultEdits() : edits, skipCrop, showClip, ovl);
-    const c = canvasRef.current;
-    if (c) setDims((d) => (d.w !== c.width || d.h !== c.height ? { w: c.width, h: c.height } : d));
+    if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = undefined;
+      const pipe = pipeRef.current;
+      if (!pipe) return;
+      const ovl = beforeAfter || skipCrop ? null : maskOverlayId;
+      pipe.render(beforeAfter ? defaultEdits() : edits, skipCrop, showClip, ovl);
+      const c = canvasRef.current;
+      if (c) setDims((d) => (d.w !== c.width || d.h !== c.height ? { w: c.width, h: c.height } : d));
+    });
+    return () => { if (rafRef.current !== undefined) { cancelAnimationFrame(rafRef.current); rafRef.current = undefined; } };
   }, [active, edits, ready, skipCrop, beforeAfter, showClip, maskOverlayId, canvasRef, asyncTick]);
 
   return { ready, error, dims };

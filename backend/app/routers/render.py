@@ -33,7 +33,7 @@ def render(photo_id: int, req: RenderRequest, max_size: int = config.PREVIEW_SIZ
         denoised = previews.get_denoised_base(photo_id, original)
     arr = pipeline.render_array(base, edits, min(max_size, config.BASE_SIZE),
                                 previews.full_long_edge(dict(row)), show_mask=show_mask,
-                                skip_crop=crop_edit, denoised_base=denoised)
+                                skip_crop=crop_edit, denoised_base=denoised, seed=photo_id)
     t2 = time.perf_counter()
     jpeg = pipeline.encode_jpeg(arr, 90)
     t3 = time.perf_counter()

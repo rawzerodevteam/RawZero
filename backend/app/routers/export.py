@@ -119,7 +119,8 @@ def _export_one(row: dict, out_dir: Path, req: ExportRequest) -> dict:
         except Exception as e:
             log.warning("Débruitage IA export échoué #%s : %s", row.get("id"), e)
     arr = pipeline.render_array(base, edits, req.max_size or 0,
-                                max(base.shape[:2]), denoised_base=denoised)
+                                max(base.shape[:2]), denoised_base=denoised,
+                                seed=int(row.get("id") or 0))
     del base, denoised
     stem = Path(row["filename"]).stem + (req.suffix or "")
     ext = FORMATS[req.format]

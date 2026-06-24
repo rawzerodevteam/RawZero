@@ -26,8 +26,15 @@ const RENDER_DRAG_SIZE = 768;
 const RENDER_IDLE_MS = 150;
 const RENDER_IDLE_SIZE = 2048;
 
-/** Rendu interactif : deux vitesses (drag rapide 768px, idle haute qualité 2048px). */
-function useRenderedImage(): string | null {
+/** Rendu interactif : deux vitesses (drag rapide 768px, idle haute qualité 2048px).
+ *
+ * `gpuActive` : en mode GPU, le canvas WebGL donne déjà le retour live → inutile de cuire un
+ * JPEG serveur À CHAQUE tick. Pire : chaque rendu terminé recharge une image + recalcule
+ * l'histogramme (getImageData + boucle ~43k px + décodage JPEG) sur le thread principal, en
+ * boucle pendant le drag → ~80 % CPU navigateur. On saute donc le rendu serveur PENDANT le
+ * drag en mode GPU ; il repart au relâchement (l'histogramme et le rendu HD se mettent à jour
+ * quand on lâche le slider). En mode serveur (GPU off), comportement inchangé. */
+function useRenderedImage(gpuActive: boolean): string | null {
   const currentId = useStore((s) => s.currentId);
   const edits = useStore((s) => s.edits);
   const beforeAfter = useStore((s) => s.beforeAfter);
@@ -55,6 +62,10 @@ function useRenderedImage(): string | null {
 
   useEffect(() => {
     if (currentId === null || !edits) { setSrc(null); return; }
+    // Mode GPU : pas de rendu serveur pendant le drag (le canvas WebGL suffit). On annule un
+    // éventuel rendu en vol et on attend le relâchement (isDragging repassera à false → effet
+    // relancé) pour rafraîchir histogramme + image HD.
+    if (gpuActive && isDragging) { window.clearTimeout(timerRef.current); abortRef.current?.abort(); return; }
     window.clearTimeout(timerRef.current);
     const delay = isDragging ? RENDER_DRAG_MS : RENDER_IDLE_MS;
     const maxSize = isDragging ? RENDER_DRAG_SIZE : RENDER_IDLE_SIZE;
@@ -73,7 +84,7 @@ function useRenderedImage(): string | null {
         .catch((e) => { if ((e as Error).name !== "AbortError") console.error(e); });
     }, delay);
     return () => window.clearTimeout(timerRef.current);
-  }, [currentId, edits, beforeAfter, showMaskOverlay, selectedLocalId, isDragging, maskSuppressed, cropEdit]);
+  }, [currentId, edits, beforeAfter, showMaskOverlay, selectedLocalId, isDragging, maskSuppressed, cropEdit, gpuActive]);
 
   // libération de la dernière URL au démontage
   useEffect(() => () => {
@@ -100,7 +111,7 @@ export function DevelopView() {
   const resetEdits = useStore((s) => s.resetEdits);
   const [gpuPreview, setGpuPreview] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
-  const src = useRenderedImage();
+  const src = useRenderedImage(gpuPreview);
 
   if (!photo) return <div className="empty-state"><p>{t("develop.noPhoto")}</p></div>;
 

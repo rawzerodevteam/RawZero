@@ -355,3 +355,31 @@ class TestRenderAndAuto:
         out = apply_pipeline(img, edits(presence={"dehaze": 60.0}))
         assert out.shape == img.shape
         assert np.isfinite(out).all()
+
+
+class TestGrain:
+    """B8 — grain : déterministe par graine, motif différent entre photos, mis à l'échelle."""
+
+    def test_grain_off_is_noop(self):
+        img = gradient_image()
+        out = apply_pipeline(img, edits(effects={"grain": 0.0}), seed=42)
+        assert np.allclose(out, np.clip(apply_pipeline(img, edits()), 0, 1))
+
+    def test_grain_same_seed_deterministic(self):
+        img = gradient_image()
+        a = apply_pipeline(img, edits(effects={"grain": 50.0}), seed=7)
+        b = apply_pipeline(img, edits(effects={"grain": 50.0}), seed=7)
+        assert np.array_equal(a, b)
+
+    def test_grain_differs_by_seed(self):
+        img = gradient_image()
+        a = apply_pipeline(img, edits(effects={"grain": 50.0}), seed=1)
+        b = apply_pipeline(img, edits(effects={"grain": 50.0}), seed=2)
+        # Motif différent d'une photo à l'autre (plus de graine fixe partagée).
+        assert not np.array_equal(a, b)
+
+    def test_grain_actually_perturbs(self):
+        img = gradient_image()
+        clean = apply_pipeline(img, edits())
+        grainy = apply_pipeline(img, edits(effects={"grain": 80.0}), seed=3)
+        assert float(np.abs(grainy - np.clip(clean, 0, 1)).mean()) > 1e-4
