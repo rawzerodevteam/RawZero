@@ -114,6 +114,7 @@ interface Store {
   brushErase: boolean;
   cropAspect: number | null;
   aiSubjectAvailable: boolean;    // modèle « sujet » (U²-Net) présent
+  aiSkyAvailable: boolean;        // détection de ciel heuristique (toujours dispo)
   aiPointAvailable: boolean;      // modèle « clic » (EdgeSAM) présent
   aiDenoiseAvailable: boolean;    // modèle de débruitage IA (FFDNet) présent
   aiMaskBusy: boolean;            // calcul d'un masque IA en cours
@@ -220,6 +221,7 @@ export const useStore = create<Store>((set, get) => ({
   brushErase: false,
   cropAspect: null,
   aiSubjectAvailable: false,
+  aiSkyAvailable: false,
   aiPointAvailable: false,
   aiDenoiseAvailable: false,
   aiMaskBusy: false,
@@ -248,7 +250,8 @@ export const useStore = create<Store>((set, get) => ({
 
   async refreshAiAvailability() {
     const a = await api.autoMaskAvailable();
-    set({ aiSubjectAvailable: a.subject, aiPointAvailable: a.point, aiDenoiseAvailable: a.denoise });
+    set({ aiSubjectAvailable: a.subject, aiSkyAvailable: a.sky,
+          aiPointAvailable: a.point, aiDenoiseAvailable: a.denoise });
   },
 
   async loadProjects() {
@@ -512,9 +515,10 @@ export const useStore = create<Store>((set, get) => ({
     set({ aiMaskBusy: true });
     try {
       const local = await api.autoMask(currentId, edits, kind);
-      get().updateEdits((e) => { e.locals.push(local); }, true, i18n.t("history.subjectMask"));
+      const label = i18n.t(kind === "sky" ? "history.skyMask" : "history.subjectMask");
+      get().updateEdits((e) => { e.locals.push(local); }, true, label);
       set({ selectedLocalId: local.id, activeTool: "none", showMaskOverlay: true });
-      get().notify("Masque « sujet » créé");
+      get().notify(i18n.t(kind === "sky" ? "local.skyCreated" : "local.subjectCreated"));
     } catch (err) {
       get().notify(`Masque IA impossible : ${err}`);
     } finally {

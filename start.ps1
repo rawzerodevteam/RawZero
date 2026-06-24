@@ -90,10 +90,15 @@ function Open-WhenReady([string]$url, [string]$healthUrl) {
 
 if ($Dev) {
   # ---- Mode développement : backend --reload en arrière-plan + Vite au premier plan ----
+  # On limite la surveillance au code source backend : sinon uvicorn --reload watche tout le
+  # dossier racine (node_modules, .tools, et surtout data/ et ses milliers de fichiers de cache
+  # régénérés en tâche de fond) → reload lent et redémarrages intempestifs.
   $env:STATIC_DIR = ""
+  $backendSrc = Join-Path $root "backend\app"
   Write-Host "Backend (reload) : http://localhost:$Port — Frontend (Vite) : http://localhost:5173" -ForegroundColor Cyan
+  Write-Host "  → Ouvre http://localhost:5173 (HMR). Code front = instantané, code Python = redémarrage auto." -ForegroundColor DarkGray
   $backend = Start-Process -PassThru -NoNewWindow $python `
-    -ArgumentList "-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--reload", "--port", $Port
+    -ArgumentList "-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--reload", "--reload-dir", $backendSrc, "--port", $Port
   try {
     Open-WhenReady "http://localhost:5173" "http://localhost:5173"
     Push-Location $front

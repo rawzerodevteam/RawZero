@@ -105,6 +105,57 @@ def subject_mask(img: np.ndarray) -> np.ndarray:
     return cv2.resize(pred.astype(np.float32), (w, h), interpolation=cv2.INTER_LINEAR)
 
 
+# ------------------------------------------------------------- Ciel (heuristique)
+
+def _smoothstep01(e0: float, e1: float, x: np.ndarray) -> np.ndarray:
+    t = np.clip((x - e0) / max(e1 - e0, 1e-6), 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def sky_mask(img: np.ndarray) -> np.ndarray:
+    """Masque de ciel **heuristique** (sans modèle, toujours disponible).
+
+    `img` : float32 RGB 0..1. Renvoie float32 (h, w) dans 0..1.
+    Combine trois indices : couleur (bleu franc *ou* clair/désaturé, type couvert ou brume),
+    a priori vertical (le ciel est plutôt en haut) et connexité au bord supérieur (écarte
+    les objets bleus ou clairs du bas de l'image), puis adoucit les bords.
+    """
+    img = np.clip(img, 0.0, 1.0).astype(np.float32)
+    h, w = img.shape[:2]
+    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)              # H:0..360  S:0..1  V:0..1
+    H, S, V = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+
+    # Ciel bleu : teinte proche du cyan-bleu (~205°), saturation et clarté correctes.
+    hue_dist = np.abs(H - 205.0)
+    blue = ((1.0 - _smoothstep01(35.0, 80.0, hue_dist))
+            * _smoothstep01(0.08, 0.25, S) * _smoothstep01(0.35, 0.6, V))
+    # Ciel clair / couvert / brumeux : très lumineux et peu saturé.
+    bright = _smoothstep01(0.62, 0.85, V) * (1.0 - _smoothstep01(0.18, 0.40, S))
+    color = np.maximum(blue, bright)
+
+    # A priori vertical : ~1 en haut, décroît vers le bas (sans tuer complètement le bas).
+    yy = np.linspace(0.0, 1.0, h, dtype=np.float32)[:, None]
+    yprior = 0.25 + 0.75 * (1.0 - _smoothstep01(0.45, 0.95, yy))
+    score = color * yprior
+
+    # Connexité : ne garder que les régions de ciel raccordées au bord supérieur de l'image,
+    # ce qui élimine les murs clairs, l'eau ou les vêtements bleus situés plus bas.
+    binary = (score > 0.35).astype(np.uint8)
+    k = max(3, (min(h, w) // 200) | 1)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, np.ones((k, k), np.uint8))
+    n, labels = cv2.connectedComponents(binary)
+    top_band = labels[0:max(1, h // 50), :]
+    top_labels = [int(v) for v in np.unique(top_band) if v != 0]
+    if top_labels:
+        keep = np.isin(labels, top_labels).astype(np.float32)
+    else:
+        keep = (score > 0.5).astype(np.float32)            # repli : pas de ciel au bord haut
+
+    soft = score * keep
+    soft = cv2.GaussianBlur(soft, (0, 0), max(min(h, w) * 0.004, 0.6))
+    return np.clip(soft, 0.0, 1.0).astype(np.float32)
+
+
 # ------------------------------------------------------------- EdgeSAM (clic)
 
 def sam_encoder_path():

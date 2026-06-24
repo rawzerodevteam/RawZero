@@ -68,6 +68,7 @@ _MASK_STORE_SIZE = 1024
 def automask_available():
     """Indique au client quelles fonctions IA sont utilisables (modèles présents)."""
     return {"subject": segment.available(), "point": segment.point_available(),
+            "sky": True,  # détection de ciel heuristique : toujours disponible (sans modèle)
             "denoise": denoise.available()}
 
 
@@ -81,9 +82,9 @@ def automask(photo_id: int, body: AutoMaskBody):
 
     Le masque est calculé sur l'image *géométrie appliquée* (recadrée) pour s'aligner sur
     l'espace des autres masques, puis stocké normalisé sous MASKS_DIR/{photo}/{id}.png."""
-    if body.kind != "subject":
+    if body.kind not in ("subject", "sky"):
         raise HTTPException(422, "Type de masque IA non pris en charge")
-    if not segment.available():
+    if body.kind == "subject" and not segment.available():
         raise HTTPException(503, "Masque IA indisponible (onnxruntime ou modèle absent)")
     row = get_photo_row(photo_id)
     base = previews.get_base(photo_id, config.ORIGINALS_DIR / row["relpath"])
@@ -91,11 +92,11 @@ def automask(photo_id: int, body: AutoMaskBody):
     img = pipeline.apply_geometry(base.astype(np.float32, copy=True), e["geometry"])
     small = _resize_long_edge(img, _MASK_STORE_SIZE)
     try:
-        mask = segment.subject_mask(small)
+        mask = segment.sky_mask(small) if body.kind == "sky" else segment.subject_mask(small)
     except segment.SegmentationUnavailable as ex:
         raise HTTPException(503, str(ex))
     if float(mask.max()) < 1e-3:
-        raise HTTPException(422, "Aucun sujet détecté")
+        raise HTTPException(422, "Aucun ciel détecté" if body.kind == "sky" else "Aucun sujet détecté")
     return _store_mask(photo_id, mask, body.kind)
 
 

@@ -27,6 +27,7 @@ export function LocalPanel() {
   const brushErase = useStore((s) => s.brushErase);
   const setUI = useStore((s) => s.setUI);
   const aiSubjectAvailable = useStore((s) => s.aiSubjectAvailable);
+  const aiSkyAvailable = useStore((s) => s.aiSkyAvailable);
   const aiPointAvailable = useStore((s) => s.aiPointAvailable);
   const aiMaskBusy = useStore((s) => s.aiMaskBusy);
   const createAutoMask = useStore((s) => s.createAutoMask);
@@ -66,7 +67,7 @@ export function LocalPanel() {
       {TOOLS.some((x) => x.tool === activeTool) && (
         <p className="hint">{t(TOOLS.find((x) => x.tool === activeTool)!.hint)}</p>
       )}
-      {(aiSubjectAvailable || aiPointAvailable) && (
+      {(aiSubjectAvailable || aiSkyAvailable || aiPointAvailable) && (
         <div className="row-actions ai-actions">
           {aiPointAvailable && (
             <button
@@ -86,6 +87,16 @@ export function LocalPanel() {
               onClick={() => void createAutoMask("subject")}
             >
               {aiMaskBusy ? t("local.computing") : t("local.autoSelect")}
+            </button>
+          )}
+          {aiSkyAvailable && (
+            <button
+              className={"btn ai-mask" + (aiMaskBusy ? " busy" : "")}
+              disabled={aiMaskBusy}
+              title={t("local.skyTitle")}
+              onClick={() => void createAutoMask("sky")}
+            >
+              {aiMaskBusy ? t("local.computing") : t("local.skySelect")}
             </button>
           )}
         </div>
@@ -133,7 +144,7 @@ export function LocalPanel() {
                 activeTool: l.type === "brush" && l.id !== selectedLocalId ? "brush" : "none",
               })}
             >
-              <span>{i + 1}. {t(`local.type.${l.type}`)}</span>
+              <span>{i + 1}. {t(l.type === "ai" && l.params.kind === "sky" ? "local.type.sky" : `local.type.${l.type}`)}</span>
               {l.invert && <span className="tag">{t("local.invTag")}</span>}
             </li>
           ))}
