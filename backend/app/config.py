@@ -11,7 +11,7 @@ THUMBS_DIR = DATA_DIR / "cache" / "thumbs"
 PREVIEWS_DIR = DATA_DIR / "cache" / "previews"
 BASE_DIR = DATA_DIR / "cache" / "base"
 MASKS_DIR = DATA_DIR / "cache" / "masks"   # masques IA rasterisés (PNG mono-canal)
-MODELS_DIR = DATA_DIR / "models"           # modèles ONNX (déposés manuellement)
+MODELS_DIR = DATA_DIR / "models"           # modèles ONNX (téléchargés à la demande, cf. routers/models.py)
 EXPORTS_DIR = DATA_DIR / "exports"
 DB_PATH = DATA_DIR / "catalog.db"
 
