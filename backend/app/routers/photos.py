@@ -16,6 +16,13 @@ SORTS = {
     "name_asc": "filename COLLATE NOCASE ASC",
 }
 
+# Colonnes servies au listing : tout SAUF les blobs TEXT `edits`/`history` (volumineux et
+# aussitôt jetés par photo_to_dict en mode listing) et relpath/hash (retirés de la sortie).
+# Évite de lire ces blobs pour chaque photo à chaque changement de filtre/tri.
+LIST_COLS = ("id", "filename", "ext", "is_raw", "width", "height", "captured_at",
+             "imported_at", "camera", "lens", "iso", "aperture", "shutter", "focal",
+             "rating", "flag", "color", "edited", "project_id")
+
 
 @router.get("/photos")
 def list_photos(min_rating: int = 0, flag: str = "", color: str = "",
@@ -24,12 +31,13 @@ def list_photos(min_rating: int = 0, flag: str = "", color: str = "",
                 date_from: str = "", date_to: str = ""):
     # Un album est transverse aux projets : s'il est demandé, il prime sur project_id.
     if album_id:
-        sql = ("SELECT photos.* FROM photos "
+        cols = ", ".join("photos." + c for c in LIST_COLS)
+        sql = (f"SELECT {cols} FROM photos "
                "JOIN album_photos ON album_photos.photo_id = photos.id "
                "WHERE album_photos.album_id = ? AND photos.rating >= ?")
         params: list = [album_id, min_rating]
     else:
-        sql = "SELECT * FROM photos WHERE rating >= ?"
+        sql = f"SELECT {', '.join(LIST_COLS)} FROM photos WHERE rating >= ?"
         params = [min_rating]
         if project_id:
             sql += " AND project_id = ?"
@@ -104,17 +112,24 @@ class PhotoPatch(BaseModel):
 @router.patch("/photos/{photo_id}")
 def patch_photo(photo_id: int, patch: PhotoPatch):
     get_photo_row(photo_id)
+    sets: list[str] = []
+    params: list = []
     if patch.rating is not None:
-        db.execute("UPDATE photos SET rating=? WHERE id=?",
-                   (max(0, min(5, patch.rating)), photo_id))
+        sets.append("rating=?")
+        params.append(max(0, min(5, patch.rating)))
     if patch.flag is not None:
         if patch.flag not in ("none", "pick", "reject"):
             raise HTTPException(422, "flag invalide")
-        db.execute("UPDATE photos SET flag=? WHERE id=?", (patch.flag, photo_id))
+        sets.append("flag=?")
+        params.append(patch.flag)
     if patch.color is not None:
         if patch.color not in ("", "red", "yellow", "green", "blue", "purple"):
             raise HTTPException(422, "couleur invalide")
-        db.execute("UPDATE photos SET color=? WHERE id=?", (patch.color, photo_id))
+        sets.append("color=?")
+        params.append(patch.color)
+    if sets:                                  # un seul UPDATE même quand plusieurs champs changent
+        params.append(photo_id)
+        db.execute(f"UPDATE photos SET {', '.join(sets)} WHERE id=?", tuple(params))
     return db.photo_to_dict(get_photo_row(photo_id))
 
 

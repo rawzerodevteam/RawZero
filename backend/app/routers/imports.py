@@ -101,9 +101,10 @@ async def import_upload(files: list[UploadFile], project_id: int = Form(0)):
 
 
 def _resolve_import_path(rel: str) -> Path:
-    base = config.IMPORT_DIR
+    base = config.IMPORT_DIR.resolve()
     target = (base / rel.lstrip("/\\")).resolve()
-    if not str(target).startswith(str(base.resolve())):
+    # is_relative_to (vs startswith de chaîne) : « /import_evil » ne passe plus pour base « /import ».
+    if target != base and not target.is_relative_to(base):
         raise HTTPException(403, "Chemin hors du dossier d'import")
     return target
 

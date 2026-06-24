@@ -251,7 +251,9 @@ def _curve_lut(pts_key: tuple, n: int = 1024) -> Optional[np.ndarray]:
 
 
 def _pts_key(points: list) -> tuple:
-    return tuple(sorted({(round(float(p[0]), 5), float(p[1])) for p in (points or [])}))
+    # x ET y arrondis : sinon un drag de courbe génère une clé inédite à chaque frame et la
+    # lru_cache de `_curve_lut` rate (recalcul PCHIP). 1e-5 reste imperceptible sur une LUT 1024.
+    return tuple(sorted({(round(float(p[0]), 5), round(float(p[1]), 5)) for p in (points or [])}))
 
 
 def _eval_lut(lut: np.ndarray, x: np.ndarray) -> np.ndarray:
