@@ -50,6 +50,13 @@ export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "wb" | "poi
 
 let saveTimer: number | undefined;
 
+// Coalescing des mises à jour « live » d'un drag de slider sur une frame d'animation.
+// onChange d'un <input range> peut tirer plusieurs fois par frame (souris haute fréquence) ;
+// chaque appel ferait un structuredClone(edits) + set Zustand → re-rendu de TOUS les panneaux.
+// On ne garde que la dernière mutation et on l'applique une fois par rAF (aligné sur le rendu GPU).
+let liveRaf: number | undefined;
+let liveFn: ((e: EditState) => void) | null = null;
+
 // Persistance de la dernière session (projet / photo / vue) pour rouvrir l'app où on l'a laissée.
 const SESSION_KEY = "rs.session";
 interface Session { projectId: number | null; photoId: number | null; view: View; }
@@ -157,6 +164,7 @@ interface Store {
   createAutoMask(kind: string): Promise<void>;
   createPointMask(x: number, y: number): Promise<void>;
   updateEdits(fn: (e: EditState) => void, commit?: boolean, label?: string): void;
+  updateEditsLive(fn: (e: EditState) => void): void;
   startDrag(): void;
   endDrag(): void;
   undo(): void;
@@ -574,12 +582,22 @@ export const useStore = create<Store>((set, get) => ({
     scheduleSave();
   },
 
+  // Mise à jour pendant un drag de slider : coalescée sur une frame (un seul clone + un seul
+  // re-rendu React par frame, quelle que soit la fréquence des events). Pas de bookkeeping undo
+  // ici (le point d'historique est posé une fois par startDrag/endDrag).
+  updateEditsLive(fn) {
+    liveFn = fn;
+    if (liveRaf !== undefined) return;
+    liveRaf = requestAnimationFrame(() => flushLiveEdit());
+  },
+
   startDrag() {
     const cur = get().edits;
     if (cur && !get().dragBaseline) set({ dragBaseline: structuredClone(cur) });
   },
 
   endDrag() {
+    flushLiveEdit(); // applique la dernière valeur en attente avant de figer la baseline
     const base = get().dragBaseline;
     const cur = get().edits;
     if (base && cur) {
@@ -724,6 +742,20 @@ export const useStore = create<Store>((set, get) => ({
 function scheduleSave() {
   if (saveTimer) window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => void useStore.getState().saveNow(), 800);
+}
+
+/** Applique immédiatement la mutation « live » en attente (un drag de slider) et annule le rAF.
+ *  Appelé par le rAF lui-même ou par endDrag pour ne pas perdre la valeur finale. */
+function flushLiveEdit() {
+  if (liveRaf !== undefined) { cancelAnimationFrame(liveRaf); liveRaf = undefined; }
+  const fn = liveFn; liveFn = null;
+  if (!fn) return;
+  const cur = useStore.getState().edits;
+  if (!cur) return;
+  const next = structuredClone(cur);
+  fn(next);
+  useStore.setState({ edits: next, dirty: true });
+  scheduleSave();
 }
 
 // Mémorise projet/photo/vue à chaque changement pour rouvrir l'app dans le même état.

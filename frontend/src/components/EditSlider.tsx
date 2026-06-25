@@ -20,6 +20,7 @@ interface Props {
 export function EditSlider({ label, value, min, max, step = 1, reset = 0, fmt, apply }: Props) {
   const { t } = useTranslation();
   const updateEdits = useStore((s) => s.updateEdits);
+  const updateEditsLive = useStore((s) => s.updateEditsLive);
   const startDrag = useStore((s) => s.startDrag);
   const endDrag = useStore((s) => s.endDrag);
   const [editing, setEditing] = useState(false);
@@ -60,7 +61,7 @@ export function EditSlider({ label, value, min, max, step = 1, reset = 0, fmt, a
         value={value}
         onPointerDown={startDrag}
         onKeyDown={startDrag}
-        onChange={(ev) => updateEdits((e) => apply(e, Number(ev.target.value)), false)}
+        onChange={(ev) => { const v = Number(ev.target.value); updateEditsLive((e) => apply(e, v)); }}
         onPointerUp={endDrag}
         onKeyUp={endDrag}
         onBlur={endDrag}
