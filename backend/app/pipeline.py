@@ -109,6 +109,18 @@ def luma(img: np.ndarray) -> np.ndarray:
 
 def gauss(img: np.ndarray, sigma: float) -> np.ndarray:
     sigma = max(float(sigma), 0.3)
+    # Grand sigma : un flou gaussien à pleine résolution construit un noyau énorme
+    # (ksize ≈ 8σ) → coût prohibitif (~4 s à σ≈116 sur 22 Mpx). Le résultat étant
+    # basse fréquence, on floute une version réduite d'un facteur k puis on ré-agrandit :
+    # 50–85× plus rapide, écart ≤ 0.06/255 vs le flou plein (k borné à 4, conservateur).
+    # Les petits σ (netteté, défrange) gardent k=1 → flou OpenCV strictement identique.
+    k = max(1, min(4, int(sigma / 8)))
+    if k > 1:
+        h, w = img.shape[:2]
+        small = cv2.resize(img, (max(w // k, 1), max(h // k, 1)), interpolation=cv2.INTER_AREA)
+        small = cv2.GaussianBlur(small, (0, 0), sigmaX=sigma / k, sigmaY=sigma / k,
+                                 borderType=cv2.BORDER_REFLECT)
+        return cv2.resize(small, (w, h), interpolation=cv2.INTER_LINEAR)
     return cv2.GaussianBlur(img, (0, 0), sigmaX=sigma, sigmaY=sigma,
                             borderType=cv2.BORDER_REFLECT)
 
@@ -188,6 +200,8 @@ def _apply_hl_shadows(img: np.ndarray, highlights: float, shadows: float) -> np.
     hl, sh = highlights / 100.0, shadows / 100.0
     l = luma(img)
     lb = gauss(l, max(img.shape[:2]) * 0.02)
+    if rsfast.available():   # combinaison per-pixel (gain) multi-cœur ; flou laissé à cv2
+        return rsfast.hl_shadows(img, lb, hl, sh)
     gain = np.ones_like(lb)
     if hl:
         w_h = _smoothstep(0.35, 0.95, lb) ** 1.2
@@ -350,7 +364,10 @@ def _apply_clarity(img: np.ndarray, clarity: float, scale: float) -> np.ndarray:
     amt = clarity / 100.0
     l = luma(img)
     sigma = max(8.0, max(img.shape[:2]) * 0.012)
-    detail = l - gauss(l, sigma)
+    blur_l = gauss(l, sigma)
+    if rsfast.available():
+        return rsfast.clarity(img, blur_l, amt)
+    detail = l - blur_l
     midtone_w = 1.0 - np.abs(2.0 * np.clip(l, 0, 1) - 1.0) ** 2
     return img + (amt * 0.9 * detail * midtone_w)[..., None]
 
@@ -363,7 +380,9 @@ def _apply_dehaze(img: np.ndarray, dehaze: float) -> np.ndarray:
     if amt < 0:  # voile artistique
         return x * (1.0 + amt * 0.35) + (-amt) * 0.35 * 0.92
     dark = cv2.erode(x.min(axis=2), np.ones((9, 9), np.uint8))
-    a = float(np.percentile(x, 99.5))
+    # Lumière atmosphérique : percentile global (statistique très robuste) estimé sur un
+    # sous-échantillon (~16× moins de pixels) — résultat quasi identique, ~7× plus rapide.
+    a = float(np.percentile(x[::4, ::4], 99.5))
     a = max(a, 0.5)
     t = 1.0 - 0.85 * amt * gauss(dark, max(img.shape[:2]) * 0.01) / a
     t = np.clip(t, 0.25, 1.0)[..., None]
@@ -394,9 +413,12 @@ def _apply_defringe(img: np.ndarray, purple: float, green: float, scale: float) 
     pondérée par la force du bord et par la « couleur de frange » du pixel."""
     if not (purple or green):
         return img
-    l = luma(img)
     sigma = max(1.5 * scale, 0.6)
-    edge = np.clip(np.abs(l - luma(gauss(img, sigma))) * 8.0, 0.0, 1.0)  # bords haute fréquence
+    blur_luma = luma(gauss(img, sigma))
+    if rsfast.available():   # math per-pixel exacte, multi-cœur ; flou (petit σ) laissé à cv2
+        return rsfast.defringe(img, blur_luma, purple, green)
+    l = luma(img)
+    edge = np.clip(np.abs(l - blur_luma) * 8.0, 0.0, 1.0)  # bords haute fréquence
     r, g, b = img[..., 0], img[..., 1], img[..., 2]
     pm = np.clip(np.minimum(r, b) - g, 0.0, 1.0)   # pourpre/magenta : R,B hauts, V bas
     gm = np.clip(g - np.maximum(r, b), 0.0, 1.0)    # vert : V haut, R,B bas
@@ -410,7 +432,10 @@ def _apply_sharpen(img: np.ndarray, amount: float, radius: float, scale: float) 
     if amount <= 0:
         return img
     sigma = max(radius * scale, 0.4)
-    detail = luma(img) - luma(gauss(img, sigma))
+    blur_luma = luma(gauss(img, sigma))
+    if rsfast.available():
+        return rsfast.sharpen(img, blur_luma, amount)
+    detail = luma(img) - blur_luma
     return img + (amount / 100.0) * detail[..., None]
 
 

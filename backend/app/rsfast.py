@@ -52,6 +52,10 @@ def _load() -> Optional[C.CDLL]:
         lib.rs_curve.argtypes = [_F32P, C.c_size_t, _F32P, _F32P, _F32P, C.c_size_t]
         lib.rs_hsl.argtypes = [_F32P, C.c_size_t, _F32P, _F32P, _F32P, _F32P,
                                C.c_size_t, C.c_float, C.c_float]
+        lib.rs_hl_shadows.argtypes = [_F32P, _F32P, C.c_size_t, C.c_float, C.c_float]
+        lib.rs_clarity.argtypes = [_F32P, _F32P, C.c_size_t, C.c_float]
+        lib.rs_sharpen.argtypes = [_F32P, _F32P, C.c_size_t, C.c_float]
+        lib.rs_defringe.argtypes = [_F32P, _F32P, C.c_size_t, C.c_float, C.c_float]
         lib.rs_vignette.argtypes = [_F32P, C.c_size_t, C.c_size_t, C.c_size_t, C.c_float]
         _lib = lib
         log.info("rsfast chargé : %s", path.name)
@@ -110,6 +114,34 @@ def hsl(hsv: np.ndarray, centers: np.ndarray, bh: np.ndarray, bs: np.ndarray,
     n = hsv.shape[0] * hsv.shape[1]
     _lib.rs_hsl(_ptr(hsv), n, _ptr(centers), _ptr(bh), _ptr(bs), _ptr(bl),
                 len(centers), vibrance, saturation)
+
+
+def hl_shadows(img: np.ndarray, lb: np.ndarray, hl: float, sh: float) -> np.ndarray:
+    a = _buf(img)
+    lbc = np.ascontiguousarray(lb, dtype=np.float32)
+    _lib.rs_hl_shadows(_ptr(a), _ptr(lbc), a.shape[0] * a.shape[1], hl, sh)
+    return a
+
+
+def clarity(img: np.ndarray, blur_l: np.ndarray, amt: float) -> np.ndarray:
+    a = _buf(img)
+    blc = np.ascontiguousarray(blur_l, dtype=np.float32)
+    _lib.rs_clarity(_ptr(a), _ptr(blc), a.shape[0] * a.shape[1], amt)
+    return a
+
+
+def sharpen(img: np.ndarray, blur_luma: np.ndarray, amount: float) -> np.ndarray:
+    a = _buf(img)
+    blc = np.ascontiguousarray(blur_luma, dtype=np.float32)
+    _lib.rs_sharpen(_ptr(a), _ptr(blc), a.shape[0] * a.shape[1], amount)
+    return a
+
+
+def defringe(img: np.ndarray, blur_luma: np.ndarray, purple: float, green: float) -> np.ndarray:
+    a = _buf(img)
+    blc = np.ascontiguousarray(blur_luma, dtype=np.float32)
+    _lib.rs_defringe(_ptr(a), _ptr(blc), a.shape[0] * a.shape[1], purple, green)
+    return a
 
 
 def vignette(img: np.ndarray, v: float) -> np.ndarray:

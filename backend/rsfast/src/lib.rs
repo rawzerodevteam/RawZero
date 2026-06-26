@@ -233,6 +233,98 @@ pub extern "C" fn rs_hsl(
     });
 }
 
+#[inline(always)]
+fn luma_px(r: f32, g: f32, b: f32) -> f32 {
+    r * 0.2126 + g * 0.7152 + b * 0.0722
+}
+
+#[inline(always)]
+fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
+    let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// HL/ombres : gain par pixel issu de la luminance floutée `lb` (calculée côté Python via
+/// le flou rapide), multiplié sur les 3 canaux. Reproduit `_apply_hl_shadows`.
+#[no_mangle]
+pub extern "C" fn rs_hl_shadows(ptr: *mut f32, lb: *const f32, npix: usize, hl: f32, sh: f32) {
+    let lb = unsafe { std::slice::from_raw_parts(lb, npix) };
+    par_pixels(ptr, npix, |i, r, g, b| {
+        let l = lb[i];
+        let mut gain = 1.0f32;
+        if hl != 0.0 {
+            let w_h = smoothstep(0.35, 0.95, l).powf(1.2);
+            gain *= (hl * 0.9 * w_h).exp2();
+        }
+        if sh != 0.0 {
+            let w_s = (1.0 - smoothstep(0.05, 0.65, l)).powf(1.2);
+            gain *= (sh * 0.9 * w_s).exp2();
+        }
+        *r *= gain;
+        *g *= gain;
+        *b *= gain;
+    });
+}
+
+/// Clarté : contraste local sur la luminance. `blur_l` = luminance floutée (Python).
+/// detail = luma - blur_l ; poids tons moyens ; ajout sur les 3 canaux. Reproduit `_apply_clarity`.
+#[no_mangle]
+pub extern "C" fn rs_clarity(ptr: *mut f32, blur_l: *const f32, npix: usize, amt: f32) {
+    let blur_l = unsafe { std::slice::from_raw_parts(blur_l, npix) };
+    par_pixels(ptr, npix, |i, r, g, b| {
+        let l = luma_px(*r, *g, *b);
+        let detail = l - blur_l[i];
+        let lc = l.clamp(0.0, 1.0);
+        let midtone_w = 1.0 - (2.0 * lc - 1.0).powi(2);
+        let add = amt * 0.9 * detail * midtone_w;
+        *r += add;
+        *g += add;
+        *b += add;
+    });
+}
+
+/// Netteté (masque flou) : detail = luma(img) - blur_luma ; img += (amount/100)*detail.
+/// `blur_luma` = luminance de l'image floutée (Python). Reproduit `_apply_sharpen`.
+#[no_mangle]
+pub extern "C" fn rs_sharpen(ptr: *mut f32, blur_luma: *const f32, npix: usize, amount: f32) {
+    let blur_luma = unsafe { std::slice::from_raw_parts(blur_luma, npix) };
+    let k = amount / 100.0;
+    par_pixels(ptr, npix, |i, r, g, b| {
+        let detail = luma_px(*r, *g, *b) - blur_luma[i];
+        let add = k * detail;
+        *r += add;
+        *g += add;
+        *b += add;
+    });
+}
+
+/// Défrange : désature les franges pourpres/vertes sur les bords. `blur_luma` = luminance
+/// de l'image floutée (Python, petit σ). Reproduit `_apply_defringe`.
+#[no_mangle]
+pub extern "C" fn rs_defringe(
+    ptr: *mut f32,
+    blur_luma: *const f32,
+    npix: usize,
+    purple: f32,
+    green: f32,
+) {
+    let blur_luma = unsafe { std::slice::from_raw_parts(blur_luma, npix) };
+    let kp = purple / 100.0 * 4.0;
+    let kg = green / 100.0 * 4.0;
+    par_pixels(ptr, npix, |i, r, g, b| {
+        let l = luma_px(*r, *g, *b);
+        let edge = ((l - blur_luma[i]).abs() * 8.0).clamp(0.0, 1.0);
+        let pm = (r.min(*b) - *g).clamp(0.0, 1.0); // pourpre/magenta : R,B hauts, V bas
+        let gm = (*g - r.max(*b)).clamp(0.0, 1.0); // vert : V haut, R,B bas
+        let fp = (pm * edge * kp).clamp(0.0, 1.0);
+        let fg = (gm * edge * kg).clamp(0.0, 1.0);
+        let f = fp.max(fg);
+        *r += (l - *r) * f;
+        *g += (l - *g) * f;
+        *b += (l - *b) * f;
+    });
+}
+
 /// vignette : gain = 2^(v*1.3*smoothstep(0.3,1,r)), r = dist normalisée au centre / sqrt(2).
 #[no_mangle]
 pub extern "C" fn rs_vignette(ptr: *mut f32, npix: usize, w: usize, h: usize, v: f32) {
