@@ -18,7 +18,12 @@ const TOOLS: { tool: Tool; icon: string; label: string; hint: string }[] = [
 
 export function LocalPanel() {
   const { t } = useTranslation();
-  const edits = useStore((s) => s.edits);
+  const hasEdits = useStore((s) => s.edits !== null);
+  // Signature de STRUCTURE de la liste de masques (pas des valeurs) : ce panneau ne se re-rend
+  // que quand la structure change (ajout/suppression/type/invert/sélection), pas à chaque tick
+  // d'un slider local — ceux-ci lisent leur propre scalaire via `get` (cf. LocalSlider/ParamSlider).
+  const localsSig = useStore((s) =>
+    s.edits ? s.edits.locals.map((l) => `${l.id}:${l.type}:${l.params.kind ?? ""}:${l.invert ? 1 : 0}`).join("|") : "");
   const updateEdits = useStore((s) => s.updateEdits);
   const activeTool = useStore((s) => s.activeTool);
   const selectedLocalId = useStore((s) => s.selectedLocalId);
@@ -31,9 +36,13 @@ export function LocalPanel() {
   const aiPointAvailable = useStore((s) => s.aiPointAvailable);
   const aiMaskBusy = useStore((s) => s.aiMaskBusy);
   const createAutoMask = useStore((s) => s.createAutoMask);
-  if (!edits) return null;
+  if (!hasEdits) return null;
+  void localsSig; // déclenche le re-rendu sur changement de structure ; la lecture se fait via getState
 
-  const selected = edits.locals.find((l) => l.id === selectedLocalId) ?? null;
+  // Lu au rendu : la réactivité vient de localsSig (structure) et selectedLocalId. Seules des
+  // données STRUCTURELLES (type/invert/kind/id) en sont tirées — les valeurs passent par `get`.
+  const allLocals = useStore.getState().edits!.locals;
+  const selected = allLocals.find((l) => l.id === selectedLocalId) ?? null;
 
   const removeSelected = () => {
     if (!selected) return;
@@ -133,9 +142,9 @@ export function LocalPanel() {
         </>
       )}
 
-      {edits.locals.length > 0 && (
+      {allLocals.length > 0 && (
         <ul className="local-list">
-          {edits.locals.map((l, i) => (
+          {allLocals.map((l, i) => (
             <li
               key={l.id}
               className={l.id === selectedLocalId ? "selected" : ""}
@@ -173,7 +182,8 @@ export function LocalPanel() {
             <button className="btn small danger" onClick={removeSelected}>{t("common.delete")}</button>
           </div>
           {(selected.type === "radial" || selected.type === "brush") && (
-            <EditSlider label={t("local.feather")} value={(selected.params.feather ?? 0.5) * 100}
+            <EditSlider label={t("local.feather")}
+              get={(e) => ((e.locals.find((l) => l.id === selected.id)?.params.feather ?? 0.5) * 100)}
               min={0} max={100} reset={50}
               apply={(e, v) => {
                 const loc = e.locals.find((l) => l.id === selected.id);
@@ -181,7 +191,8 @@ export function LocalPanel() {
               }} />
           )}
           {selected.type === "ai" && (
-            <EditSlider label={t("local.hardness")} value={selected.params.hardness ?? 0}
+            <EditSlider label={t("local.hardness")}
+              get={(e) => (e.locals.find((l) => l.id === selected.id)?.params.hardness ?? 0)}
               min={0} max={100} reset={0}
               apply={(e, v) => {
                 const loc = e.locals.find((l) => l.id === selected.id);
@@ -190,36 +201,36 @@ export function LocalPanel() {
           )}
           {selected.type === "lumrange" && (
             <>
-              <ParamSlider id={selected.id} label={t("local.min")} pk="lo" value={selected.params.lo ?? 0.25}
+              <ParamSlider id={selected.id} label={t("local.min")} pk="lo"
                 min={0} max={1} step={0.01} reset={0.25} fmt={(v) => v.toFixed(2)} />
-              <ParamSlider id={selected.id} label={t("local.max")} pk="hi" value={selected.params.hi ?? 0.75}
+              <ParamSlider id={selected.id} label={t("local.max")} pk="hi"
                 min={0} max={1} step={0.01} reset={0.75} fmt={(v) => v.toFixed(2)} />
-              <ParamSlider id={selected.id} label={t("local.transition")} pk="smooth" value={selected.params.smooth ?? 0.1}
+              <ParamSlider id={selected.id} label={t("local.transition")} pk="smooth"
                 min={0.01} max={0.5} step={0.01} reset={0.1} fmt={(v) => v.toFixed(2)} />
             </>
           )}
           {selected.type === "colorrange" && (
             <>
-              <ParamSlider id={selected.id} label={t("hsl.hue")} pk="hue" value={selected.params.hue ?? 0}
+              <ParamSlider id={selected.id} label={t("hsl.hue")} pk="hue"
                 min={0} max={360} step={1} reset={0} fmt={(v) => `${Math.round(v)}°`} />
-              <ParamSlider id={selected.id} label={t("local.range")} pk="range" value={selected.params.range ?? 30}
+              <ParamSlider id={selected.id} label={t("local.range")} pk="range"
                 min={0} max={120} step={1} reset={30} fmt={(v) => `${Math.round(v)}°`} />
-              <ParamSlider id={selected.id} label={t("local.transition")} pk="smooth" value={selected.params.smooth ?? 15}
+              <ParamSlider id={selected.id} label={t("local.transition")} pk="smooth"
                 min={1} max={60} step={1} reset={15} fmt={(v) => `${Math.round(v)}°`} />
-              <ParamSlider id={selected.id} label={t("local.satMin")} pk="sat_min" value={selected.params.sat_min ?? 0.15}
+              <ParamSlider id={selected.id} label={t("local.satMin")} pk="sat_min"
                 min={0} max={1} step={0.01} reset={0.15} fmt={(v) => v.toFixed(2)} />
             </>
           )}
           <LocalSlider id={selected.id} label={t("adj.exposure")} k="exposure" min={-3} max={3} step={0.05}
-            fmt={(v) => (v > 0 ? "+" : "") + v.toFixed(2)} value={selected.adjust.exposure} />
-          <LocalSlider id={selected.id} label={t("adj.contrast")} k="contrast" value={selected.adjust.contrast} />
-          <LocalSlider id={selected.id} label={t("adj.highlights")} k="highlights" value={selected.adjust.highlights} />
-          <LocalSlider id={selected.id} label={t("adj.shadows")} k="shadows" value={selected.adjust.shadows} />
-          <LocalSlider id={selected.id} label={t("adj.temperature")} k="temp" value={selected.adjust.temp} />
-          <LocalSlider id={selected.id} label={t("adj.tint")} k="tint" value={selected.adjust.tint} />
-          <LocalSlider id={selected.id} label={t("adj.saturation")} k="saturation" value={selected.adjust.saturation} />
-          <LocalSlider id={selected.id} label={t("adj.clarity")} k="clarity" value={selected.adjust.clarity} />
-          <LocalSlider id={selected.id} label={t("local.sharpness")} k="sharpness" value={selected.adjust.sharpness} />
+            fmt={(v) => (v > 0 ? "+" : "") + v.toFixed(2)} />
+          <LocalSlider id={selected.id} label={t("adj.contrast")} k="contrast" />
+          <LocalSlider id={selected.id} label={t("adj.highlights")} k="highlights" />
+          <LocalSlider id={selected.id} label={t("adj.shadows")} k="shadows" />
+          <LocalSlider id={selected.id} label={t("adj.temperature")} k="temp" />
+          <LocalSlider id={selected.id} label={t("adj.tint")} k="tint" />
+          <LocalSlider id={selected.id} label={t("adj.saturation")} k="saturation" />
+          <LocalSlider id={selected.id} label={t("adj.clarity")} k="clarity" />
+          <LocalSlider id={selected.id} label={t("local.sharpness")} k="sharpness" />
           <div className="row-actions">
             <button className="btn small" onClick={() => updateEdits((e) => {
               const loc = e.locals.find((l) => l.id === selected.id);
@@ -234,14 +245,16 @@ export function LocalPanel() {
   );
 }
 
-/** Slider agissant sur un paramètre de masque (loc.params[pk]) — masques par plage. */
-function ParamSlider({ id, label, pk, value, min, max, step, reset, fmt }: {
+/** Slider agissant sur un paramètre de masque (loc.params[pk]) — masques par plage.
+ *  Abonnement granulaire : lit son scalaire via `get` (défaut = reset si le param est absent). */
+function ParamSlider({ id, label, pk, min, max, step, reset, fmt }: {
   id: string; label: string; pk: string;
-  value: number; min: number; max: number; step: number; reset: number; fmt: (v: number) => string;
+  min: number; max: number; step: number; reset: number; fmt: (v: number) => string;
 }) {
   return (
     <EditSlider
-      label={label} value={value} min={min} max={max} step={step} reset={reset} fmt={fmt}
+      label={label} min={min} max={max} step={step} reset={reset} fmt={fmt}
+      get={(e) => { const v = e.locals.find((l) => l.id === id)?.params[pk]; return typeof v === "number" ? v : reset; }}
       apply={(e, v) => {
         const loc = e.locals.find((l) => l.id === id);
         if (loc) loc.params[pk] = v;
@@ -250,13 +263,14 @@ function ParamSlider({ id, label, pk, value, min, max, step, reset, fmt }: {
   );
 }
 
-function LocalSlider({ id, label, k, value, min = -100, max = 100, step = 1, fmt }: {
+function LocalSlider({ id, label, k, min = -100, max = 100, step = 1, fmt }: {
   id: string; label: string; k: keyof LocalAdjustValues;
-  value: number; min?: number; max?: number; step?: number; fmt?: (v: number) => string;
+  min?: number; max?: number; step?: number; fmt?: (v: number) => string;
 }) {
   return (
     <EditSlider
-      label={label} value={value} min={min} max={max} step={step} fmt={fmt}
+      label={label} min={min} max={max} step={step} fmt={fmt}
+      get={(e) => e.locals.find((l) => l.id === id)?.adjust[k] ?? 0}
       apply={(e, v) => {
         const loc = e.locals.find((l) => l.id === id);
         if (loc) loc.adjust[k] = v;

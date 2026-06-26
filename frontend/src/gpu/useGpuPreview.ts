@@ -1,14 +1,17 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { api } from "../api";
 import { GpuPipeline } from "./pipeline";
-import { useStore } from "../store";
-import { defaultEdits } from "../types";
+import { useStore, registerLiveRender } from "../store";
+import { defaultEdits, type EditState } from "../types";
 
 interface GpuState {
   ready: boolean;
   error: string | null;
   dims: { w: number; h: number };
 }
+
+// Délai d'immobilité du curseur (drag toujours enfoncé) avant le re-rendu pleine qualité.
+const SETTLE_MS = 90;
 
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => {
@@ -44,6 +47,7 @@ export function useGpuPreview(
 
   const currentId = useStore((s) => s.currentId);
   const edits = useStore((s) => s.edits);
+  const isDragging = useStore((s) => s.dragBaseline !== null);
   const fullLong = useStore((s) => {
     const p = s.photos.find((ph) => ph.id === s.currentId);
     return p ? Math.max(p.width, p.height) : 1;
@@ -105,26 +109,55 @@ export function useGpuPreview(
     return () => { ctrl.abort(); if (url) URL.revokeObjectURL(url); };
   }, [active, ready, currentId, nrAi]);
 
-  // Rendu à chaque changement de réglage / d'état (sans réseau), COALESCÉ sur une frame
-  // d'animation. Appeler render() synchroniquement à chaque event de slider (>60×/s) empile
-  // les passes plus vite que le GPU ne les draine : la file de commandes WebGL sature et le
-  // prochain appel gl.* BLOQUE le thread principal → le slider lague. En ne rendant qu'une
-  // fois par frame (rAF, aligné au compositeur), on ne devance jamais le GPU.
-  const rafRef = useRef<number>();
-  useEffect(() => {
-    if (!active || !pipeRef.current || !ready || !edits) return;
-    if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = undefined;
-      const pipe = pipeRef.current;
-      if (!pipe) return;
-      const ovl = beforeAfter || skipCrop ? null : maskOverlayId;
-      pipe.render(beforeAfter ? defaultEdits() : edits, skipCrop, showClip, ovl);
+  // Fonction de rendu impérative, réassignée à chaque rendu pour capturer les derniers paramètres
+  // (active/ready/skipCrop/beforeAfter/showClip/maskOverlayId). Appelée par le store PENDANT un drag
+  // de slider (chemin découplé) : il mute `edits` en place puis nous demande de peindre, sans passer
+  // par un setState/re-render React. quality=0.6 → gain quadratique pendant le drag.
+  const renderImperative = useRef<(e: EditState) => void>();
+  const settleRef = useRef<number>();
+  renderImperative.current = (e) => {
+    const pipe = pipeRef.current;
+    if (!active || !pipe || !ready) return;
+    const ovl = beforeAfter || skipCrop ? null : maskOverlayId;
+    const paint = (src: EditState, q: number) => {
+      pipe.render(beforeAfter ? defaultEdits() : src, skipCrop, showClip, ovl, q);
       const c = canvasRef.current;
       if (c) setDims((d) => (d.w !== c.width || d.h !== c.height ? { w: c.width, h: c.height } : d));
-    });
-    return () => { if (rafRef.current !== undefined) { cancelAnimationFrame(rafRef.current); rafRef.current = undefined; } };
-  }, [active, edits, ready, skipCrop, beforeAfter, showClip, maskOverlayId, canvasRef, asyncTick]);
+    };
+    paint(e, 0.6); // draft pendant le mouvement
+    // Raffinement progressif : si le curseur se stabilise ~90 ms TOUT EN restant enfoncé (pas de
+    // nouveau draft entre-temps), on repeint en pleine qualité sans attendre le relâchement. Si le
+    // slider est relâché avant, le chemin de release (useLayoutEffect, isDragging→false) rend déjà
+    // en HD → le timer s'auto-annule via la garde dragBaseline.
+    if (settleRef.current !== undefined) clearTimeout(settleRef.current);
+    settleRef.current = window.setTimeout(() => {
+      settleRef.current = undefined;
+      const st = useStore.getState();
+      if (!pipeRef.current || st.dragBaseline === null || !st.edits) return;
+      paint(st.edits, 1);
+    }, SETTLE_MS);
+  };
+  // Branché UNIQUEMENT quand l'aperçu GPU est actif : c'est la présence de ce callback qui dit au
+  // store d'emprunter le chemin découplé (en place) plutôt que clone+setState (cf. flushLiveEdit).
+  useEffect(() => {
+    if (!active) return;
+    registerLiveRender((e) => renderImperative.current?.(e));
+    return () => { registerLiveRender(null); if (settleRef.current) clearTimeout(settleRef.current); };
+  }, [active]);
+
+  // Rendu à chaque changement de réglage / d'état (sans réseau). En useLayoutEffect SYNCHRONE :
+  // le canvas se peint dans LA MÊME frame que le commit React. Pendant un drag, le store ne passe
+  // PLUS par ici (mutation en place → pas de changement de `edits`) : c'est `renderImperative` qui
+  // peint. Ce useLayoutEffect couvre les changements hors drag ET le rendu HD au relâchement
+  // (isDragging repasse à false → quality 1).
+  useLayoutEffect(() => {
+    if (!active || !pipeRef.current || !ready || !edits) return;
+    const pipe = pipeRef.current;
+    const ovl = beforeAfter || skipCrop ? null : maskOverlayId;
+    pipe.render(beforeAfter ? defaultEdits() : edits, skipCrop, showClip, ovl, isDragging ? 0.6 : 1);
+    const c = canvasRef.current;
+    if (c) setDims((d) => (d.w !== c.width || d.h !== c.height ? { w: c.width, h: c.height } : d));
+  }, [active, edits, ready, skipCrop, beforeAfter, showClip, maskOverlayId, isDragging, canvasRef, asyncTick]);
 
   return { ready, error, dims };
 }

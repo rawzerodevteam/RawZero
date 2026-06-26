@@ -57,6 +57,15 @@ let saveTimer: number | undefined;
 let liveRaf: number | undefined;
 let liveFn: ((e: EditState) => void) | null = null;
 
+// Découplage total GPU↔store pendant un drag de slider. Quand l'aperçu GPU est actif, il enregistre
+// ici une fonction de rendu IMPÉRATIF. Pendant un drag, on mute alors `edits` EN PLACE (zéro clone,
+// zéro setState → React reste figé) et on rend directement le canvas via ce callback. Hors aperçu
+// GPU (mode serveur), `liveRender` reste null → on retombe sur le chemin clone+setState (le rendu
+// serveur débouncé a besoin que `edits` change pour rafraîchir l'aperçu pendant le drag).
+let liveRender: ((e: EditState) => void) | null = null;
+/** Branché par useGpuPreview quand l'aperçu GPU est actif ; débranché sinon (passe null). */
+export function registerLiveRender(fn: ((e: EditState) => void) | null) { liveRender = fn; }
+
 // Persistance de la dernière session (projet / photo / vue) pour rouvrir l'app où on l'a laissée.
 const SESSION_KEY = "rs.session";
 interface Session { projectId: number | null; photoId: number | null; view: View; }
@@ -601,12 +610,16 @@ export const useStore = create<Store>((set, get) => ({
     const base = get().dragBaseline;
     const cur = get().edits;
     if (base && cur) {
+      // `dirty: true` explicite : sur le chemin GPU découplé, le drag mute `edits` en place sans
+      // jamais passer par set() — c'est ce relâchement qui marque l'état à sauvegarder. Le set()
+      // qui suit (dragBaseline → null) débloque aussi le rendu HD (isDragging repasse à false).
       set({
         undoStack: [...get().undoStack.slice(-49), base],
         undoLabels: [...get().undoLabels.slice(-49), get().currentLabel],
         redoStack: [], redoLabels: [],
         currentLabel: describeEditChange(base, cur),
         dragBaseline: null,
+        dirty: true,
       });
       scheduleSave();
     }
@@ -750,12 +763,23 @@ function flushLiveEdit() {
   if (liveRaf !== undefined) { cancelAnimationFrame(liveRaf); liveRaf = undefined; }
   const fn = liveFn; liveFn = null;
   if (!fn) return;
-  const cur = useStore.getState().edits;
+  const st = useStore.getState();
+  const cur = st.edits;
   if (!cur) return;
-  const next = structuredClone(cur);
-  fn(next);
-  useStore.setState({ edits: next, dirty: true });
-  scheduleSave();
+  if (st.dragBaseline && liveRender) {
+    // Chemin découplé (aperçu GPU actif, drag en cours) : mutation EN PLACE, aucun re-render React,
+    // rendu GPU impératif. La baseline d'historique (dragBaseline) est un clone indépendant pris au
+    // startDrag, donc muter `cur` ici est sûr. endDrag posera le point d'historique + marquera dirty.
+    fn(cur);
+    liveRender(cur);
+  } else {
+    // Chemin classique (mode serveur, ou hors drag) : clone + setState → l'aperçu serveur débouncé
+    // se rafraîchit, et React reflète l'état.
+    const next = structuredClone(cur);
+    fn(next);
+    useStore.setState({ edits: next, dirty: true });
+    scheduleSave();
+  }
 }
 
 // Mémorise projet/photo/vue à chaque changement pour rouvrir l'app dans le même état.

@@ -5,7 +5,9 @@ import type { EditState } from "../types";
 
 interface Props {
   label: string;
-  value: number;
+  /** Sélecteur de la valeur dans l'état : abonnement granulaire — ce slider ne se re-rend que
+   *  quand SA valeur change (pas quand un autre réglage bouge). */
+  get: (e: EditState) => number;
   min: number;
   max: number;
   step?: number;
@@ -16,15 +18,27 @@ interface Props {
 
 /** Slider lié au store : drag = mises à jour continues, relâchement = point d'historique.
  *  Double-clic sur le libellé = retour à la valeur par défaut.
- *  Clic sur la valeur = saisie numérique directe. */
-export function EditSlider({ label, value, min, max, step = 1, reset = 0, fmt, apply }: Props) {
+ *  Clic sur la valeur = saisie numérique directe.
+ *
+ *  Abonnement granulaire : chaque slider lit son propre scalaire via `get`. Pendant un drag,
+ *  seul le slider tiré se re-rend (les panneaux ne s'abonnent plus à l'objet `edits` entier),
+ *  ce qui supprime la réconciliation des dizaines d'autres sliders à chaque frame. */
+export function EditSlider({ label, get, min, max, step = 1, reset = 0, fmt, apply }: Props) {
   const { t } = useTranslation();
+  const value = useStore((s) => (s.edits ? get(s.edits) : 0));
   const updateEdits = useStore((s) => s.updateEdits);
   const updateEditsLive = useStore((s) => s.updateEditsLive);
   const startDrag = useStore((s) => s.startDrag);
   const endDrag = useStore((s) => s.endDrag);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  // Valeur d'affichage pendant un drag. Sur le chemin GPU découplé, `edits` est muté EN PLACE sans
+  // setState → le store ne notifie pas, `value` resterait figé. On tient donc localement la valeur
+  // courante (curseur + nombre) le temps du drag, puis on repasse à `value` (committé) au relâchement.
+  const [liveValue, setLiveValue] = useState<number | null>(null);
+  const shown = liveValue ?? value;
+
+  const endDragHandler = () => { endDrag(); setLiveValue(null); };
 
   const doReset = () => {
     startDrag();
@@ -58,13 +72,13 @@ export function EditSlider({ label, value, min, max, step = 1, reset = 0, fmt, a
         min={min}
         max={max}
         step={step}
-        value={value}
+        value={shown}
         onPointerDown={startDrag}
         onKeyDown={startDrag}
-        onChange={(ev) => { const v = Number(ev.target.value); updateEditsLive((e) => apply(e, v)); }}
-        onPointerUp={endDrag}
-        onKeyUp={endDrag}
-        onBlur={endDrag}
+        onChange={(ev) => { const v = Number(ev.target.value); setLiveValue(v); updateEditsLive((e) => apply(e, v)); }}
+        onPointerUp={endDragHandler}
+        onKeyUp={endDragHandler}
+        onBlur={endDragHandler}
       />
       {editing ? (
         <input
@@ -82,7 +96,7 @@ export function EditSlider({ label, value, min, max, step = 1, reset = 0, fmt, a
         />
       ) : (
         <span className="slider-value" onClick={beginEdit} title={t("slider.enterValue")}>
-          {fmt ? fmt(value) : (Math.round(value * 100) / 100).toString()}
+          {fmt ? fmt(shown) : (Math.round(shown * 100) / 100).toString()}
         </span>
       )}
     </div>

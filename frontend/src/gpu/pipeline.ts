@@ -801,14 +801,20 @@ export class GpuPipeline {
     });
   }
 
-  render(e: EditState, skipCrop = false, showClip = false, maskOverlayId: string | null = null) {
+  render(e: EditState, skipCrop = false, showClip = false, maskOverlayId: string | null = null, quality = 1) {
     const gl = this.gl;
     if (!this.workW) return;
     const ovlLoc = maskOverlayId ? e.locals.find((l) => l.id === maskOverlayId) ?? null : null;
 
-    // 0) géométrie (pré-pass mis en cache) : le reste tourne sur l'image recadrée.
+    // 0) géométrie (pré-pass mis en cache, plein résolution) : le reste tourne sur l'image recadrée.
     const geo = this.applyGeometry(e.geometry, skipCrop);
-    const W = geo.w, H = geo.h, maxd = Math.max(W, H);
+    // quality < 1 (pendant un drag de slider) : on rend TOUT le pipeline aval à résolution réduite
+    // (downscale en samplant la géométrie pleine réso). Gain quadratique sur les passes plein écran ;
+    // l'aperçu est un peu plus doux pendant le drag, net au relâchement (quality=1). N'affecte PAS
+    // l'export (Python, pleine réso) ni la parité. La géométrie cachée reste pleine réso.
+    const q = Math.min(Math.max(quality, 0.1), 1);
+    const W = Math.max(1, Math.round(geo.w * q)), H = Math.max(1, Math.round(geo.h * q));
+    const maxd = Math.max(W, H);
 
     // 0bis) réduction de bruit IA : mélange base bruitée ↔ base débruitée (même géométrie).
     //       Quasi gratuit ; coût nul quand inactif ou base débruitée pas encore chargée.
@@ -823,8 +829,9 @@ export class GpuPipeline {
       });
       inputTex = blended.tex;
     }
-    // scale = ratio rendu/pleine-résolution, calculé sur la taille NON recadrée (comme le Python)
-    const scale = Math.max(this.workW, this.workH) / this.fullLong;
+    // scale = ratio rendu/pleine-résolution, calculé sur la taille NON recadrée (comme le Python).
+    // ×q : à résolution réduite les rayons (netteté/NR) rétrécissent proportionnellement.
+    const scale = (Math.max(this.workW, this.workH) / this.fullLong) * q;
     const cv = gl.canvas as HTMLCanvasElement;
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
 

@@ -7,18 +7,22 @@ import { defaultEdits, mergeEdits } from "../types";
 
 export function BasicPanel() {
   const { t } = useTranslation();
-  const edits = useStore((s) => s.edits);
+  // Abonnement à l'EXISTENCE des edits (pas à leur contenu) → ce panneau ne se re-rend pas à
+  // chaque tick de slider ; chaque EditSlider lit son propre scalaire (cf. EditSlider).
+  const hasEdits = useStore((s) => s.edits !== null);
   const currentId = useStore((s) => s.currentId);
   const updateEdits = useStore((s) => s.updateEdits);
   const notify = useStore((s) => s.notify);
   const activeTool = useStore((s) => s.activeTool);
   const setUI = useStore((s) => s.setUI);
-  if (!edits) return null;
+  if (!hasEdits) return null;
   const d = defaultEdits();
 
   const auto = async () => {
     if (currentId === null) return;
     try {
+      const edits = useStore.getState().edits;
+      if (!edits) return;
       const suggested = await api.autoAdjust(currentId, edits);
       updateEdits((e) => {
         e.tone.exposure = suggested.tone.exposure;
@@ -61,21 +65,21 @@ export function BasicPanel() {
           </svg>
         </button>
       </h4>
-      <EditSlider label={t("adj.temperature")} value={edits.wb.temp} min={-100} max={100} apply={(e, v) => { e.wb.temp = v; }} />
-      <EditSlider label={t("adj.tint")} value={edits.wb.tint} min={-100} max={100} apply={(e, v) => { e.wb.tint = v; }} />
+      <EditSlider label={t("adj.temperature")} get={(e) => e.wb.temp} min={-100} max={100} apply={(e, v) => { e.wb.temp = v; }} />
+      <EditSlider label={t("adj.tint")} get={(e) => e.wb.tint} min={-100} max={100} apply={(e, v) => { e.wb.tint = v; }} />
       <h4>{t("basic.tone")}</h4>
-      <EditSlider label={t("adj.exposure")} value={edits.tone.exposure} min={-5} max={5} step={0.05}
+      <EditSlider label={t("adj.exposure")} get={(e) => e.tone.exposure} min={-5} max={5} step={0.05}
         fmt={(v) => (v > 0 ? "+" : "") + v.toFixed(2)} apply={(e, v) => { e.tone.exposure = v; }} />
-      <EditSlider label={t("adj.contrast")} value={edits.tone.contrast} min={-100} max={100} apply={(e, v) => { e.tone.contrast = v; }} />
-      <EditSlider label={t("adj.highlights")} value={edits.tone.highlights} min={-100} max={100} apply={(e, v) => { e.tone.highlights = v; }} />
-      <EditSlider label={t("adj.shadows")} value={edits.tone.shadows} min={-100} max={100} apply={(e, v) => { e.tone.shadows = v; }} />
-      <EditSlider label={t("adj.whites")} value={edits.tone.whites} min={-100} max={100} apply={(e, v) => { e.tone.whites = v; }} />
-      <EditSlider label={t("adj.blacks")} value={edits.tone.blacks} min={-100} max={100} apply={(e, v) => { e.tone.blacks = v; }} />
+      <EditSlider label={t("adj.contrast")} get={(e) => e.tone.contrast} min={-100} max={100} apply={(e, v) => { e.tone.contrast = v; }} />
+      <EditSlider label={t("adj.highlights")} get={(e) => e.tone.highlights} min={-100} max={100} apply={(e, v) => { e.tone.highlights = v; }} />
+      <EditSlider label={t("adj.shadows")} get={(e) => e.tone.shadows} min={-100} max={100} apply={(e, v) => { e.tone.shadows = v; }} />
+      <EditSlider label={t("adj.whites")} get={(e) => e.tone.whites} min={-100} max={100} apply={(e, v) => { e.tone.whites = v; }} />
+      <EditSlider label={t("adj.blacks")} get={(e) => e.tone.blacks} min={-100} max={100} apply={(e, v) => { e.tone.blacks = v; }} />
       <h4>{t("basic.presence")}</h4>
-      <EditSlider label={t("adj.clarity")} value={edits.presence.clarity} min={-100} max={100} apply={(e, v) => { e.presence.clarity = v; }} />
-      <EditSlider label={t("adj.dehaze")} value={edits.presence.dehaze} min={-100} max={100} apply={(e, v) => { e.presence.dehaze = v; }} />
-      <EditSlider label={t("adj.vibrance")} value={edits.presence.vibrance} min={-100} max={100} apply={(e, v) => { e.presence.vibrance = v; }} />
-      <EditSlider label={t("adj.saturation")} value={edits.presence.saturation} min={-100} max={100} apply={(e, v) => { e.presence.saturation = v; }} />
+      <EditSlider label={t("adj.clarity")} get={(e) => e.presence.clarity} min={-100} max={100} apply={(e, v) => { e.presence.clarity = v; }} />
+      <EditSlider label={t("adj.dehaze")} get={(e) => e.presence.dehaze} min={-100} max={100} apply={(e, v) => { e.presence.dehaze = v; }} />
+      <EditSlider label={t("adj.vibrance")} get={(e) => e.presence.vibrance} min={-100} max={100} apply={(e, v) => { e.presence.vibrance = v; }} />
+      <EditSlider label={t("adj.saturation")} get={(e) => e.presence.saturation} min={-100} max={100} apply={(e, v) => { e.presence.saturation = v; }} />
     </PanelSection>
   );
 }

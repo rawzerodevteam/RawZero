@@ -9,10 +9,10 @@ const MODES = [["h", "hue"], ["s", "saturation"], ["l", "luminance"]] as const;
 
 export function HSLPanel() {
   const { t } = useTranslation();
-  const edits = useStore((s) => s.edits);
+  const hasEdits = useStore((s) => s.edits !== null);
   const updateEdits = useStore((s) => s.updateEdits);
   const [mode, setMode] = useState<"h" | "s" | "l">("s");
-  if (!edits) return null;
+  if (!hasEdits) return null;
 
   return (
     <PanelSection
@@ -31,7 +31,7 @@ export function HSLPanel() {
         <div key={band} className="hsl-row" style={{ ["--band-color" as any]: BAND_COLORS[band] }}>
           <EditSlider
             label={t(`hsl.band.${band}`)}
-            value={edits.hsl[band][mode]}
+            get={(e) => e.hsl[band][mode]}
             min={-100}
             max={100}
             apply={(e, v) => { e.hsl[band][mode] = v; }}

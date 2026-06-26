@@ -12,12 +12,12 @@ function suggestNrAi(iso: number): number {
 
 export function DetailPanel() {
   const { t } = useTranslation();
-  const edits = useStore((s) => s.edits);
+  const hasEdits = useStore((s) => s.edits !== null);
   const updateEdits = useStore((s) => s.updateEdits);
   const denoiseAvailable = useStore((s) => s.aiDenoiseAvailable);
   const currentId = useStore((s) => s.currentId);
   const iso = useStore((s) => s.photos.find((p) => p.id === currentId)?.iso ?? 0);
-  if (!edits) return null;
+  if (!hasEdits) return null;
   return (
     <PanelSection
       title={t("detail.title")}
@@ -25,14 +25,14 @@ export function DetailPanel() {
       onReset={() => updateEdits((e) => { e.detail = defaultEdits().detail; })}
     >
       <h4>{t("detail.sharpen")}</h4>
-      <EditSlider label={t("detail.gain")} value={edits.detail.sharpen_amount} min={0} max={150} reset={25}
+      <EditSlider label={t("detail.gain")} get={(e) => e.detail.sharpen_amount} min={0} max={150} reset={25}
         apply={(e, v) => { e.detail.sharpen_amount = v; }} />
-      <EditSlider label={t("detail.radius")} value={edits.detail.sharpen_radius} min={0.5} max={3} step={0.1} reset={1}
+      <EditSlider label={t("detail.radius")} get={(e) => e.detail.sharpen_radius} min={0.5} max={3} step={0.1} reset={1}
         fmt={(v) => v.toFixed(1)} apply={(e, v) => { e.detail.sharpen_radius = v; }} />
       <h4>{t("detail.nr")}</h4>
-      <EditSlider label={t("detail.luminance")} value={edits.detail.nr_luma} min={0} max={100}
+      <EditSlider label={t("detail.luminance")} get={(e) => e.detail.nr_luma} min={0} max={100}
         apply={(e, v) => { e.detail.nr_luma = v; }} />
-      <EditSlider label={t("detail.color")} value={edits.detail.nr_color} min={0} max={100}
+      <EditSlider label={t("detail.color")} get={(e) => e.detail.nr_color} min={0} max={100}
         apply={(e, v) => { e.detail.nr_color = v; }} />
       <h4 className="h4-row">
         {t("detail.nrAi")}
@@ -44,15 +44,15 @@ export function DetailPanel() {
         )}
       </h4>
       {denoiseAvailable ? (
-        <EditSlider label={t("detail.force")} value={edits.detail.nr_ai} min={0} max={100}
+        <EditSlider label={t("detail.force")} get={(e) => e.detail.nr_ai} min={0} max={100}
           apply={(e, v) => { e.detail.nr_ai = v; }} />
       ) : (
         <p className="dim hint">{t("detail.modelMissing")}</p>
       )}
       <h4>{t("detail.defringe")}</h4>
-      <EditSlider label={t("detail.defringePurple")} value={edits.detail.defringe_purple} min={0} max={100}
+      <EditSlider label={t("detail.defringePurple")} get={(e) => e.detail.defringe_purple} min={0} max={100}
         apply={(e, v) => { e.detail.defringe_purple = v; }} />
-      <EditSlider label={t("detail.defringeGreen")} value={edits.detail.defringe_green} min={0} max={100}
+      <EditSlider label={t("detail.defringeGreen")} get={(e) => e.detail.defringe_green} min={0} max={100}
         apply={(e, v) => { e.detail.defringe_green = v; }} />
     </PanelSection>
   );

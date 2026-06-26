@@ -10,14 +10,15 @@ const ASPECTS: [string, number | null][] = [
 
 export function GeometryPanel() {
   const { t } = useTranslation();
-  const edits = useStore((s) => s.edits);
+  const hasEdits = useStore((s) => s.edits !== null);
+  const flipH = useStore((s) => s.edits?.geometry.flip_h ?? false);
+  const flipV = useStore((s) => s.edits?.geometry.flip_v ?? false);
   const updateEdits = useStore((s) => s.updateEdits);
   const activeTool = useStore((s) => s.activeTool);
   const cropAspect = useStore((s) => s.cropAspect);
   const setCropAspect = useStore((s) => s.setCropAspect);
   const setUI = useStore((s) => s.setUI);
-  if (!edits) return null;
-  const g = edits.geometry;
+  if (!hasEdits) return null;
 
   return (
     <PanelSection
@@ -37,16 +38,16 @@ export function GeometryPanel() {
           onClick={() => updateEdits((e) => { e.geometry.rotate = (e.geometry.rotate + 90) % 360; })}>
           ⟳ 90°
         </button>
-        <button className={"btn" + (g.flip_h ? " active" : "")} title={t("geometry.flipH")}
+        <button className={"btn" + (flipH ? " active" : "")} title={t("geometry.flipH")}
           onClick={() => updateEdits((e) => { e.geometry.flip_h = !e.geometry.flip_h; })}>
           ⇋ H
         </button>
-        <button className={"btn" + (g.flip_v ? " active" : "")} title={t("geometry.flipV")}
+        <button className={"btn" + (flipV ? " active" : "")} title={t("geometry.flipV")}
           onClick={() => updateEdits((e) => { e.geometry.flip_v = !e.geometry.flip_v; })}>
           ⇵ V
         </button>
       </div>
-      <EditSlider label={t("geometry.straighten")} value={g.straighten} min={-10} max={10} step={0.1}
+      <EditSlider label={t("geometry.straighten")} get={(e) => e.geometry.straighten} min={-10} max={10} step={0.1}
         fmt={(v) => v.toFixed(1) + "°"} apply={(e, v) => { e.geometry.straighten = v; }} />
       <h4>{t("geometry.crop")}</h4>
       <div className="row-actions">

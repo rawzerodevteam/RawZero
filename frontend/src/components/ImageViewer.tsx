@@ -40,7 +40,18 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
   const brushErase = useStore((s) => s.brushErase);
   const selectedLocalId = useStore((s) => s.selectedLocalId);
   const showMaskOverlay = useStore((s) => interactive && s.showMaskOverlay);
-  const locals = useStore((s) => s.edits?.locals);
+  // Ne PAS s'abonner au tableau `locals` (nouvelle référence à chaque structuredClone → re-render
+  // du viewer à chaque tick de slider). On s'abonne uniquement à une SIGNATURE du masque
+  // sélectionné (type + géométrie du contour/poignées) : le viewer ne se re-rend que quand ce
+  // masque change vraiment (drag d'une poignée), pas pendant un drag de réglage global.
+  const selSig = useStore((s) => {
+    const l = s.edits?.locals.find((x) => x.id === s.selectedLocalId);
+    if (!l) return "";
+    const p = l.params;
+    return l.type === "linear" || l.type === "radial"
+      ? `${l.id}:${l.type}:${p.x0}:${p.y0}:${p.x1}:${p.y1}:${p.cx}:${p.cy}:${p.rx}:${p.ry}:${p.angle}`
+      : `${l.id}:${l.type}`;
+  });
   const updateEdits = useStore((s) => s.updateEdits);
   const startDrag = useStore((s) => s.startDrag);
   const endDrag = useStore((s) => s.endDrag);
@@ -242,7 +253,7 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
       setTempShape(null);
     } else if (mode.current === "brush" && stroke.current.length) {
       const newStroke = { points: stroke.current, size: brushSize, erase: brushErase };
-      const selected = locals?.find((l) => l.id === selectedLocalId);
+      const selected = useStore.getState().edits?.locals.find((l) => l.id === selectedLocalId);
       if (selected && selected.type === "brush") {
         updateEdits((e) => {
           const loc = e.locals.find((l) => l.id === selectedLocalId);
@@ -262,7 +273,8 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
     mode.current = "none";
   };
 
-  const selectedLocal = locals?.find((l) => l.id === selectedLocalId);
+  void selSig; // déclenche le re-rendu quand la géométrie du masque sélectionné change
+  const selectedLocal = useStore.getState().edits?.locals.find((l) => l.id === selectedLocalId);
   const brushCursorR = brushSize * 0.5 * Math.max(dispW, dispH);
 
   return (
