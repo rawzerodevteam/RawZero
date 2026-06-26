@@ -16,6 +16,7 @@ from typing import Any, Optional
 import cv2
 import numpy as np
 
+from . import rsfast
 from .masks import build_mask
 
 # ---------------------------------------------------------------- état par défaut
@@ -170,9 +171,11 @@ def _wb_gains(temp: float, tint: float) -> tuple[float, float, float]:
 def _apply_linear_stage(img: np.ndarray, temp: float, tint: float, exposure: float) -> np.ndarray:
     if not (temp or tint or exposure):
         return img
-    lin = srgb_to_linear(img)
     rg, gg, bg = _wb_gains(temp, tint)
     ev = 2.0 ** float(exposure)
+    if rsfast.available():   # même math (LUT sRGB 4096), multi-cœur
+        return rsfast.linear_stage(img, rg * ev, gg * ev, bg * ev)
+    lin = srgb_to_linear(img)
     lin[..., 0] *= rg * ev
     lin[..., 1] *= gg * ev
     lin[..., 2] *= bg * ev
@@ -200,13 +203,18 @@ def _apply_whites_blacks(img: np.ndarray, whites: float, blacks: float) -> np.nd
         return img
     wp = 1.0 - 0.25 * (whites / 100.0)
     bp = -0.20 * (blacks / 100.0)
-    return (img - bp) / max(wp - bp, 0.05)
+    denom = max(wp - bp, 0.05)
+    if rsfast.available():
+        return rsfast.whites_blacks(img, bp, denom)
+    return (img - bp) / denom
 
 
 def _apply_contrast(img: np.ndarray, contrast: float) -> np.ndarray:
     if not contrast:
         return img
     c = contrast / 100.0
+    if rsfast.available():
+        return rsfast.contrast(img, c)
     x = np.clip(img, 0.0, 1.0)
     if c > 0:  # fondu vers une courbe en S douce (pas d'écrêtage brutal)
         s = x * x * (3.0 - 2.0 * x)
@@ -281,6 +289,8 @@ def _apply_curve(img: np.ndarray, curve: dict) -> np.ndarray:
         changed = True
     if not changed:
         return img
+    if rsfast.available():   # lookup LUT par canal (LUT composées ci-dessus), multi-cœur
+        return rsfast.curve(img, luts)
     out = img.copy()
     for ci, lut in enumerate(luts):
         if lut is not None:
@@ -299,6 +309,13 @@ def _apply_color(img: np.ndarray, hsl: dict, vibrance: float, saturation: float)
     if not (has_hsl or vibrance or saturation):
         return img
     hsv = cv2.cvtColor(np.clip(img, 0.0, 1.0), cv2.COLOR_RGB2HSV)
+    if rsfast.available():   # math 8 bandes + vibrance/sat en place (multi-cœur), cvtColor laissé à OpenCV
+        centers = np.array([c for _, c in HSL_BANDS], dtype=np.float32)
+        bh = np.array([float((hsl.get(n) or {}).get("h", 0)) for n, _ in HSL_BANDS], dtype=np.float32)
+        bs = np.array([float((hsl.get(n) or {}).get("s", 0)) for n, _ in HSL_BANDS], dtype=np.float32)
+        bl = np.array([float((hsl.get(n) or {}).get("l", 0)) for n, _ in HSL_BANDS], dtype=np.float32)
+        rsfast.hsl(hsv, centers, bh, bs, bl, float(vibrance), float(saturation))
+        return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
     if has_hsl:
         h_shift = np.zeros_like(h)
@@ -402,6 +419,8 @@ _vignette_r_cache: dict[tuple[int, int], np.ndarray] = {}
 def _apply_vignette(img: np.ndarray, vignette: float) -> np.ndarray:
     if not vignette:
         return img
+    if rsfast.available():   # r calculé par pixel (même formule), multi-cœur
+        return rsfast.vignette(img, vignette / 100.0)
     h, w = img.shape[:2]
     key = (h, w)
     if key not in _vignette_r_cache:

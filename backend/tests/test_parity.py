@@ -100,8 +100,13 @@ def _build_fixture() -> dict:
     return {"pixels": PIXELS, "cases": cases}
 
 
-def test_parity_fixture_matches_pipeline():
-    """Le golden commité reflète le pipeline courant (régénérer si ça casse)."""
+def test_parity_fixture_matches_pipeline(monkeypatch):
+    """Le golden commité reflète le pipeline courant (régénérer si ça casse).
+
+    Le golden est l'oracle de parité du GPU : on le calcule sur le chemin NumPy
+    **canonique** (rsfast forcé hors-ligne), pour qu'il soit stable que l'accélérateur
+    natif soit compilé ou non. rsfast reproduit cette math à ≤ 0.035/255 (sous le 2/255 GPU)."""
+    monkeypatch.setattr(pipeline.rsfast, "available", lambda: False)
     fresh = _build_fixture()
     if os.environ.get("RAWSTUDIO_WRITE_FIXTURES"):
         FIXTURE.parent.mkdir(parents=True, exist_ok=True)

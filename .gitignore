@@ -21,10 +21,14 @@ CLAUDE.md
 étude.md
 TEST_OPTIMISATION.md
 Notes
+transfert_rust.md
 
 # Tauri / Rust
 src-tauri/target/
 src-tauri/gen/
+
+# accélérateur natif rsfast (artefacts de build cargo)
+backend/rsfast/target/
 
 # sidecar PyInstaller (backend figé pour le bundle Tauri)
 backend/build/

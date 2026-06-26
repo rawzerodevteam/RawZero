@@ -51,6 +51,30 @@ if (-not (Test-Path (Join-Path $front "node_modules"))) {
   Pop-Location
 }
 
+# ---- Accélérateur natif Rust (rsfast) : optionnel, compilé si cargo est présent ----
+# Le pipeline détecte la DLL au runtime et retombe sur NumPy si elle est absente
+# (cf. backend/app/rsfast.py). On ne bloque jamais le lancement là-dessus.
+$rsfastDir = Join-Path $root "backend\rsfast"
+$rsfastDll = Join-Path $rsfastDir "target\release\rsfast.dll"
+$cargo = Get-Command cargo -ErrorAction SilentlyContinue
+if ($cargo) {
+  $needBuild = $Rebuild -or (-not (Test-Path $rsfastDll))
+  if (-not $needBuild) {
+    $srcNewest = Get-ChildItem (Join-Path $rsfastDir "src") -Recurse -File -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    if ($srcNewest -and $srcNewest.LastWriteTimeUtc -gt (Get-Item $rsfastDll).LastWriteTimeUtc) { $needBuild = $true }
+  }
+  if ($needBuild) {
+    Write-Host "Build de l'accélérateur natif rsfast (cargo --release)…" -ForegroundColor Cyan
+    Push-Location $rsfastDir
+    & $cargo.Source build --release
+    if ($LASTEXITCODE -ne 0) { Write-Host "  build rsfast échoué → repli NumPy" -ForegroundColor Yellow }
+    Pop-Location
+  }
+} elseif (-not (Test-Path $rsfastDll)) {
+  Write-Host "cargo introuvable : rsfast non compilé → pipeline NumPy (perf normale)." -ForegroundColor DarkGray
+}
+
 # ---- Variables d'environnement de l'app ----
 $env:DATA_DIR   = Join-Path $root "data"
 $env:IMPORT_DIR = Join-Path $root "import"
