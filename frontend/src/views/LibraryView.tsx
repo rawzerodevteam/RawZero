@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { Filmstrip } from "../components/Filmstrip";
+import { ImageViewer } from "../components/ImageViewer";
 import { ModeTabs } from "../components/ModeTabs";
 import { ProjectMenu } from "../components/ProjectMenu";
 import { StarRating } from "../components/StarRating";
@@ -290,6 +291,23 @@ function Grid() {
     if (d && !d.moved && !d.additive) setSelection([]); // clic dans le vide → tout désélectionner
   };
 
+  // Sélection au clic sur une vignette gérée via les événements POINTEUR (pas `onClick`) :
+  // les cellules sont `draggable`, donc un léger mouvement déclenche un drag natif qui *avale*
+  // le `click` — on se retrouvait avec tout en bleu, impossible à désélectionner. Le pointerup,
+  // lui, est toujours émis pour un vrai clic (et pas pour un glissement → pas de fausse sélection).
+  const cellDown = useRef<{ id: number; x: number; y: number } | null>(null);
+  const onCellPointerDown = (ev: React.PointerEvent, id: number) => {
+    if (ev.button !== 0) return;
+    cellDown.current = { id, x: ev.clientX, y: ev.clientY };
+  };
+  const onCellPointerUp = (ev: React.PointerEvent, id: number) => {
+    const d = cellDown.current;
+    cellDown.current = null;
+    if (!d || d.id !== id) return;
+    if (Math.hypot(ev.clientX - d.x, ev.clientY - d.y) > 6) return; // c'était un glissement
+    onClick(ev as unknown as React.MouseEvent, id);
+  };
+
   // garde la photo courante visible quand on navigue au clavier
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>(`[data-id="${currentId}"]`)
@@ -328,7 +346,8 @@ function Grid() {
             if (!selection.includes(p.id)) setSelection([p.id]);
             setDragIds(ev, ids);
           }}
-          onClick={(ev) => onClick(ev, p.id)}
+          onPointerDown={(ev) => onCellPointerDown(ev, p.id)}
+          onPointerUp={(ev) => onCellPointerUp(ev, p.id)}
           onContextMenu={(ev) => onContextMenu(ev, p.id)}
           onDoubleClick={() => { selectPhoto(p.id); setView("loupe"); }}
         >
@@ -369,11 +388,9 @@ function Loupe() {
   return (
     <div className="loupe">
       <div className="loupe-main">
-        {/* Aperçu robuste : l'image est forcée à se contenir dans la zone (object-fit), sans
-            calcul de boîte JS (qui pouvait collapser à 0 si le conteneur n'était pas mesuré). */}
-        <div className="loupe-image">
-          <img src={api.previewUrl(photo.id, versions[photo.id] ?? 0)} alt={photo.filename} draggable={false} />
-        </div>
+        {/* Viewer partagé avec le mode développement : molette = zoom centré curseur,
+            Espace + glisser = déplacement, Z / double-clic = ajusté ↔ 100 %. */}
+        <ImageViewer src={api.previewUrl(photo.id, versions[photo.id] ?? 0)} />
         {showInfo && <ExifOverlay />}
         <div className="loupe-bar">
           <span className="name">{photo.filename}</span>

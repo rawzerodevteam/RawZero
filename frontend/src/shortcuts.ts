@@ -109,6 +109,8 @@ export function handleGlobalKey(ev: KeyboardEvent) {
       s.setView("grid");
     } else if (s.activeTool !== "none") {
       s.setUI({ activeTool: "none" });
+    } else if (s.view === "grid" && s.selection.length) {
+      s.setSelection([]); // filet de sécurité : Échap vide la sélection (sortir du « tout bleu »)
     } else if (s.view !== "grid") {
       s.setView("grid");
     }
