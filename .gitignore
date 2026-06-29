@@ -32,3 +32,7 @@ backend/dist/
 
 # outillage local Claude Code
 .claude/
+
+# wrangler / R2 — deps racine + état local jetable
+/node_modules/
+.wrangler/

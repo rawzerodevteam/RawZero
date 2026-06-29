@@ -61,10 +61,11 @@ jobs:
         run: ./src-tauri/nsis-plugins.ps1
 
       # tauri-action lance beforeBuildCommand (build Vite), compile le shell Rust, bundle les
-      # installateurs et, si tagName est fourni, les attache à une Release GitHub. Avec les
-      # secrets TAURI_SIGNING_* (issue #14), il signe aussi chaque binaire et publie
-      # latest.json -- manifeste lu par l'updater intégré à l'app (tauri.conf.json ->
-      # plugins.updater). Secrets à générer une fois via `npx tauri signer generate`.
+      # installateurs et, si tagName est fourni, les attache à une Release GitHub (draft, pour
+      # téléchargement humain). Avec les secrets TAURI_SIGNING_* (issue #14) il signe chaque
+      # binaire et génère les .sig dans target/release/bundle. L'auto-update NE passe PAS par
+      # GitHub (repo privé -> assets non lisibles par l'updater non authentifié) mais par R2,
+      # publié à l'étape suivante. Secrets signing à générer via `npx tauri signer generate`.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -75,4 +76,13 @@ jobs:
           releaseName: 'RawStudio ${{ github.ref_name }}'
           releaseDraft: true
           prerelease: false
-          includeUpdaterJson: true
+          includeUpdaterJson: false
+
+      # Publie artefacts updater + manifeste par plateforme sur R2 (source lue par l'updater).
+      # Seulement sur tag : workflow_dispatch sert à valider le build sans rien publier.
+      - name: Publier la mise à jour sur R2
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: '63c0970bbb95c016789e74671e5e24c6'
+        run: node scripts/publish-r2.mjs
