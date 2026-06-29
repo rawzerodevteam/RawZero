@@ -54,12 +54,6 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      # Plugin EnVar requis par installer-hooks.nsh (ajout au PATH) — Windows seulement.
-      - name: NSIS EnVar plugin
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: ./src-tauri/nsis-plugins.ps1
-
       # tauri-action lance beforeBuildCommand (build Vite), compile le shell Rust, bundle les
       # installateurs et, si tagName est fourni, les attache à une Release GitHub (draft, pour
       # téléchargement humain). Avec les secrets TAURI_SIGNING_* (issue #14) il signe chaque

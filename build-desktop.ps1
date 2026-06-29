@@ -14,7 +14,6 @@ npm run build
 Pop-Location
 
 Write-Host "== 3/3 : bundle Tauri (.exe NSIS) =="
-& "$PSScriptRoot\src-tauri\nsis-plugins.ps1"   # plugin EnVar pour l'ajout au PATH
 npx --prefix frontend tauri build
 
 Write-Host "`nBundle prêt : src-tauri\target\release\bundle\"

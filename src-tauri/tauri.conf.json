@@ -5,7 +5,7 @@
   "identifier": "com.rawstudio.app",
   "build": {
     "frontendDist": "../frontend/dist",
-    "beforeBuildCommand": "npm run build --prefix ../frontend"
+    "beforeBuildCommand": "npm run build --prefix frontend"
   },
   "app": {
     "windows": [],
@@ -32,8 +32,7 @@
       "nsis": {
         "installMode": "both",
         "languages": ["French", "English"],
-        "displayLanguageSelector": true,
-        "installerHooks": "installer-hooks.nsh"
+        "displayLanguageSelector": true
       }
     },
     "android": {
