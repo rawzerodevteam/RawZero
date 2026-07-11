@@ -49,10 +49,14 @@ _static = Path(config.STATIC_DIR) if config.STATIC_DIR else None
 if _static and _static.is_dir():
     app.mount("/assets", StaticFiles(directory=str(_static / "assets")), name="assets")
 
+    _static_root = _static.resolve()
+
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa(full_path: str):
-        candidate = _static / full_path
-        if full_path and candidate.is_file():
+        # Confinement (cf. durcissement import/masques) : `is_file()` seul suivrait un
+        # `../../…` hors du dossier statique → on exige que la cible reste sous _static.
+        candidate = (_static / full_path).resolve()
+        if full_path and candidate.is_file() and candidate.is_relative_to(_static_root):
             return FileResponse(candidate)
         return FileResponse(_static / "index.html")
 else:

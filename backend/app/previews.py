@@ -50,17 +50,25 @@ def _hot_put(hot: "OrderedDict[int, np.ndarray]", photo_id: int, arr: np.ndarray
 # B2 — un verrou de décodage par photo : deux requêtes concurrentes sur une base
 # non cachée (navigation rapide en mode Dev, le client coupe mais l'endpoint sync
 # continue) ne doivent décoder LibRaw qu'une seule fois ; la 2ᵉ attend la 1ʳᵉ.
-_decode_locks: "dict[int, threading.Lock]" = {}
-_dn_decode_locks: "dict[int, threading.Lock]" = {}
+# N2 — tables LRU bornées : sans éviction, une session parcourant des milliers de
+# photos accumulait un Lock par photo (fuite mémoire non bornée). Évincer un verrou
+# inutilisé est sûr : au pire deux décodages concurrents pour une photo dont le verrou
+# vient de disparaître (exactement la situation d'avant B2, tolérable et rarissime).
+_decode_locks: "OrderedDict[int, threading.Lock]" = OrderedDict()
+_dn_decode_locks: "OrderedDict[int, threading.Lock]" = OrderedDict()
 _decode_locks_guard = threading.Lock()
+_DECODE_LOCKS_MAX = 64
 
 
-def _keyed_lock(table: "dict[int, threading.Lock]", photo_id: int) -> threading.Lock:
+def _keyed_lock(table: "OrderedDict[int, threading.Lock]", photo_id: int) -> threading.Lock:
     with _decode_locks_guard:
         lk = table.get(photo_id)
         if lk is None:
             lk = threading.Lock()
             table[photo_id] = lk
+        table.move_to_end(photo_id)
+        while len(table) > _DECODE_LOCKS_MAX:
+            table.popitem(last=False)
         return lk
 
 
