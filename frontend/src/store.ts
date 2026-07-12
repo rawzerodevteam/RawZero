@@ -125,6 +125,7 @@ interface Store {
   showExport: boolean;
   showModels: boolean;            // dialog « Modèles IA » (téléchargement à la demande)
   showAlbums: boolean;            // panneau latéral Collections (grille)
+  relinkTargetId: number | null;  // id de la photo en cours de reliage (dialog « Relier »)
   activeTool: Tool;
   selectedLocalId: string | null;
   showMaskOverlay: boolean;
@@ -172,6 +173,9 @@ interface Store {
   patchSelection(patch: Partial<Pick<Photo, "rating" | "flag" | "color">>): void;
   removeCurrent(deleteFile: boolean): Promise<void>;
   removeSelection(deleteFile: boolean): Promise<void>;
+  openRelink(id: number): void;
+  closeRelink(): void;
+  relinkPhoto(path: string): Promise<void>;
 
   createAutoMask(kind: string): Promise<void>;
   createPointMask(x: number, y: number): Promise<void>;
@@ -238,6 +242,7 @@ export const useStore = create<Store>((set, get) => ({
   showExport: false,
   showModels: false,
   showAlbums: false,
+  relinkTargetId: null,
   activeTool: "none",
   selectedLocalId: null,
   showMaskOverlay: true,
@@ -541,6 +546,19 @@ export const useStore = create<Store>((set, get) => ({
     const rest = photos.filter((p) => p.id !== currentId);
     set({ photos: rest, currentId: rest.length ? rest[Math.min(idx, rest.length - 1)].id : null });
     if (!rest.length) set({ view: "grid" });
+  },
+
+  openRelink(id) { set({ relinkTargetId: id }); },
+  closeRelink() { set({ relinkTargetId: null }); },
+
+  async relinkPhoto(path) {
+    const id = get().relinkTargetId;
+    if (id === null) return;
+    const updated = await api.relinkPhoto(id, path);
+    set({ photos: get().photos.map((p) => (p.id === id ? { ...p, missing: updated.missing } : p)),
+          relinkTargetId: null });
+    if (updated.warning) get().notify(updated.warning);
+    if (get().currentId === id && get().view === "develop") void get().openDevelop(id);
   },
 
   // Masque IA : calcule côté serveur puis ajoute le masque retourné aux retouches locales.

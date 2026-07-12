@@ -76,9 +76,8 @@ if ($cargo) {
 }
 
 # ---- Variables d'environnement de l'app ----
-$env:DATA_DIR   = Join-Path $root "data"
-$env:IMPORT_DIR = Join-Path $root "import"
-New-Item -ItemType Directory -Force -Path $env:DATA_DIR, $env:IMPORT_DIR | Out-Null
+$env:DATA_DIR = Join-Path $root "data"
+New-Item -ItemType Directory -Force -Path $env:DATA_DIR | Out-Null
 
 # ---- Le build du frontend est-il périmé par rapport aux sources ? ----
 function Test-FrontendStale([string]$front, [string]$dist) {

@@ -48,11 +48,11 @@ def delete_project(project_id: int, delete_files: bool = False):
     if (db.query_one("SELECT COUNT(*) AS n FROM projects") or {"n": 0})["n"] <= 1:
         raise HTTPException(422, "Impossible de supprimer le dernier projet")
     # retire les photos du projet (cache invalidé ; fichiers conservés sauf demande explicite)
-    from .. import config
-    for ph in db.query("SELECT id, relpath FROM photos WHERE project_id=?", (project_id,)):
+    from pathlib import Path
+    for ph in db.query("SELECT id, path FROM photos WHERE project_id=?", (project_id,)):
         previews.invalidate(ph["id"])
         if delete_files:
-            (config.ORIGINALS_DIR / ph["relpath"]).unlink(missing_ok=True)
+            Path(ph["path"]).unlink(missing_ok=True)
     db.execute("DELETE FROM photos WHERE project_id=?", (project_id,))
     db.execute("DELETE FROM projects WHERE id=?", (project_id,))
     return {"ok": True}

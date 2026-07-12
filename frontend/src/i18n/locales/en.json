@@ -204,24 +204,30 @@
   "import": {
     "title": "Import into “{{name}}”",
     "defaultProject": "Project",
-    "fromComputer": "From this computer",
-    "folderTab": "/import folder",
-    "uploading": "Importing…",
-    "dropzone": "Drop files here or click to choose",
     "formats": "RAW (CR2/CR3, NEF, ARW, RAF, ORF, RW2, DNG…) or JPEG / PNG / TIFF",
-    "noFolder": "No import folder mounted. Drop your files in ./import next to docker-compose.yml (mounted read-only in the container), then reopen this tab.",
+    "pickFiles": "Choose photos…",
+    "pickFolder": "Choose a folder…",
+    "noFolder": "Folder not found.",
     "parentDir": "Parent folder",
     "importAll": "Import all ({{count}})",
     "clickToImport": "Click to import",
     "emptyFolder": "Empty folder",
+    "referenceHint": "Photos stay at their original location (nothing is copied): don't move imported files outside of RawStudio.",
     "status": {
       "imported": "imported",
       "duplicate": "duplicate skipped",
       "ignored": "unsupported format",
       "error": "error",
-      "pending": "pending",
-      "uploading": "uploading…"
+      "pending": "pending"
     }
+  },
+  "relink": {
+    "title": "Relink “{{name}}”",
+    "hint": "This photo's original file can't be found (moved or deleted). Choose its new location.",
+    "missingBadge": "Original file not found",
+    "developBanner": "Original file not found — develop and export are unavailable until this photo is relinked.",
+    "action": "Relink file…",
+    "warning": "Warning: the selected file's content differs from the cataloged original."
   },
   "local": {
     "title": "Local adjustments",

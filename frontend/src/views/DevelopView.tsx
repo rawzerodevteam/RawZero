@@ -109,6 +109,7 @@ export function DevelopView() {
   const copyEdits = useStore((s) => s.copyEdits);
   const pasteEdits = useStore((s) => s.pasteEdits);
   const resetEdits = useStore((s) => s.resetEdits);
+  const openRelink = useStore((s) => s.openRelink);
   const [gpuPreview, setGpuPreview] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
   const src = useRenderedImage(gpuPreview);
@@ -145,6 +146,12 @@ export function DevelopView() {
           <button className="btn small" title={t("develop.exportTitle")} onClick={() => setUI({ showExport: true })}>⤒</button>
           <button className="btn small" title={t("settings.title")} onClick={() => setView("settings")}>⚙</button>
         </div>
+        {photo.missing && (
+          <div className="missing-banner">
+            <span>{t("relink.developBanner")}</span>
+            <button className="btn small" onClick={() => openRelink(photo.id)}>{t("relink.action")}</button>
+          </div>
+        )}
         <div className="develop-viewer">
           {edits ? <ImageViewer src={src} interactive gpu={gpuPreview} /> : <div className="viewer-empty">{t("common.loading")}</div>}
           {beforeAfter && <div className="before-badge">{t("develop.beforeBadge")}</div>}

@@ -1,6 +1,7 @@
 """Rendu interactif (edits → JPEG) + fichiers cache (thumb/preview) + original."""
 import logging
 import time
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Response
@@ -8,7 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from .. import config, db, pipeline, previews
-from .photos import get_photo_row
+from .photos import get_photo_row, require_original
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ class RenderRequest(BaseModel):
 def render(photo_id: int, req: RenderRequest, max_size: int = config.PREVIEW_SIZE,
            show_mask: str = "", before: bool = False, crop_edit: bool = False):
     row = get_photo_row(photo_id)
-    original = config.ORIGINALS_DIR / row["relpath"]
+    original = require_original(row)
     # Chronométrage par étape → en-tête Server-Timing (lu par le panneau de profilage dev).
     t0 = time.perf_counter()
     base = previews.get_base(photo_id, original)
@@ -48,7 +49,7 @@ def denoised(photo_id: int, max_size: int = 1600):
     """Base **neutre débruitée** (JPEG) pour la texture GPU — miroir du chemin `before:true`.
     503 si le modèle de débruitage est absent (le client masque alors le réglage)."""
     row = get_photo_row(photo_id)
-    original = config.ORIGINALS_DIR / row["relpath"]
+    original = require_original(row)
     dn = previews.get_denoised_base(photo_id, original)
     if dn is None:
         return Response(status_code=503)
@@ -61,10 +62,12 @@ def denoised(photo_id: int, max_size: int = 1600):
 def _cached_file(photo_id: int, path, versioned: bool) -> Response:
     if not path.exists():
         row = get_photo_row(photo_id)
-        try:
-            previews.generate_initial_previews(photo_id, config.ORIGINALS_DIR / row["relpath"])
-        except Exception as e:
-            log.warning("Génération preview à la volée échouée #%s : %s", photo_id, e)
+        original = Path(row["path"])
+        if original.is_file():
+            try:
+                previews.generate_initial_previews(photo_id, original)
+            except Exception as e:
+                log.warning("Génération preview à la volée échouée #%s : %s", photo_id, e)
     if path.exists():
         # L'URL est cache-bustée par ?v= (incrémenté après chaque édition) → on peut servir
         # « immutable » : plus de revalidation à chaque montage de grille / scroll.
@@ -87,5 +90,5 @@ def preview(photo_id: int, v: Optional[str] = None):
 @router.get("/photos/{photo_id}/original")
 def original(photo_id: int):
     row = get_photo_row(photo_id)
-    path = config.ORIGINALS_DIR / row["relpath"]
+    path = require_original(row)
     return FileResponse(path, filename=row["filename"])

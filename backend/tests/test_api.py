@@ -1,6 +1,8 @@
 """Test bout en bout : import → tri → edit → render → export → presets."""
 import io
 import json
+import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -17,6 +19,11 @@ def client():
         yield c
 
 
+# Dossier « externe » (hors data/) simulant l'emplacement réel des photos sur le disque de
+# l'utilisateur : l'import référence ces fichiers par chemin, sans les copier.
+_SRC_DIR = Path(tempfile.mkdtemp(prefix="rawstudio-src-"))
+
+
 def make_jpeg(w: int = 640, h: int = 420) -> bytes:
     x = np.linspace(0, 255, w, dtype=np.uint8)
     y = np.linspace(0, 200, h, dtype=np.uint8)
@@ -27,12 +34,22 @@ def make_jpeg(w: int = 640, h: int = 420) -> bytes:
     return buf.getvalue()
 
 
+def import_photo(client, filename: str, content: bytes | None = None, w: int = 640, h: int = 420,
+                 project_id: int | None = None) -> dict:
+    """Écrit un fichier dans le dossier source externe puis l'enregistre par chemin (sans copie)."""
+    src = _SRC_DIR / filename
+    src.write_bytes(content if content is not None else make_jpeg(w, h))
+    body = {"paths": [str(src)]}
+    if project_id:
+        body["project_id"] = project_id
+    r = client.post("/api/import/folder", json=body)
+    assert r.status_code == 200
+    return r.json()["results"][0]
+
+
 @pytest.fixture(scope="module")
 def photo_id(client) -> int:
-    r = client.post("/api/import/upload",
-                    files=[("files", ("test-grad.jpg", make_jpeg(), "image/jpeg"))])
-    assert r.status_code == 200
-    res = r.json()["results"][0]
+    res = import_photo(client, "test-grad.jpg")
     assert res["status"] == "imported"
     return res["id"]
 
@@ -42,15 +59,13 @@ def test_health(client):
 
 
 def test_duplicate_detection(client, photo_id):
-    r = client.post("/api/import/upload",
-                    files=[("files", ("copie.jpg", make_jpeg(), "image/jpeg"))])
-    assert r.json()["results"][0]["status"] == "duplicate"
+    res = import_photo(client, "copie.jpg")  # mêmes dimensions → mêmes octets → même hash
+    assert res["status"] == "duplicate"
 
 
 def test_unsupported_extension(client):
-    r = client.post("/api/import/upload",
-                    files=[("files", ("notes.txt", b"hello", "text/plain"))])
-    assert r.json()["results"][0]["status"] == "ignored"
+    res = import_photo(client, "notes.txt", content=b"hello")
+    assert res["status"] == "ignored"
 
 
 def test_list_and_get(client, photo_id):
@@ -59,6 +74,8 @@ def test_list_and_get(client, photo_id):
     p = client.get(f"/api/photos/{photo_id}").json()
     assert p["width"] == 640 and p["height"] == 420
     assert p["edits"] == {}
+    assert p["missing"] is False
+    assert p["path"] == str(_SRC_DIR / "test-grad.jpg")
 
 
 def test_rating_flag_color(client, photo_id):
@@ -198,17 +215,22 @@ def test_export_stream(client, photo_id):
     assert client.get(files[0]["url"]).status_code == 200
 
 
-def test_browse_import_dir(client):
-    config.IMPORT_DIR.mkdir(parents=True, exist_ok=True)
-    (config.IMPORT_DIR / "sub").mkdir(exist_ok=True)
-    (config.IMPORT_DIR / "sub" / "photo.jpg").write_bytes(make_jpeg(64, 64))
-    r = client.get("/api/import/browse").json()
-    assert r["available"] and any(d["name"] == "sub" for d in r["dirs"])
-    r2 = client.get("/api/import/browse", params={"path": "sub"}).json()
+def test_browse_and_import_folder(client):
+    sub = _SRC_DIR / "browsesub"
+    sub.mkdir(exist_ok=True)
+    (sub / "photo.jpg").write_bytes(make_jpeg(64, 64))
+    r = client.get("/api/import/browse", params={"path": str(_SRC_DIR)}).json()
+    assert r["available"] and any(d["name"] == "browsesub" for d in r["dirs"])
+    r2 = client.get("/api/import/browse", params={"path": str(sub)}).json()
     assert any(f["name"] == "photo.jpg" for f in r2["files"])
-    imp = client.post("/api/import/folder", json={"paths": ["sub/photo.jpg"]}).json()
+    imp = client.post("/api/import/folder", json={"paths": [str(sub / "photo.jpg")]}).json()
     assert imp["results"][0]["status"] == "imported"
-    assert client.get("/api/import/browse", params={"path": "../.."}).status_code in (403, 404)
+    assert client.get("/api/import/browse", params={"path": str(sub / "does-not-exist")}).status_code == 404
+
+
+def test_browse_root_lists_drives_or_fallback(client):
+    r = client.get("/api/import/browse").json()
+    assert r["available"] and r["dirs"]
 
 
 def test_albums_crud_and_membership(client, photo_id):
@@ -245,8 +267,29 @@ def test_albums_crud_and_membership(client, photo_id):
 
 
 def test_delete_photo(client):
-    r = client.post("/api/import/upload",
-                    files=[("files", ("to-delete.jpg", make_jpeg(100, 80), "image/jpeg"))])
-    pid = r.json()["results"][0]["id"]
+    res = import_photo(client, "to-delete.jpg", w=100, h=80)
+    pid = res["id"]
+    src = _SRC_DIR / "to-delete.jpg"
     assert client.delete(f"/api/photos/{pid}", params={"delete_file": True}).json()["ok"]
     assert client.get(f"/api/photos/{pid}").status_code == 404
+    assert not src.exists()  # le fichier original (référencé, pas copié) est bien supprimé
+
+
+def test_missing_original_and_relink(client, tmp_path):
+    src = tmp_path / "movable.jpg"
+    src.write_bytes(make_jpeg(50, 50))
+    res = client.post("/api/import/folder", json={"paths": [str(src)]}).json()["results"][0]
+    assert res["status"] == "imported"
+    pid = res["id"]
+    assert client.get(f"/api/photos/{pid}").json()["missing"] is False
+
+    moved = tmp_path / "moved.jpg"
+    src.rename(moved)
+    assert client.get(f"/api/photos/{pid}").json()["missing"] is True
+    assert client.post(f"/api/photos/{pid}/render", json={"edits": {}}).status_code == 409
+    export_res = client.post("/api/export", json={"ids": [pid], "format": "jpeg"}).json()
+    assert export_res["errors"] and export_res["errors"][0]["id"] == pid
+
+    relinked = client.patch(f"/api/photos/{pid}/relink", json={"path": str(moved)}).json()
+    assert relinked["missing"] is False
+    assert client.post(f"/api/photos/{pid}/render", json={"edits": {}}).status_code == 200

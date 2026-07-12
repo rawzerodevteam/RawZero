@@ -280,7 +280,10 @@ def _refresh_previews_job(photo_id: int) -> None:
         row = db.query_one("SELECT * FROM photos WHERE id=?", (photo_id,))
         if row is None:
             return
-        original = config.ORIGINALS_DIR / row["relpath"]
+        original = Path(row["path"])
+        if not original.is_file():
+            log.warning("Refresh preview #%s ignoré : original introuvable (%s)", photo_id, original)
+            return
         edits = json.loads(row["edits"] or "{}")
         base = get_base(photo_id, original)
         rendered = pipeline.render_array(base, edits, config.PREVIEW_SIZE,

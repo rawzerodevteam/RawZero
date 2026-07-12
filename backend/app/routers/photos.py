@@ -1,10 +1,11 @@
 """Catalogue : liste, métadonnées, note/drapeau/label, suppression."""
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import config, db, previews
+from .. import db, previews
 
 router = APIRouter()
 
@@ -17,9 +18,10 @@ SORTS = {
 }
 
 # Colonnes servies au listing : tout SAUF les blobs TEXT `edits`/`history` (volumineux et
-# aussitôt jetés par photo_to_dict en mode listing) et relpath/hash (retirés de la sortie).
+# aussitôt jetés par photo_to_dict en mode listing) et hash (retiré de la sortie).
+# `path` est inclus : nécessaire pour le badge « fichier introuvable » dans la grille.
 # Évite de lire ces blobs pour chaque photo à chaque changement de filtre/tri.
-LIST_COLS = ("id", "filename", "ext", "is_raw", "width", "height", "captured_at",
+LIST_COLS = ("id", "filename", "path", "ext", "is_raw", "width", "height", "captured_at",
              "imported_at", "camera", "lens", "iso", "aperture", "shutter", "focal",
              "rating", "flag", "color", "edited", "project_id")
 
@@ -98,6 +100,17 @@ def get_photo_row(photo_id: int):
     return row
 
 
+def require_original(row) -> Path:
+    """Chemin de l'original, garanti présent sur disque (409 sinon).
+
+    L'import référence le fichier à son emplacement d'origine (pas de copie) : il peut
+    avoir été déplacé/supprimé hors de RawStudio depuis l'import."""
+    path = Path(row["path"])
+    if not path.is_file():
+        raise HTTPException(409, f"Fichier original introuvable : {path}")
+    return path
+
+
 @router.get("/photos/{photo_id}")
 def get_photo(photo_id: int):
     return db.photo_to_dict(get_photo_row(photo_id), with_edits=True)
@@ -138,6 +151,6 @@ def delete_photo(photo_id: int, delete_file: bool = False):
     row = get_photo_row(photo_id)
     previews.invalidate(photo_id)
     if delete_file:
-        (config.ORIGINALS_DIR / row["relpath"]).unlink(missing_ok=True)
+        Path(row["path"]).unlink(missing_ok=True)
     db.execute("DELETE FROM photos WHERE id=?", (photo_id,))
     return {"ok": True}

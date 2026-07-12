@@ -140,17 +140,16 @@ export const api = {
     await json(await fetch(`/api/photos/${id}?delete_file=${deleteFile}`, { method: "DELETE" }));
   },
 
-  async uploadFile(file: File, projectId?: number | null): Promise<ImportResult> {
-    const fd = new FormData();
-    fd.append("files", file, file.name);
-    if (projectId) fd.append("project_id", String(projectId));
-    const out = await json<{ results: ImportResult[] }>(
-      await fetch("/api/import/upload", { method: "POST", body: fd }));
-    return out.results[0];
+  async relinkPhoto(id: number, path: string): Promise<Photo & { warning?: string }> {
+    return json(await fetch(`/api/photos/${id}/relink`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    }));
   },
 
   async browseImport(path: string): Promise<{
-    available: boolean; path: string;
+    available: boolean; path: string; parent?: string;
     dirs: { name: string; path: string }[];
     files: { name: string; path: string; size: number }[];
   }> {

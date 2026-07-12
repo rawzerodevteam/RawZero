@@ -22,6 +22,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .. import config, db, denoise, pipeline, raw_loader
+from .photos import require_original
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -108,7 +109,7 @@ def export_stream(req: ExportRequest):
 
 def _export_one(row: dict, out_dir: Path, req: ExportRequest) -> dict:
     t0 = time.perf_counter()
-    original = config.ORIGINALS_DIR / row["relpath"]
+    original = require_original(row)
     base = raw_loader.decode_full(original)
     edits = json.loads(row.get("edits") or "{}")
     # Débruitage IA pleine résolution (tuilé) — chemin lent, seulement si le réglage est actif.

@@ -3,6 +3,7 @@ import json
 import sqlite3
 import threading
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from . import config
@@ -25,7 +26,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS photos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   filename TEXT NOT NULL,
-  relpath TEXT NOT NULL,
+  path TEXT NOT NULL,
   hash TEXT UNIQUE NOT NULL,
   ext TEXT NOT NULL,
   is_raw INTEGER NOT NULL DEFAULT 0,
@@ -91,6 +92,19 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = [r[1] for r in conn.execute("PRAGMA table_info(photos)")]
     if "project_id" not in cols:
         conn.execute("ALTER TABLE photos ADD COLUMN project_id INTEGER")
+    # Import par référence de chemin (plus de copie dans data/originals) : la colonne
+    # `relpath` (chemin relatif à ORIGINALS_DIR) devient `path` (chemin absolu quelconque
+    # sur le disque). Les photos déjà cataloguées (copiées) sont absolutisées vers leur
+    # copie existante sous ORIGINALS_DIR : elles continuent de fonctionner à l'identique.
+    if "path" not in cols and "relpath" in cols:
+        conn.execute("ALTER TABLE photos RENAME COLUMN relpath TO path")
+        rows = conn.execute("SELECT id, path FROM photos").fetchall()
+        updates = []
+        for photo_id, rel in rows:
+            if rel and not Path(rel).is_absolute():
+                updates.append((str((config.ORIGINALS_DIR / rel).resolve()), photo_id))
+        if updates:
+            conn.executemany("UPDATE photos SET path=? WHERE id=?", updates)
     # Colonne `edited` : calculée une fois ici puis maintenue au save, pour éviter de
     # recalculer `edits_meaningful` (deepcopy) à chaque listing du catalogue.
     # Historique des étapes de développement (panneau « Historique »), persisté par photo.
@@ -184,7 +198,10 @@ def photo_to_dict(row: sqlite3.Row, with_edits: bool = False) -> dict[str, Any]:
             d["history"] = {}
     else:
         d.pop("edits", None)
-    d.pop("relpath", None)
+    # `path` : import par référence (pas de copie) → exposé au client (app locale
+    # mono-utilisateur, utile pour le badge/relink « fichier introuvable »).
+    if "path" in d:
+        d["missing"] = not Path(d["path"]).is_file()
     d.pop("hash", None)
     return d
 

@@ -359,6 +359,7 @@ function Grid() {
             {p.color && <span className="badge color" style={{ background: COLOR_HEX[p.color] }} />}
             {!!p.is_raw && <span className="badge raw">RAW</span>}
             {p.edited && <span className="badge edited" title={t("develop.editedTitle")}>✎</span>}
+            {p.missing && <span className="badge missing" title={t("relink.missingBadge")}>⚠</span>}
           </div>
           <div className="cell-meta">
             <span className="name" title={p.filename}>

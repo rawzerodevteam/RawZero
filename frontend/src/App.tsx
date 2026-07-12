@@ -4,6 +4,7 @@ import { DevOverlay } from "./components/DevOverlay";
 import { ExportDialog } from "./components/ExportDialog";
 import { ImportPanel } from "./components/ImportPanel";
 import { ModelsDialog } from "./components/ModelsDialog";
+import { RelinkDialog } from "./components/RelinkDialog";
 import { ShortcutsOverlay } from "./components/ShortcutsOverlay";
 import { useGlobalShortcuts } from "./shortcuts";
 import i18n from "./i18n";
@@ -41,6 +42,7 @@ export function App() {
       {showExport && <ExportDialog />}
       {showModels && <ModelsDialog />}
       {showHelp && <ShortcutsOverlay />}
+      <RelinkDialog />
       <ContextMenu />
       {toast && <div className="toast">{toast}</div>}
       <DevOverlay />

@@ -70,6 +70,7 @@ fn static_dir(app: &tauri::App) -> PathBuf {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -80,10 +81,8 @@ pub fn run() {
             }
 
             let base_dir = app.path().app_data_dir().expect("app_data_dir introuvable");
-            let import_dir = base_dir.join("import");
             let data_dir = base_dir.join("data");
             std::fs::create_dir_all(&data_dir)?;
-            std::fs::create_dir_all(&import_dir)?;
 
             let port = pick_free_port();
             let bin = sidecar_path(app);
@@ -92,7 +91,6 @@ pub fn run() {
             let mut cmd = Command::new(&bin);
             cmd.env("PORT", port.to_string())
                 .env("DATA_DIR", &data_dir)
-                .env("IMPORT_DIR", &import_dir)
                 .env("STATIC_DIR", static_dir(app))
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit());

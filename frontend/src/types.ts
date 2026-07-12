@@ -21,6 +21,8 @@ export interface Album {
 export interface Photo {
   id: number;
   filename: string;
+  path: string;
+  missing: boolean;
   ext: string;
   is_raw: number;
   width: number;
@@ -148,7 +150,7 @@ export interface Preset {
 
 export interface ImportResult {
   filename: string;
-  status: "imported" | "duplicate" | "ignored" | "error" | "pending" | "uploading";
+  status: "imported" | "duplicate" | "ignored" | "error" | "pending";
   reason?: string;
   id?: number;
 }

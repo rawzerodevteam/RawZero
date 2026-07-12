@@ -204,24 +204,30 @@
   "import": {
     "title": "Importer dans « {{name}} »",
     "defaultProject": "Projet",
-    "fromComputer": "Depuis cet ordinateur",
-    "folderTab": "Dossier /import",
-    "uploading": "Import en cours…",
-    "dropzone": "Déposer des fichiers ici ou cliquer pour choisir",
     "formats": "RAW (CR2/CR3, NEF, ARW, RAF, ORF, RW2, DNG…) ou JPEG / PNG / TIFF",
-    "noFolder": "Aucun dossier d'import monté. Déposez vos fichiers dans ./import à côté du docker-compose.yml (monté en lecture seule dans le conteneur), puis rouvrez cet onglet.",
+    "pickFiles": "Choisir des photos…",
+    "pickFolder": "Choisir un dossier…",
+    "noFolder": "Dossier introuvable.",
     "parentDir": "Dossier parent",
     "importAll": "Tout importer ({{count}})",
     "clickToImport": "Cliquer pour importer",
     "emptyFolder": "Dossier vide",
+    "referenceHint": "Les photos restent à leur emplacement d'origine (aucune copie n'est faite) : ne déplacez pas les fichiers importés en dehors de RawStudio.",
     "status": {
       "imported": "importée",
       "duplicate": "doublon ignoré",
       "ignored": "format non géré",
       "error": "erreur",
-      "pending": "en attente",
-      "uploading": "envoi…"
+      "pending": "en attente"
     }
+  },
+  "relink": {
+    "title": "Relier « {{name}} »",
+    "hint": "Le fichier original de cette photo est introuvable (déplacé ou supprimé). Sélectionnez son nouvel emplacement.",
+    "missingBadge": "Fichier original introuvable",
+    "developBanner": "Fichier original introuvable — le développement et l'export sont indisponibles tant que la photo n'est pas reliée.",
+    "action": "Relier le fichier…",
+    "warning": "Attention : le contenu du fichier sélectionné diffère de l'original catalogué."
   },
   "local": {
     "title": "Retouches locales",

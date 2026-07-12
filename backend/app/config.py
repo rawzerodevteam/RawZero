@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data")).resolve()
-IMPORT_DIR = Path(os.environ.get("IMPORT_DIR", "./import")).resolve()
 STATIC_DIR = os.environ.get("STATIC_DIR", "")
 
 ORIGINALS_DIR = DATA_DIR / "originals"

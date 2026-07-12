@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from .. import config, db, denoise, pipeline, previews, segment
-from .photos import get_photo_row
+from .photos import get_photo_row, require_original
 
 router = APIRouter()
 
@@ -41,7 +41,7 @@ def save_edits(photo_id: int, body: SaveEditsBody):
 @router.post("/photos/{photo_id}/auto")
 def auto(photo_id: int, body: EditsBody):
     row = get_photo_row(photo_id)
-    base = previews.get_base(photo_id, config.ORIGINALS_DIR / row["relpath"])
+    base = previews.get_base(photo_id, require_original(row))
     return {"edits": pipeline.auto_adjust(base, body.edits)}
 
 
@@ -54,7 +54,7 @@ class WbPickBody(EditsBody):
 def wb_pick(photo_id: int, body: WbPickBody):
     """Pipette WB : renvoie {temp, tint} neutralisant le point (x, y) cliqué."""
     row = get_photo_row(photo_id)
-    base = previews.get_base(photo_id, config.ORIGINALS_DIR / row["relpath"])
+    base = previews.get_base(photo_id, require_original(row))
     return pipeline.wb_from_point(base, body.edits, body.x, body.y)
 
 
@@ -87,7 +87,7 @@ def automask(photo_id: int, body: AutoMaskBody):
     if body.kind == "subject" and not segment.available():
         raise HTTPException(503, "Masque IA indisponible (onnxruntime ou modèle absent)")
     row = get_photo_row(photo_id)
-    base = previews.get_base(photo_id, config.ORIGINALS_DIR / row["relpath"])
+    base = previews.get_base(photo_id, require_original(row))
     e = pipeline.merge_edits(body.edits)
     img = pipeline.apply_geometry(base.astype(np.float32, copy=True), e["geometry"])
     small = _resize_long_edge(img, _MASK_STORE_SIZE)
@@ -116,7 +116,7 @@ def clickmask(photo_id: int, body: ClickMaskBody):
     if not segment.point_available():
         raise HTTPException(503, "Segmentation au clic indisponible (modèle EdgeSAM absent)")
     row = get_photo_row(photo_id)
-    base = previews.get_base(photo_id, config.ORIGINALS_DIR / row["relpath"])
+    base = previews.get_base(photo_id, require_original(row))
     e = pipeline.merge_edits(body.edits)
     img = pipeline.apply_geometry(base.astype(np.float32, copy=True), e["geometry"])
     small = _resize_long_edge(img, _MASK_STORE_SIZE)
