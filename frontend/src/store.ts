@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { api, type PhotoFilters, type PhotoFacets } from "./api";
-import { ALL_PHOTOS_ID, defaultEdits, mergeEdits, type Album, type EditState, type HistoryData, type HistoryStep, type Photo, type Project } from "./types";
+import { ALL_PHOTOS_ID, defaultEdits, mergeEdits, type Album, type EditState, type HistoryData, type HistoryStep, type LocalAdjust, type Photo, type Project } from "./types";
 import { describeEditChange } from "./lib/historyLabel";
+import { cloneLocalMask } from "./lib/localMask";
 import i18n from "./i18n";
 
 // Libellé de l'étape « origine » de l'historique, dans la langue courante.
@@ -112,6 +113,7 @@ interface Store {
   currentLabel: string;           // libellé de l'étape courante (edits)
   dragBaseline: EditState | null; // snapshot avant un drag de slider
   clipboard: EditState | null;
+  localClipboard: LocalAdjust | null; // masque local copié (Ctrl+C/Ctrl+V) — collable sur n'importe quelle photo
   editsVersion: Record<number, number>; // cache-busting des thumbs/previews
 
   gridSize: number;               // taille des vignettes de la grille (px), réglable
@@ -158,6 +160,7 @@ interface Store {
   toggleSelect(id: number): void;
   selectRange(id: number): void;
   setSelection(ids: number[]): void;
+  selectAll(): void;
   openContextMenu(id: number, x: number, y: number): void;
   closeContextMenu(): void;
   setExportIds(ids: number[] | null): void;
@@ -183,6 +186,9 @@ interface Store {
   applyPartial(settings: Partial<EditState>): void;
   copyEdits(): void;
   pasteEdits(): void;
+  copyLocalMask(): void;
+  cutLocalMask(): void;
+  pasteLocalMask(): void;
   setCropAspect(ratio: number | null): void;
   saveNow(): Promise<void>;
   bumpVersion(id: number): void;
@@ -220,6 +226,7 @@ export const useStore = create<Store>((set, get) => ({
   currentLabel: originLabel(),
   dragBaseline: null,
   clipboard: null,
+  localClipboard: null,
   editsVersion: {},
 
   gridSize: (() => { const v = Number(localStorage.getItem("rs.gridSize")); return v >= 120 && v <= 520 ? v : 260; })(),
@@ -417,6 +424,17 @@ export const useStore = create<Store>((set, get) => ({
   // Sélection directe d'un ensemble d'ids (rectangle de sélection de la grille).
   setSelection(ids) {
     set({ selection: ids });
+  },
+
+  // Ctrl+A : sélectionne toutes les photos actuellement listées (respecte les filtres actifs),
+  // y compris depuis le mode développement (la photo ouverte reste active, `selection` sert
+  // seulement aux actions par lot : notation, export…). Un second Ctrl+A (tout déjà sélectionné)
+  // désélectionne tout, comme un bascule.
+  selectAll() {
+    const { photos, selection } = get();
+    const allIds = photos.map((p) => p.id);
+    const allSelected = allIds.length > 0 && allIds.every((id) => selection.includes(id));
+    set({ selection: allSelected ? [] : allIds });
   },
 
   // Maj+clic : plage de la photo active jusqu'à la cliquée (dans l'ordre affiché)
@@ -693,6 +711,39 @@ export const useStore = create<Store>((set, get) => ({
       e.geometry = keep;
     }, true, i18n.t("history.pasted"));
     get().notify("Réglages collés");
+  },
+
+  // Copie/colle UN masque local (Ctrl+C/Ctrl+V) — distinct de copyEdits/pasteEdits (tous les
+  // réglages). Colle sur la photo courante (la même ou une autre, selon où on est au moment du
+  // Ctrl+V) : ajoute une copie légèrement décalée, l'original ne bouge pas.
+  copyLocalMask() {
+    const { edits, selectedLocalId } = get();
+    const local = edits?.locals.find((l) => l.id === selectedLocalId);
+    if (!local) return;
+    set({ localClipboard: structuredClone(local) });
+    get().notify(i18n.t("local.maskCopied"));
+  },
+
+  // Ctrl+X : coupe le masque sélectionné (copie + retrait de la photo courante) pour le recoller
+  // ailleurs (même photo ou une autre) via Ctrl+V.
+  cutLocalMask() {
+    const { edits, selectedLocalId } = get();
+    const local = edits?.locals.find((l) => l.id === selectedLocalId);
+    if (!local) return;
+    set({ localClipboard: structuredClone(local) });
+    get().updateEdits((e) => { e.locals = e.locals.filter((l) => l.id !== selectedLocalId); },
+      true, i18n.t("history.localCut"));
+    set({ selectedLocalId: null });
+    get().notify(i18n.t("local.maskCut"));
+  },
+
+  pasteLocalMask() {
+    const source = get().localClipboard;
+    if (!source) return;
+    const clone = cloneLocalMask(source);
+    get().updateEdits((e) => { e.locals.push(clone); }, true, i18n.t("history.localDuplicated"));
+    set({ selectedLocalId: clone.id, activeTool: "none", showMaskOverlay: true });
+    get().notify(i18n.t("local.maskPasted"));
   },
 
   setCropAspect(ratio) {

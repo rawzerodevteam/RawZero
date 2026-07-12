@@ -52,10 +52,13 @@ describe("garde de saisie", () => {
 
 describe("notes, drapeaux, labels", () => {
   it("0–5 notent la photo courante", () => {
+    // Hors développement, noter fait aussi avancer à la photo suivante (cf. CLAUDE.md) :
+    // la 2e pression note donc la photo devenue courante, pas la première.
     press("3");
     expect(useStore.getState().photos[0].rating).toBe(3);
+    expect(useStore.getState().currentId).toBe(2);
     press("0");
-    expect(useStore.getState().photos[0].rating).toBe(0);
+    expect(useStore.getState().photos[1].rating).toBe(0);
   });
 
   it("P / X / U posent les drapeaux", () => {

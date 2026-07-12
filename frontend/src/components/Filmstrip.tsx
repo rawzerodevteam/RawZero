@@ -19,6 +19,20 @@ export function Filmstrip() {
     el?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
   }, [currentId, photos.length]);
 
+  // Molette verticale (comportement par défaut de la souris) → défilement horizontal du bandeau
+  // (listener natif non-passif, sinon preventDefault est ignoré par React sur onWheel).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (ev: WheelEvent) => {
+      if (ev.deltaY === 0) return;
+      el.scrollLeft += ev.deltaY;
+      ev.preventDefault();
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
   return (
     <div className="filmstrip" ref={ref}>
       {photos.map((p) => (
@@ -33,6 +47,7 @@ export function Filmstrip() {
           title={p.filename}
         >
           <img src={api.thumbUrl(p.id, versions[p.id] ?? 0)} alt={p.filename} loading="lazy" draggable={false} />
+          {selection.includes(p.id) && <span className="film-select-badge">✓</span>}
           {p.rating > 0 && <span className="film-rating">{"★".repeat(p.rating)}</span>}
           {p.flag === "pick" && <span className="film-flag">⚑</span>}
           {p.edited && <span className="film-edited" title={t("develop.editedTitle")}>✎</span>}

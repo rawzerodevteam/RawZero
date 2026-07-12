@@ -181,6 +181,7 @@ export function LocalPanel() {
             </button>
             <button className="btn small danger" onClick={removeSelected}>{t("common.delete")}</button>
           </div>
+          <p className="hint">{t("local.copyPasteHint")}</p>
           {(selected.type === "radial" || selected.type === "brush") && (
             <EditSlider label={t("local.feather")}
               get={(e) => ((e.locals.find((l) => l.id === selected.id)?.params.feather ?? 0.5) * 100)}

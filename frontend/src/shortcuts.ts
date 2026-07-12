@@ -74,8 +74,18 @@ function dispatch(action: string, s: ReturnType<typeof useStore.getState>, ev: K
     case "info": s.setUI({ showInfo: !s.showInfo }); return;
     case "undo": ev.preventDefault(); s.undo(); return;
     case "redo": ev.preventDefault(); s.redo(); return;
+    case "select-all": ev.preventDefault(); s.selectAll(); return;
     case "copy": ev.preventDefault(); s.copyEdits(); return;
     case "paste": ev.preventDefault(); s.pasteEdits(); return;
+    case "copy-mask":
+      if (s.view === "develop" && s.selectedLocalId) { ev.preventDefault(); s.copyLocalMask(); }
+      return;
+    case "cut-mask":
+      if (s.view === "develop" && s.selectedLocalId) { ev.preventDefault(); s.cutLocalMask(); }
+      return;
+    case "paste-mask":
+      if (s.view === "develop" && s.localClipboard) { ev.preventDefault(); s.pasteLocalMask(); }
+      return;
     case "export": ev.preventDefault(); s.setUI({ showExport: true }); return;
     case "remove":
       if (s.currentId !== null && window.confirm(i18n.t("shortcuts.confirmRemoveCurrent"))) {
