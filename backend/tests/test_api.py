@@ -21,7 +21,7 @@ def client():
 
 # Dossier « externe » (hors data/) simulant l'emplacement réel des photos sur le disque de
 # l'utilisateur : l'import référence ces fichiers par chemin, sans les copier.
-_SRC_DIR = Path(tempfile.mkdtemp(prefix="rawstudio-src-"))
+_SRC_DIR = Path(tempfile.mkdtemp(prefix="rawzero-src-"))
 
 
 def make_jpeg(w: int = 640, h: int = 420) -> bytes:

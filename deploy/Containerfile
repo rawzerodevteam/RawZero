@@ -1,4 +1,4 @@
-# RawStudio — image OCI (Podman / Docker)
+# RawZero — image OCI (Podman / Docker)
 # Build multi-étapes : 1) build du frontend (Node), 2) runtime Python qui sert
 # l'API FastAPI + le frontend statique sur un seul port (comme start.ps1 sans -Dev).
 

@@ -1,4 +1,4 @@
-﻿# Build complet de l'app desktop Tauri sous Windows : sidecar backend (PyInstaller) +
+# Build complet de l'app desktop Tauri sous Windows : sidecar backend (PyInstaller) +
 # frontend (Vite) + bundle Tauri (.msi/.exe). Miroir Windows de build-desktop.sh.
 #
 # Prérequis : .\bootstrap.ps1 (outillage dev) + Rust installé (cargo dans le PATH).
@@ -42,7 +42,7 @@ if (-not (Test-Path $pyInstaller)) {
 }
 Push-Location backend
 try {
-  & $pyInstaller --noconfirm rawstudio-backend.spec
+  & $pyInstaller --noconfirm rawzero-backend.spec
   if ($LASTEXITCODE -ne 0) { throw "Échec du build PyInstaller" }
 } finally { Pop-Location }
 

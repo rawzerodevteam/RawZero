@@ -104,7 +104,7 @@ def require_original(row) -> Path:
     """Chemin de l'original, garanti présent sur disque (409 sinon).
 
     L'import référence le fichier à son emplacement d'origine (pas de copie) : il peut
-    avoir été déplacé/supprimé hors de RawStudio depuis l'import."""
+    avoir été déplacé/supprimé hors de RawZero depuis l'import."""
     path = Path(row["path"])
     if not path.is_file():
         raise HTTPException(409, f"Fichier original introuvable : {path}")

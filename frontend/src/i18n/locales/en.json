@@ -149,7 +149,8 @@
     "emptyCatalog": "No photos in the catalog (or none match the filters).",
     "importPhotos": "Import photos",
     "developBtn": "Develop (D)",
-    "flagState": { "none": "—", "pick": "Picked", "reject": "Rejected" }
+    "flagState": { "none": "—", "pick": "Picked", "reject": "Rejected" },
+    "multiSelectHint": "Tip: Ctrl/Shift+click, or drag over the background, to select several photos at once."
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",
@@ -223,7 +224,7 @@
     "importAll": "Import all ({{count}})",
     "clickToImport": "Click to import",
     "emptyFolder": "Empty folder",
-    "referenceHint": "Photos stay at their original location (nothing is copied): don't move imported files outside of RawStudio.",
+    "referenceHint": "Photos stay at their original location (nothing is copied): don't move imported files outside of RawZero.",
     "status": {
       "imported": "imported",
       "duplicate": "duplicate skipped",
@@ -468,7 +469,9 @@
     "advancedTitle": "Advanced / debug tools",
     "gpuLabel": "Real-time GPU preview",
     "diffLabel": "GPU ↔ Python diff…",
-    "positionOf": "{{n}} of {{total}}"
+    "positionOf": "{{n}} of {{total}}",
+    "togglePanelsTitle": "Show/hide panels",
+    "viewerHint": "Wheel: zoom · Space + drag: pan · Z: fit ↔ 100%"
   },
   "crop": {
     "ratio": "Ratio",

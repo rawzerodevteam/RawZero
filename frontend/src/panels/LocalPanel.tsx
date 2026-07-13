@@ -1,19 +1,21 @@
+import type { ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 import { EditSlider } from "../components/EditSlider";
 import { PanelSection } from "../components/PanelSection";
 import { useStore, type Tool } from "../store";
 import { defaultLocalAdjust, type LocalAdjustValues } from "../types";
+import { IconColorRange, IconEdit, IconLumRange, IconMaskLinear, IconMaskRadial, type IconProps } from "../icons";
 
 const RANGE_DEFAULTS: Record<string, Record<string, number>> = {
   lumrange: { lo: 0.25, hi: 0.75, smooth: 0.1 },
   colorrange: { hue: 0, range: 30, smooth: 15, sat_min: 0.15 },
 };
 
-// label/hint = clés i18n (cf. local.tool.*) ; icon reste littéral.
-const TOOLS: { tool: Tool; icon: string; label: string; hint: string }[] = [
-  { tool: "linear", icon: "▤", label: "local.tool.linear", hint: "local.tool.linearHint" },
-  { tool: "radial", icon: "◎", label: "local.tool.radial", hint: "local.tool.radialHint" },
-  { tool: "brush", icon: "✎", label: "local.tool.brush", hint: "local.tool.brushHint" },
+// label/hint = clés i18n (cf. local.tool.*).
+const TOOLS: { tool: Tool; icon: ComponentType<IconProps>; label: string; hint: string }[] = [
+  { tool: "linear", icon: IconMaskLinear, label: "local.tool.linear", hint: "local.tool.linearHint" },
+  { tool: "radial", icon: IconMaskRadial, label: "local.tool.radial", hint: "local.tool.radialHint" },
+  { tool: "brush", icon: IconEdit, label: "local.tool.brush", hint: "local.tool.brushHint" },
 ];
 
 export function LocalPanel() {
@@ -62,14 +64,14 @@ export function LocalPanel() {
   return (
     <PanelSection title={t("local.title")} defaultOpen={false} storageKey="local">
       <div className="row-actions">
-        {TOOLS.map(({ tool, icon, label, hint }) => (
+        {TOOLS.map(({ tool, icon: Icon, label, hint }) => (
           <button
             key={tool}
             className={"btn" + (activeTool === tool ? " active" : "")}
             title={t(hint)}
             onClick={() => setUI({ activeTool: activeTool === tool ? "none" : tool })}
           >
-            {icon} {t(label)}
+            <Icon size={13} /> {t(label)}
           </button>
         ))}
       </div>
@@ -112,9 +114,9 @@ export function LocalPanel() {
       )}
       <div className="row-actions">
         <button className="btn" title={t("local.lumRangeTitle")}
-          onClick={() => addRangeMask("lumrange")}>◐ {t("local.lumRange")}</button>
+          onClick={() => addRangeMask("lumrange")}><IconLumRange size={13} /> {t("local.lumRange")}</button>
         <button className="btn" title={t("local.colorRangeTitle")}
-          onClick={() => addRangeMask("colorrange")}>◑ {t("local.colorRange")}</button>
+          onClick={() => addRangeMask("colorrange")}><IconColorRange size={13} /> {t("local.colorRange")}</button>
       </div>
       {activeTool === "pointmask" && (
         <p className="hint">

@@ -8,6 +8,7 @@ import type { EditState, Preset } from "../types";
 import {
   downloadTextFile, parsePresetFile, presetSlug, presetToEntry, serializePresets, uniquePresetName,
 } from "../lib/presetFile";
+import { IconClose, IconExport, IconImport, IconPlus } from "../icons";
 
 export function PresetsPanel() {
   const { t } = useTranslation();
@@ -106,9 +107,9 @@ export function PresetsPanel() {
                   >
                     {p.name}
                   </button>
-                  <button className="mini-btn" title={t("presets.export")} onClick={() => exportOne(p)}>⬇</button>
+                  <button className="mini-btn" title={t("presets.export")} aria-label={t("presets.export")} onClick={() => exportOne(p)}><IconExport size={13} /></button>
                   {!p.builtin && (
-                    <button className="mini-btn" title={t("common.delete")} onClick={() => void remove(p)}>✕</button>
+                    <button className="mini-btn" title={t("common.delete")} aria-label={t("common.delete")} onClick={() => void remove(p)}><IconClose size={12} /></button>
                   )}
                 </li>
               ))}
@@ -117,10 +118,10 @@ export function PresetsPanel() {
         ))}
       <div className="row-actions">
         <button className="btn" disabled={!edits} onClick={() => void saveCurrent()}>
-          + {t("presets.saveCurrent")}
+          <IconPlus size={12} /> {t("presets.saveCurrent")}
         </button>
-        <button className="btn" onClick={() => fileInput.current?.click()}>⬆ {t("presets.import")}</button>
-        <button className="btn" disabled={!hasCustoms} onClick={exportAll}>⬇ {t("presets.exportAll")}</button>
+        <button className="btn" onClick={() => fileInput.current?.click()}><IconImport size={14} /> {t("presets.import")}</button>
+        <button className="btn" disabled={!hasCustoms} onClick={exportAll}><IconExport size={14} /> {t("presets.exportAll")}</button>
       </div>
     </PanelSection>
   );

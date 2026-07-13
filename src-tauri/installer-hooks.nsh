@@ -1,4 +1,4 @@
-; Hooks NSIS pour l'installeur Windows de RawStudio.
+; Hooks NSIS pour l'installeur Windows de RawZero.
 ; Tauri appelle ces macros pendant l'install/désinstall (cf. bundle.windows.nsis.installerHooks).
 ;
 ; Seul rôle ici : ajouter / retirer le dossier d'install du PATH.
@@ -12,12 +12,12 @@
   EnVar::SetHKCU
   EnVar::AddValue "Path" "$INSTDIR"
   Pop $0
-  DetailPrint "RawStudio: ajout au PATH de '$INSTDIR' (code EnVar: $0)"
+  DetailPrint "RawZero: ajout au PATH de '$INSTDIR' (code EnVar: $0)"
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
   EnVar::SetHKCU
   EnVar::DeleteValue "Path" "$INSTDIR"
   Pop $0
-  DetailPrint "RawStudio: retrait du PATH de '$INSTDIR' (code EnVar: $0)"
+  DetailPrint "RawZero: retrait du PATH de '$INSTDIR' (code EnVar: $0)"
 !macroend

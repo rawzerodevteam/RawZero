@@ -1,7 +1,7 @@
 /** Transfert d'ids de photos par glisser-déposer (grille → album). */
 import type { DragEvent } from "react";
 
-const MIME = "application/x-rawstudio-photos";
+const MIME = "application/x-rawzero-photos";
 
 export function setDragIds(ev: DragEvent, ids: number[]): void {
   ev.dataTransfer.setData(MIME, JSON.stringify(ids));

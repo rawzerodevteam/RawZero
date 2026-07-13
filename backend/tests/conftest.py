@@ -4,7 +4,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-_tmp = tempfile.mkdtemp(prefix="rawstudio-test-")
+_tmp = tempfile.mkdtemp(prefix="rawzero-test-")
 os.environ["DATA_DIR"] = str(Path(_tmp) / "data")
 os.environ.pop("STATIC_DIR", None)
 

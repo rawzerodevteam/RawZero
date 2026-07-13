@@ -1,15 +1,15 @@
-# RawStudio — orchestration Podman (podman-compose) / Docker Compose.
+# RawZero — orchestration Podman (podman-compose) / Docker Compose.
 #   podman compose -f deploy/compose.yaml up -d        (ou : podman-compose ...)
 #   podman compose -f deploy/compose.yaml up --build   pour reconstruire l'image
 # Puis ouvrir http://localhost:8000
 # Contexte de build = racine du dépôt (..) ; les chemins de volumes sont relatifs à ce fichier.
 services:
-  rawstudio:
+  rawzero:
     build:
       context: ..
       dockerfile: deploy/Containerfile
-    image: localhost/rawstudio:latest
-    container_name: rawstudio
+    image: localhost/rawzero:latest
+    container_name: rawzero
     ports:
       - "8000:8000"
     volumes:

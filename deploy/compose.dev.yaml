@@ -1,4 +1,4 @@
-# RawStudio — environnement de DÉVELOPPEMENT (hot reload) sous Podman / Docker.
+# RawZero — environnement de DÉVELOPPEMENT (hot reload) sous Podman / Docker.
 #   docker compose -f deploy/compose.dev.yaml up --build   (ou: podman compose -f deploy/compose.dev.yaml up --build)
 # Puis ouvrir http://localhost:5173  (frontend Vite, proxy /api -> service backend)
 #

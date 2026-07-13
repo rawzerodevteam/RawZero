@@ -32,19 +32,19 @@ fn wait_for_port(port: u16, timeout: Duration) -> bool {
 
 /// Nom du binaire sidecar selon l'OS (PyInstaller ajoute `.exe` sous Windows).
 fn bin_name() -> &'static str {
-    if cfg!(windows) { "rawstudio-backend.exe" } else { "rawstudio-backend" }
+    if cfg!(windows) { "rawzero-backend.exe" } else { "rawzero-backend" }
 }
 
 /// Chemin du binaire sidecar (backend figé par PyInstaller --onedir).
 /// En dev : sous backend/dist (build manuel). En prod : sous le dossier de ressources de l'app
-/// (cf. "resources" dans tauri.conf.json, qui copie backend/dist/rawstudio-backend → resourceDir/backend).
+/// (cf. "resources" dans tauri.conf.json, qui copie backend/dist/rawzero-backend → resourceDir/backend).
 fn sidecar_path(app: &tauri::App) -> PathBuf {
     if cfg!(debug_assertions) {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("backend")
             .join("dist")
-            .join("rawstudio-backend")
+            .join("rawzero-backend")
             .join(bin_name())
     } else {
         app.path()
@@ -117,7 +117,7 @@ pub fn run() {
 
             let url = format!("http://127.0.0.1:{port}/").parse().unwrap();
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
-                .title("RawStudio")
+                .title("RawZero")
                 .inner_size(1400.0, 900.0)
                 .min_inner_size(1024.0, 700.0)
                 .build()?;

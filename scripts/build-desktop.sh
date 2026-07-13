@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 echo "== 1/3 : sidecar backend (PyInstaller) =="
-( cd backend && .venv/bin/pyinstaller --noconfirm rawstudio-backend.spec )
+( cd backend && .venv/bin/pyinstaller --noconfirm rawzero-backend.spec )
 
 echo "== 2/3 : frontend (Vite) =="
 ( cd frontend && npm run build )

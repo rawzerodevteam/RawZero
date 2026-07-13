@@ -1,4 +1,4 @@
-//! Accélérateur natif des étages pur-NumPy du pipeline RawStudio.
+//! Accélérateur natif des étages pur-NumPy du pipeline RawZero.
 //!
 //! Chaque fonction opère **en place** sur un buffer f32 RGB entrelacé (R,G,B,R,G,B…)
 //! de `npix` pixels, fourni par NumPy via ctypes. Le parallélisme découpe les pixels

@@ -7,7 +7,7 @@ pour un boîtier, la vignette « bascule » à la première retouche (B4).
 Ce test compare les deux chemins sur un échantillon de RAW réels. Il est **ignoré** par défaut
 (le catalogue de test est vide) ; pour l'activer, pointer un dossier de RAW :
 
-    RAWSTUDIO_REAL_RAW_DIR=/chemin/vers/originals  pytest backend/tests/test_raw_orientation.py
+    RAWZERO_REAL_RAW_DIR=/chemin/vers/originals  pytest backend/tests/test_raw_orientation.py
 
 Aucun fichier RAW n'est committé (trop volumineux, data/ gitignoré) — cf. D3.
 """
@@ -23,7 +23,7 @@ _MAX = 15  # borne le coût (chaque RAW = un décodage demi-résolution)
 
 
 def _sample_raws() -> list[Path]:
-    root = Path(os.environ.get("RAWSTUDIO_REAL_RAW_DIR") or config.ORIGINALS_DIR)
+    root = Path(os.environ.get("RAWZERO_REAL_RAW_DIR") or config.ORIGINALS_DIR)
     if not root.exists():
         return []
     found: list[Path] = []
@@ -40,7 +40,7 @@ def _sample_raws() -> list[Path]:
 _RAWS = _sample_raws()
 
 
-@pytest.mark.skipif(not _RAWS, reason="aucun RAW réel (définir RAWSTUDIO_REAL_RAW_DIR)")
+@pytest.mark.skipif(not _RAWS, reason="aucun RAW réel (définir RAWZERO_REAL_RAW_DIR)")
 @pytest.mark.parametrize("path", _RAWS, ids=lambda p: p.name)
 def test_embedded_and_decoded_orientation_agree(path: Path):
     """Le JPEG embarqué orienté et la base LibRaw doivent avoir la même orientation

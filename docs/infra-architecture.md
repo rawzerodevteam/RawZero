@@ -1,4 +1,4 @@
-# RawStudio — Architecture Local vs Cloud (existant + roadmap)
+# RawZero — Architecture Local vs Cloud (existant + roadmap)
 
 Diagramme scindé en deux blocs séparés par une bordure en pointillés :
 **Local** (app desktop, sur la machine de l'utilisateur) et **Cloud**

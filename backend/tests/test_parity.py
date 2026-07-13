@@ -8,7 +8,7 @@ sérialisé dans ``frontend/tests/fixtures/parity.json``. Le test front
 
 Filet à deux faces :
   - si ``pipeline.py`` change, le golden commité ne correspond plus → ce test Python
-    casse → on régénère (``RAWSTUDIO_WRITE_FIXTURES=1``) ;
+    casse → on régénère (``RAWZERO_WRITE_FIXTURES=1``) ;
   - si la régénération change le golden mais que le GLSL/port CPU n'a pas suivi, le
     test front casse à son tour.
 
@@ -108,12 +108,12 @@ def test_parity_fixture_matches_pipeline(monkeypatch):
     natif soit compilé ou non. rsfast reproduit cette math à ≤ 0.035/255 (sous le 2/255 GPU)."""
     monkeypatch.setattr(pipeline.rsfast, "available", lambda: False)
     fresh = _build_fixture()
-    if os.environ.get("RAWSTUDIO_WRITE_FIXTURES"):
+    if os.environ.get("RAWZERO_WRITE_FIXTURES"):
         FIXTURE.parent.mkdir(parents=True, exist_ok=True)
         FIXTURE.write_text(json.dumps(fresh, indent=2) + "\n", encoding="utf-8")
 
     assert FIXTURE.exists(), (
-        "fixture absente — générer avec RAWSTUDIO_WRITE_FIXTURES=1 pytest tests/test_parity.py")
+        "fixture absente — générer avec RAWZERO_WRITE_FIXTURES=1 pytest tests/test_parity.py")
     committed = json.loads(FIXTURE.read_text(encoding="utf-8"))
 
     assert committed["pixels"] == fresh["pixels"]
@@ -123,4 +123,4 @@ def test_parity_fixture_matches_pipeline(monkeypatch):
         diff = np.abs(np.array(a["output"]) - np.array(b["output"])).max()
         assert diff < 1e-6, (
             f"golden périmé pour {a['name']} (Δ={diff:.2e}) — "
-            "régénérer avec RAWSTUDIO_WRITE_FIXTURES=1")
+            "régénérer avec RAWZERO_WRITE_FIXTURES=1")

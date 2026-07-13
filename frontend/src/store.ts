@@ -129,6 +129,7 @@ interface Store {
   showExport: boolean;
   showModels: boolean;            // dialog « Modèles IA » (téléchargement à la demande)
   showAlbums: boolean;            // panneau latéral Collections (grille)
+  panelsCollapsed: boolean;       // colonne de panneaux droite masquée (développement, écrans étroits)
   relinkTargetId: number | null;  // id de la photo en cours de reliage (dialog « Relier »)
   activeTool: Tool;
   selectedLocalId: string | null;
@@ -142,6 +143,8 @@ interface Store {
   aiDenoiseAvailable: boolean;    // modèle de débruitage IA (FFDNet) présent
   aiMaskBusy: boolean;            // calcul d'un masque IA en cours
   toasts: ToastItem[];
+  seenHints: Record<string, boolean>; // coach-marks déjà vus (persisté), cf. audit UX §7.2/§4.2
+  panelOrder: string[];            // ordre personnalisé des panneaux de développement (persisté)
 
   init(): Promise<void>;
   loadProjects(): Promise<void>;
@@ -204,9 +207,11 @@ interface Store {
 
   setUI(p: Partial<Pick<Store, "beforeAfter" | "showClipping" | "showInfo" | "showHelp" |
     "showImport" | "showExport" | "showModels" | "showAlbums" | "activeTool" | "selectedLocalId" | "showMaskOverlay" |
-    "brushSize" | "brushErase" | "cropAspect" | "gridSize">>): void;
+    "brushSize" | "brushErase" | "cropAspect" | "gridSize" | "panelsCollapsed">>): void;
   notify(msg: string, type?: ToastType, action?: { label: string; onClick: () => void }): void;
   dismissToast(id: number): void;
+  markHintSeen(key: string): void;
+  reorderPanels(order: string[]): void;
   refreshAiAvailability(): Promise<void>;
 }
 
@@ -248,6 +253,7 @@ export const useStore = create<Store>((set, get) => ({
   showExport: false,
   showModels: false,
   showAlbums: false,
+  panelsCollapsed: localStorage.getItem("rs.panelsCollapsed") === "1",
   relinkTargetId: null,
   activeTool: "none",
   selectedLocalId: null,
@@ -261,6 +267,12 @@ export const useStore = create<Store>((set, get) => ({
   aiDenoiseAvailable: false,
   aiMaskBusy: false,
   toasts: [],
+  seenHints: (() => {
+    try { return JSON.parse(localStorage.getItem("rs.seenHints") || "{}"); } catch { return {}; }
+  })(),
+  panelOrder: (() => {
+    try { return JSON.parse(localStorage.getItem("rs.panelOrder") || "[]"); } catch { return []; }
+  })(),
 
   // Au démarrage : page d'accueil (projets) par défaut, ou reprise de la dernière session.
   async init() {
@@ -840,6 +852,7 @@ export const useStore = create<Store>((set, get) => ({
 
   setUI(p) {
     if (p.gridSize !== undefined) localStorage.setItem("rs.gridSize", String(p.gridSize));
+    if (p.panelsCollapsed !== undefined) localStorage.setItem("rs.panelsCollapsed", p.panelsCollapsed ? "1" : "0");
     set(p);
   },
 
@@ -851,6 +864,17 @@ export const useStore = create<Store>((set, get) => ({
 
   dismissToast(id) {
     set({ toasts: get().toasts.filter((t) => t.id !== id) });
+  },
+
+  markHintSeen(key) {
+    const seenHints = { ...get().seenHints, [key]: true };
+    try { localStorage.setItem("rs.seenHints", JSON.stringify(seenHints)); } catch { /* quota/private mode */ }
+    set({ seenHints });
+  },
+
+  reorderPanels(order) {
+    try { localStorage.setItem("rs.panelOrder", JSON.stringify(order)); } catch { /* quota/private mode */ }
+    set({ panelOrder: order });
   },
 }));
 

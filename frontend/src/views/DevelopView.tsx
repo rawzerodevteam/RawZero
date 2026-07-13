@@ -5,21 +5,15 @@ import { Filmstrip } from "../components/Filmstrip";
 import { Histogram } from "../components/Histogram";
 import { ImageViewer } from "../components/ImageViewer";
 import { StarRating } from "../components/StarRating";
+import { EmptyState } from "../components/EmptyState";
+import { Coachmark } from "../components/Coachmark";
+import { IconClipHigh, IconClipLow, IconCopy, IconDiff, IconExport, IconGpu, IconHome, IconPaste, IconRedo, IconReset, IconSettings, IconUndo } from "../icons";
 import { GpuDiffDialog } from "../components/GpuDiffDialog";
 import { ModeTabs } from "../components/ModeTabs";
 import { useStore } from "../store";
 import { useMaskSuppressed } from "../lib/useMaskSuppressed";
 import { CROP_ASPECTS } from "../lib/cropAspects";
-import { BasicPanel } from "../panels/BasicPanel";
-import { CurvePanel } from "../panels/CurvePanel";
-import { DetailPanel } from "../panels/DetailPanel";
-import { EffectsPanel } from "../panels/EffectsPanel";
-import { GeometryPanel } from "../panels/GeometryPanel";
-import { HSLPanel } from "../panels/HSLPanel";
-import { LocalPanel } from "../panels/LocalPanel";
-import { HistoryPanel } from "../panels/HistoryPanel";
-import { MetaPanel } from "../panels/MetaPanel";
-import { PresetsPanel } from "../panels/PresetsPanel";
+import { resolvePanelOrder } from "../panels/registry";
 import { ExifOverlay } from "./LibraryView";
 
 const RENDER_DRAG_MS = 50;
@@ -111,6 +105,9 @@ export function DevelopView() {
   const pasteEdits = useStore((s) => s.pasteEdits);
   const resetEdits = useStore((s) => s.resetEdits);
   const openRelink = useStore((s) => s.openRelink);
+  const panelsCollapsed = useStore((s) => s.panelsCollapsed);
+  const panelOrder = useStore((s) => s.panelOrder);
+  const reorderPanels = useStore((s) => s.reorderPanels);
   const undo = useStore((s) => s.undo);
   const redo = useStore((s) => s.redo);
   const canUndo = useStore((s) => s.undoStack.length > 0);
@@ -121,7 +118,23 @@ export function DevelopView() {
   const photos = useStore((s) => s.photos);
   const src = useRenderedImage(gpuPreview);
 
-  if (!photo) return <div className="empty-state"><p>{t("develop.noPhoto")}</p></div>;
+  if (!photo) return <EmptyState message={t("develop.noPhoto")} />;
+
+  const panelDefs = resolvePanelOrder(panelOrder);
+  const onPanelDragOver = (ev: React.DragEvent) => {
+    if (ev.dataTransfer.types.includes("text/rs-panel-key")) ev.preventDefault();
+  };
+  const onPanelDrop = (ev: React.DragEvent) => {
+    const fromKey = ev.dataTransfer.getData("text/rs-panel-key");
+    const toKey = (ev.target as HTMLElement).closest<HTMLElement>("[data-panel-key]")?.dataset.panelKey;
+    if (!fromKey || !toKey || fromKey === toKey) return;
+    const keys = panelDefs.map((p) => p.key);
+    const from = keys.indexOf(fromKey);
+    const to = keys.indexOf(toKey);
+    if (from === -1 || to === -1) return;
+    keys.splice(to, 0, keys.splice(from, 1)[0]);
+    reorderPanels(keys);
+  };
 
   const photoIndex = photos.findIndex((p) => p.id === photo.id);
   const photoTotal = photos.length;
@@ -130,7 +143,7 @@ export function DevelopView() {
     <div className="develop">
       <div className="develop-main">
         <div className="toolbar">
-          <button className="btn small" title={t("project.homeTitle")} aria-label={t("project.homeTitle")} onClick={() => setView("home")}>🏠</button>
+          <button className="btn small" title={t("project.homeTitle")} aria-label={t("project.homeTitle")} onClick={() => setView("home")}><IconHome size={14} /></button>
           <ModeTabs />
           <span className="name">{photo.filename}</span>
           {dirty && <span className="dim" title={t("develop.autosaving")}>●</span>}
@@ -142,22 +155,27 @@ export function DevelopView() {
             title={t("develop.beforeAfterTitle")} onClick={() => setUI({ beforeAfter: !beforeAfter })}>
             {beforeAfter ? t("develop.before") : t("develop.after")}
           </button>
-          <button className={"btn small" + (showClipping ? " active" : "")}
+          <button className={"btn small clip-toggle" + (showClipping ? " active" : "")}
             title={t("develop.clippingTitle")} aria-label={t("develop.clippingTitle")} onClick={() => setUI({ showClipping: !showClipping })}>
-            ▲▼
+            <IconClipHigh size={11} /><IconClipLow size={11} />
           </button>
-          <button className="btn small" title={t("develop.undoTitle")} aria-label={t("develop.undoTitle")} disabled={!canUndo} onClick={undo}>↶</button>
-          <button className="btn small" title={t("develop.redoTitle")} aria-label={t("develop.redoTitle")} disabled={!canRedo} onClick={redo}>↷</button>
-          <button className="btn small" title={t("develop.copyTitle")} onClick={copyEdits}>⧉ {t("develop.copy")}</button>
-          <button className="btn small" title={t("develop.pasteTitle")} onClick={pasteEdits}>📋 {t("develop.paste")}</button>
-          <button className="btn small" title={t("develop.resetTitle")} aria-label={t("develop.resetTitle")} onClick={resetEdits}>↺</button>
+          <button className="btn small" title={t("develop.undoTitle")} aria-label={t("develop.undoTitle")} disabled={!canUndo} onClick={undo}><IconUndo size={14} /></button>
+          <button className="btn small" title={t("develop.redoTitle")} aria-label={t("develop.redoTitle")} disabled={!canRedo} onClick={redo}><IconRedo size={14} /></button>
+          <button className="btn small" title={t("develop.copyTitle")} onClick={copyEdits}><IconCopy size={14} /> <span className="btn-label">{t("develop.copy")}</span></button>
+          <button className="btn small" title={t("develop.pasteTitle")} onClick={pasteEdits}><IconPaste size={14} /> <span className="btn-label">{t("develop.paste")}</span></button>
+          <button className="btn small" title={t("develop.resetTitle")} aria-label={t("develop.resetTitle")} onClick={resetEdits}><IconReset size={14} /></button>
           <AdvancedMenu
             show={showAdvanced} setShow={setShowAdvanced}
             gpuPreview={gpuPreview} setGpuPreview={setGpuPreview}
             onDiff={() => { setShowDiff(true); setShowAdvanced(false); }}
           />
-          <button className="btn small" title={t("develop.exportTitle")} onClick={() => setUI({ showExport: true })}>⤒</button>
-          <button className="btn small" title={t("settings.title")} onClick={() => setView("settings")}>⚙</button>
+          <button className="btn small" title={t("develop.exportTitle")} aria-label={t("develop.exportTitle")} onClick={() => setUI({ showExport: true })}><IconExport size={14} /></button>
+          <button className={"btn small" + (panelsCollapsed ? " active" : "")}
+            title={t("develop.togglePanelsTitle")} aria-label={t("develop.togglePanelsTitle")}
+            onClick={() => setUI({ panelsCollapsed: !panelsCollapsed })}>
+            {panelsCollapsed ? "❮" : "❯"}
+          </button>
+          <button className="btn small" title={t("settings.title")} aria-label={t("settings.title")} onClick={() => setView("settings")}><IconSettings size={14} /></button>
         </div>
         {photo.missing && (
           <div className="missing-banner">
@@ -170,22 +188,17 @@ export function DevelopView() {
           {beforeAfter && <div className="before-badge">{t("develop.beforeBadge")}</div>}
           {showInfo && <ExifOverlay />}
           <CropBar />
+          <div className="viewer-coachmark">
+            <Coachmark hintKey="develop-viewer-controls" message={t("develop.viewerHint")} />
+          </div>
         </div>
         <Filmstrip />
       </div>
       {showDiff && <GpuDiffDialog onClose={() => setShowDiff(false)} />}
-      <aside className="develop-panels">
+      <aside className={"develop-panels" + (panelsCollapsed ? " collapsed" : "")}
+        onDragOver={onPanelDragOver} onDrop={onPanelDrop}>
         <Histogram src={src} />
-        <BasicPanel />
-        <CurvePanel />
-        <HSLPanel />
-        <DetailPanel />
-        <EffectsPanel />
-        <GeometryPanel />
-        <LocalPanel />
-        <PresetsPanel />
-        <HistoryPanel />
-        <MetaPanel />
+        {panelDefs.map(({ key, Component }) => <Component key={key} />)}
       </aside>
     </div>
   );
@@ -215,9 +228,9 @@ function AdvancedMenu({ show, setShow, gpuPreview, setGpuPreview, onDiff }: {
       {show && (
         <div className="advanced-menu-pop">
           <button className={gpuPreview ? "active" : ""} onClick={() => setGpuPreview((v) => !v)}>
-            ⚡ {t("develop.gpuLabel")}
+            <IconGpu size={13} /> {t("develop.gpuLabel")}
           </button>
-          <button onClick={onDiff}>Δ {t("develop.diffLabel")}</button>
+          <button onClick={onDiff}><IconDiff size={13} /> {t("develop.diffLabel")}</button>
         </div>
       )}
     </div>

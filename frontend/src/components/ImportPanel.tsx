@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { nativeDialogAvailable, pickFiles, pickFolder } from "../lib/nativeDialog";
 import { useStore } from "../store";
 import type { ImportResult } from "../types";
+import { Modal } from "./Modal";
+import { IconClose, IconFolder, IconImage } from "../icons";
 
 export function ImportPanel() {
   const { t } = useTranslation();
@@ -18,6 +20,7 @@ export function ImportPanel() {
   const [listing, setListing] = useState<Awaited<ReturnType<typeof api.browseImport>> | null>(null);
   const [error, setError] = useState("");
   const close = () => setUI({ showImport: false });
+  const titleId = useId();
 
   const browse = (p: string) => {
     api.browseImport(p)
@@ -59,20 +62,19 @@ export function ImportPanel() {
   };
 
   return (
-    <div className="modal-backdrop" onClick={busy ? undefined : close}>
-      <div className="modal import-modal" onClick={(ev) => ev.stopPropagation()}>
-        <header>
-          <h2>{t("import.title", { name: project?.name ?? t("import.defaultProject") })}</h2>
-          <button className="mini-btn" onClick={close} disabled={busy}>✕</button>
-        </header>
+    <Modal className="import-modal" labelledBy={titleId} onClose={close} closeOnBackdrop={!busy}>
+      <header>
+        <h2 id={titleId}>{t("import.title", { name: project?.name ?? t("import.defaultProject") })}</h2>
+        <button className="mini-btn" onClick={close} disabled={busy} aria-label={t("common.close")}><IconClose size={12} /></button>
+      </header>
         <p className="hint">{t("import.referenceHint")}</p>
         {nativeDialogAvailable ? (
           <div className="row-actions">
             <button className="btn primary" disabled={busy} onClick={() => void pickAndImportFiles()}>
-              🖼 {t("import.pickFiles")}
+              <IconImage size={14} /> {t("import.pickFiles")}
             </button>
             <button className="btn" disabled={busy} onClick={() => void pickAndImportFolder()}>
-              📁 {t("import.pickFolder")}
+              <IconFolder size={14} /> {t("import.pickFolder")}
             </button>
           </div>
         ) : error ? <p className="error">{error}</p>
@@ -96,11 +98,11 @@ export function ImportPanel() {
               </div>
               <ul className="browser-list">
                 {listing.dirs.map((d) => (
-                  <li key={d.path} className="dir" onClick={() => browse(d.path)}>📁 {d.name}</li>
+                  <li key={d.path} className="dir" onClick={() => browse(d.path)}><IconFolder size={13} /> {d.name}</li>
                 ))}
                 {listing.files.map((f) => (
                   <li key={f.path} className="file" onClick={() => void importPaths([f.path])} title={t("import.clickToImport")}>
-                    🖼 {f.name} <span className="dim">{t("common.sizeMb", { mb: (f.size / 1024 / 1024).toFixed(1) })}</span>
+                    <IconImage size={13} /> {f.name} <span className="dim">{t("common.sizeMb", { mb: (f.size / 1024 / 1024).toFixed(1) })}</span>
                   </li>
                 ))}
                 {!listing.dirs.length && !listing.files.length && <li className="dim">{t("import.emptyFolder")}</li>}
@@ -117,7 +119,6 @@ export function ImportPanel() {
             ))}
           </ul>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

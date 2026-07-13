@@ -1,6 +1,6 @@
-﻿<#
+<#
 .SYNOPSIS
-  Lance RawStudio en local sans Docker (outillage portable .tools).
+  Lance RawZero en local sans Docker (outillage portable .tools).
 
 .DESCRIPTION
   Mode par défaut : build le frontend si nécessaire puis sert API + frontend
@@ -99,8 +99,8 @@ function Open-WhenReady([string]$url, [string]$healthUrl) {
   if ($NoBrowser) { return }
   # Supprime tout job d'ouverture resté d'un lancement précédent : sinon ces
   # « pollers » fantômes ouvrent chacun un onglet dès que le serveur répond.
-  Get-Job -Name "rawstudio-open" -ErrorAction SilentlyContinue | Remove-Job -Force
-  Start-Job -Name "rawstudio-open" -ArgumentList $url, $healthUrl -ScriptBlock {
+  Get-Job -Name "rawzero-open" -ErrorAction SilentlyContinue | Remove-Job -Force
+  Start-Job -Name "rawzero-open" -ArgumentList $url, $healthUrl -ScriptBlock {
     param($u, $h)
     $ok = $false
     foreach ($i in 1..40) {
@@ -140,7 +140,7 @@ if ($Dev) {
     Pop-Location
   }
   $env:STATIC_DIR = $dist
-  Write-Host "RawStudio : http://localhost:$Port  (Ctrl+C pour arrêter)" -ForegroundColor Cyan
+  Write-Host "RawZero : http://localhost:$Port  (Ctrl+C pour arrêter)" -ForegroundColor Cyan
   Open-WhenReady "http://localhost:$Port" "http://localhost:$Port/api/health"
   & $python -m uvicorn app.main:app --app-dir backend --port $Port
 }

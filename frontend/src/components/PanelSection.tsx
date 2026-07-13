@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { IconChevron, IconReset } from "../icons";
 
 interface Props {
   title: string;
@@ -27,17 +28,22 @@ export function PanelSection({ title, children, defaultOpen = true, onReset, sto
     if (storageKey) { try { localStorage.setItem(`rs.panelOpen.${storageKey}`, v ? "1" : "0"); } catch { /* ignore */ } }
   };
   return (
-    <section className="panel-section">
-      <header onClick={() => setOpen(!open)}>
-        <span className={"chev" + (open ? " open" : "")}>▸</span>
+    <section className="panel-section" data-panel-key={storageKey}>
+      <header
+        onClick={() => setOpen(!open)}
+        draggable={!!storageKey}
+        onDragStart={(ev) => { if (storageKey) ev.dataTransfer.setData("text/rs-panel-key", storageKey); }}
+      >
+        <IconChevron size={9} className={"chev" + (open ? " open" : "")} />
         <h3>{title}</h3>
         {onReset && (
           <button
             className="mini-btn"
             title={t("section.reset")}
+            aria-label={t("section.reset")}
             onClick={(ev) => { ev.stopPropagation(); onReset(); }}
           >
-            ↺
+            <IconReset size={12} />
           </button>
         )}
       </header>

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "rawstudio",
+  "productName": "rawzero",
   "version": "0.1.0",
-  "identifier": "com.rawstudio.app",
+  "identifier": "com.rawzero.app",
   "build": {
     "frontendDist": "../frontend/dist",
     "beforeBuildCommand": "npm run build --prefix ../frontend"
@@ -17,7 +17,7 @@
     "active": true,
     "targets": ["nsis", "deb", "rpm"],
     "resources": {
-      "../backend/dist/rawstudio-backend": "backend",
+      "../backend/dist/rawzero-backend": "backend",
       "../frontend/dist": "frontend-dist"
     },
     "icon": [

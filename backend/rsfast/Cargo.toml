@@ -3,7 +3,7 @@ name = "rsfast"
 version = "0.1.0"
 edition = "2021"
 
-# Accélérateur natif des étages pur-NumPy du pipeline RawStudio.
+# Accélérateur natif des étages pur-NumPy du pipeline RawZero.
 # cdylib appelé depuis Python via ctypes (pas de maturin/PyO3 requis).
 # Aucune dépendance externe : parallélisme via std::thread (build hors-ligne).
 [lib]

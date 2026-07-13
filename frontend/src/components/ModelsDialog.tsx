@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, type ModelStatus } from "../api";
 import { useStore } from "../store";
+import { Modal } from "./Modal";
 
 const FEATURES = ["subject", "point", "denoise"] as const;
 
@@ -31,14 +32,14 @@ export function ModelsDialog() {
   const download = (f: string) => { void api.modelsDownload(f).then(refresh).catch(() => {}); };
 
   const close = () => setUI({ showModels: false });
+  const titleId = useId();
 
   return (
-    <div className="modal-backdrop" onClick={close}>
-      <div className="modal models-modal" onClick={(e) => e.stopPropagation()}>
-        <header>
-          <h2>{t("models.title")}</h2>
-          <button className="btn" onClick={close}>{t("common.close")}</button>
-        </header>
+    <Modal className="models-modal" labelledBy={titleId} onClose={close}>
+      <header>
+        <h2 id={titleId}>{t("models.title")}</h2>
+        <button className="btn" onClick={close}>{t("common.close")}</button>
+      </header>
         <p className="models-intro">{t("models.intro")}</p>
         <ul className="models-list">
           {FEATURES.map((f) => {
@@ -69,7 +70,6 @@ export function ModelsDialog() {
             );
           })}
         </ul>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,4 +1,4 @@
-"""RawStudio — application FastAPI : API + frontend statique + exports."""
+"""RawZero — application FastAPI : API + frontend statique + exports."""
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -22,7 +22,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="RawStudio", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="RawZero", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,7 +39,7 @@ for r in (photos.router, imports.router, render.router, edits.router, export.rou
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "app": "RawStudio", "version": "1.0.0"}
+    return {"status": "ok", "app": "RawZero", "version": "1.0.0"}
 
 
 app.mount("/exports", StaticFiles(directory=str(config.EXPORTS_DIR), check_dir=False),
@@ -62,5 +62,5 @@ if _static and _static.is_dir():
 else:
     @app.get("/", include_in_schema=False)
     def root():
-        return JSONResponse({"app": "RawStudio API",
+        return JSONResponse({"app": "RawZero API",
                              "hint": "frontend non buildé : utiliser le serveur Vite (npm run dev)"})

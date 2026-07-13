@@ -7,6 +7,9 @@ import { ModeTabs } from "../components/ModeTabs";
 import { ProjectMenu } from "../components/ProjectMenu";
 import { StarRating } from "../components/StarRating";
 import { useThumbSelection } from "../components/useThumbSelection";
+import { EmptyState } from "../components/EmptyState";
+import { Coachmark } from "../components/Coachmark";
+import { IconAlbum, IconClose, IconExport, IconFolder, IconGrid, IconImport, IconPlus, IconSettings, IconTrash, IconEdit, IconCheck } from "../icons";
 import { setDragIds, parseDragIds, hasDragIds } from "../lib/dragPhotos";
 import { confirmDialog, promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
@@ -37,9 +40,9 @@ function LeftRail() {
   return (
     <nav className="left-rail">
       <button className={"rail-btn" + (view === "grid" ? " active" : "")}
-        onClick={() => setView("grid")} title={t("library.gridTitle")}>▦<span>{t("library.grid")}</span></button>
+        onClick={() => setView("grid")} title={t("library.gridTitle")}><IconGrid size={18} /><span>{t("library.grid")}</span></button>
       <button className={"rail-btn" + (showAlbums ? " active" : "")}
-        onClick={() => setUI({ showAlbums: !showAlbums })} title={t("library.albumsTitle")}>📚<span>{t("home.albums")}</span></button>
+        onClick={() => setUI({ showAlbums: !showAlbums })} title={t("library.albumsTitle")}><IconAlbum size={18} /><span>{t("home.albums")}</span></button>
     </nav>
   );
 }
@@ -88,14 +91,14 @@ function Collections() {
     <aside className="collections">
       <div className="collections-head">
         <span>{t("library.collections")}</span>
-        <button className="coll-add" title={t("home.newAlbum")} onClick={create}>＋</button>
+        <button className="coll-add" title={t("home.newAlbum")} aria-label={t("home.newAlbum")} onClick={create}><IconPlus size={13} /></button>
       </div>
       <button
         className={"coll-item source" + (currentAlbumId === null ? " active" : "")}
         onClick={() => void setAlbum(null)}
         title={t("library.backToProject")}
       >
-        <span className="coll-name">📁 {projectName}</span>
+        <span className="coll-name"><IconFolder size={14} /> {projectName}</span>
       </button>
       <div className="coll-sep" />
       {albums.length === 0 && <p className="coll-empty">{t("library.noAlbums")}</p>}
@@ -112,11 +115,11 @@ function Collections() {
           onDragLeave={() => setDropId((d) => (d === a.id ? null : d))}
           onDrop={onDrop(a.id)}
         >
-          <span className="coll-name" title={a.name}>📚 {a.name}</span>
+          <span className="coll-name" title={a.name}><IconAlbum size={14} /> {a.name}</span>
           <span className="coll-count">{a.count ?? 0}</span>
           <span className="coll-actions">
-            <button title={t("project.rename")} onClick={(e) => { e.stopPropagation(); rename(a.id, a.name); }}>✎</button>
-            <button title={t("common.delete")} onClick={(e) => { e.stopPropagation(); remove(a.id, a.name); }}>🗑</button>
+            <button title={t("project.rename")} aria-label={t("project.rename")} onClick={(e) => { e.stopPropagation(); rename(a.id, a.name); }}><IconEdit size={13} /></button>
+            <button title={t("common.delete")} aria-label={t("common.delete")} onClick={(e) => { e.stopPropagation(); remove(a.id, a.name); }}><IconTrash size={13} /></button>
           </span>
         </div>
       ))}
@@ -157,14 +160,14 @@ function Toolbar() {
   return (
     <div className="toolbar">
       <button className="brand-btn" title={t("project.homeTitle")} onClick={() => setView("home")}>
-        <strong className="brand">RawStudio</strong>
+        <strong className="brand">RawZero</strong>
       </button>
       <ProjectMenu />
       <ModeTabs />
       {currentAlbum && (
         <span className="album-chip" title={t("library.albumShown")}>
-          📚 {currentAlbum.name}
-          <button title={t("library.leaveAlbum")} onClick={() => void setAlbum(null)}>✕</button>
+          <IconAlbum size={13} /> {currentAlbum.name}
+          <button title={t("library.leaveAlbum")} aria-label={t("library.leaveAlbum")} onClick={() => void setAlbum(null)}><IconClose size={11} /></button>
         </span>
       )}
       <span className="dim">{t("home.photoCount", { count: photos.length })}</span>
@@ -250,15 +253,15 @@ function Toolbar() {
       <span className="spacer" />
       {view === "grid" && (
         <label className="grid-size" title={t("library.thumbSize")}>
-          ▦
+          <IconGrid size={14} />
           <input type="range" min={140} max={460} step={10} value={gridSize}
             onChange={(ev) => setUI({ gridSize: Number(ev.target.value) })} />
         </label>
       )}
-      <button className="btn" onClick={() => setUI({ showImport: true })}>⤓ {t("home.import")}</button>
-      <button className="btn" onClick={() => setUI({ showExport: true })}>⤒ {t("export.title")}</button>
+      <button className="btn" onClick={() => setUI({ showImport: true })}><IconImport size={14} /> <span className="btn-label">{t("home.import")}</span></button>
+      <button className="btn" onClick={() => setUI({ showExport: true })}><IconExport size={14} /> <span className="btn-label">{t("export.title")}</span></button>
       <button className="btn" title={t("library.shortcutsTitle")} onClick={() => setUI({ showHelp: true })}>?</button>
-      <button className="btn small" title={t("settings.title")} onClick={() => setView("settings")}>⚙</button>
+      <button className="btn small" title={t("settings.title")} aria-label={t("settings.title")} onClick={() => setView("settings")}><IconSettings size={14} /></button>
     </div>
   );
 }
@@ -276,8 +279,12 @@ function Grid() {
   const setRating = useStore((s) => s.setRating);
   const setUI = useStore((s) => s.setUI);
   const gridSize = useStore((s) => s.gridSize);
+  const markHintSeen = useStore((s) => s.markHintSeen);
   const { onClick, onContextMenu } = useThumbSelection();
   const ref = useRef<HTMLDivElement>(null);
+
+  // Le coach-mark de sélection multiple n'a plus lieu d'être une fois le geste découvert.
+  useEffect(() => { if (selection.length > 1) markHintSeen("library-multiselect"); }, [selection.length, markHintSeen]);
 
   // Rectangle de sélection (marquee), comme l'explorateur de fichiers : glisser sur le fond
   // de la grille dessine un cadre qui sélectionne toutes les vignettes qu'il recouvre.
@@ -343,18 +350,19 @@ function Grid() {
 
   if (!photos.length) {
     return (
-      <div className="empty-state">
-        <p>{t("library.emptyCatalog")}</p>
-        <button className="btn primary" onClick={() => setUI({ showImport: true })}>
-          {t("library.importPhotos")}
-        </button>
-      </div>
+      <EmptyState
+        message={t("library.emptyCatalog")}
+        cta={{ label: t("library.importPhotos"), onClick: () => setUI({ showImport: true }) }}
+      />
     );
   }
 
   return (
     <>
       <SelectionBar />
+      <div className="grid-coachmark">
+        <Coachmark hintKey="library-multiselect" message={t("library.multiSelectHint")} />
+      </div>
       <div className="grid" ref={ref} role="listbox" aria-multiselectable="true"
         style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${gridSize}px, 1fr))` }}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove}
@@ -389,12 +397,12 @@ function Grid() {
         >
           <div className="cell-img">
             <img src={api.thumbUrl(p.id, versions[p.id] ?? 0)} alt={p.filename} loading="lazy" draggable={false} />
-            {selection.includes(p.id) && <span className="badge select">✓</span>}
+            {selection.includes(p.id) && <span className="badge select"><IconCheck size={11} /></span>}
             {p.flag === "pick" && <span className="badge pick">⚑</span>}
-            {p.flag === "reject" && <span className="badge reject">✕</span>}
+            {p.flag === "reject" && <span className="badge reject"><IconClose size={10} /></span>}
             {p.color && <span className="badge color" style={{ background: COLOR_HEX[p.color] }} />}
             {!!p.is_raw && <span className="badge raw">RAW</span>}
-            {p.edited && <span className="badge edited" title={t("develop.editedTitle")}>✎</span>}
+            {p.edited && <span className="badge edited" title={t("develop.editedTitle")}><IconEdit size={10} /></span>}
             {p.missing && <span className="badge missing" title={t("relink.missingBadge")}>⚠</span>}
           </div>
           <div className="cell-meta">
@@ -429,12 +437,12 @@ function SelectionBar() {
     <div className="selection-bar">
       <span className="selection-count">{t("home.photoCount", { count: selection.length })}</span>
       <button className="btn small" onClick={() => { setExportIds(selection); setUI({ showExport: true }); }}>
-        ⤒ {t("export.title")}
+        <IconExport size={13} /> {t("export.title")}
       </button>
       <button className="btn small" onClick={() => patchSelection({ flag: "pick" })}>⚑ {t("ctx.pick")}</button>
-      <button className="btn small" onClick={() => patchSelection({ flag: "reject" })}>✕ {t("ctx.reject")}</button>
+      <button className="btn small" onClick={() => patchSelection({ flag: "reject" })}><IconClose size={11} /> {t("ctx.reject")}</button>
       <span className="selection-album">
-        <button className="btn small" onClick={() => setAlbumOpen((v) => !v)}>📚 {t("ctx.addToAlbum")}</button>
+        <button className="btn small" onClick={() => setAlbumOpen((v) => !v)}><IconAlbum size={13} /> {t("ctx.addToAlbum")}</button>
         {albumOpen && (
           <div className="selection-album-pop">
             {albums.length === 0 && <p className="hint">{t("library.noAlbums")}</p>}
@@ -445,7 +453,7 @@ function SelectionBar() {
         )}
       </span>
       <span className="spacer" />
-      <button className="btn small" onClick={() => setSelection([])}>✕ {t("common.close")}</button>
+      <button className="btn small" onClick={() => setSelection([])}><IconClose size={11} /> {t("common.close")}</button>
     </div>
   );
 }
@@ -459,7 +467,7 @@ function Loupe() {
   const setFlag = useStore((s) => s.setFlag);
   const openDevelop = useStore((s) => s.openDevelop);
 
-  if (!photo) return <div className="empty-state"><p>{t("develop.noPhoto")}</p></div>;
+  if (!photo) return <EmptyState message={t("develop.noPhoto")} />;
 
   return (
     <div className="loupe">

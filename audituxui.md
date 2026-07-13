@@ -1,4 +1,4 @@
-# Audit UX / UI — RawStudio
+# Audit UX / UI — RawZero
 
 > Audit ergonomique complet, détail par détail, du point de vue utilisateur.
 > Basé sur une lecture du code réel de l'interface (`frontend/src`), pas sur des suppositions.
@@ -47,9 +47,9 @@ Les albums existent : (a) en cartes sur l'accueil (`HomeView`), (b) via le rail 
 ### 1.3 🟠 Bouton Accueil (🏠) dupliqué et incohérent selon la vue
 - En bibliothèque : le 🏠 est dans `ProjectMenu` (`project-home`).
 - En développement : un 🏠 séparé dans la toolbar (`DevelopView`).
-- Sur l'accueil : pas de 🏠 (logique) mais la marque « RawStudio » n'est pas cliquable pour revenir/rafraîchir.
+- Sur l'accueil : pas de 🏠 (logique) mais la marque « RawZero » n'est pas cliquable pour revenir/rafraîchir.
 
-**Reco** : rendre la marque « RawStudio » (présente dans 3 toolbars) systématiquement cliquable → retour accueil. Supprimer les 🏠 redondants ou les uniformiser (même position, gauche).
+**Reco** : rendre la marque « RawZero » (présente dans 3 toolbars) systématiquement cliquable → retour accueil. Supprimer les 🏠 redondants ou les uniformiser (même position, gauche).
 
 ### 1.4 🟠 `ModeTabs` n'expose que 2 modes alors qu'il en existe 3
 `ModeTabs` = *Bibliothèque* / *Développement*. Or la Loupe (E) est un 3ᵉ mode réel avec sa propre vue. L'utilisateur bascule Grille↔Loupe uniquement via le rail (▦) ou double-clic ou raccourci. La relation Grille/Loupe/Développement n'est jamais montrée d'un coup.
@@ -504,7 +504,7 @@ Classées par valeur/usage :
 
 ## 19. Synthèse
 
-RawStudio a un **cœur fonctionnel de niveau professionnel** et une **ingénierie front soignée**. Les gains UX les plus élevés viennent aujourd'hui de :
+RawZero a un **cœur fonctionnel de niveau professionnel** et une **ingénierie front soignée**. Les gains UX les plus élevés viennent aujourd'hui de :
 
 1. **Accessibilité clavier** (focus visible + éléments non natifs) — dette la plus systémique.
 2. **Maîtrise de la densité** (toolbars responsives, filtres regroupés, fonctions dev cachées).

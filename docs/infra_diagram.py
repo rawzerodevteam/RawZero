@@ -19,7 +19,7 @@ EDGE = "edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#
 EDGE_FUTURE = "edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;strokeColor=#ef4444;dashed=1;endArrow=block;endFill=1;jettySize=auto;"
 
 mxfile = ET.Element("mxfile", host="app.diagrams.net")
-diagram = ET.SubElement(mxfile, "diagram", name="RawStudio infra")
+diagram = ET.SubElement(mxfile, "diagram", name="RawZero infra")
 model = ET.SubElement(diagram, "mxGraphModel", dx="1600", dy="900", grid="0", gridSize="10",
                        guides="1", tooltips="1", connect="1", arrows="1", fold="1", page="1",
                        pageScale="1", pageWidth="1700", pageHeight="1180", math="0", shadow="0")

@@ -34,10 +34,18 @@ describe("serialize/parse round-trip", () => {
 
   it("accepte la forme preset unique (name + settings)", () => {
     const text = JSON.stringify({
-      format: "rawstudio-preset", version: 1,
+      format: "rawzero-preset", version: 1,
       name: "Solo", settings: { tone: { contrast: 10 } },
     });
     expect(parsePresetFile(text)).toEqual([{ name: "Solo", settings: { tone: { contrast: 10 } } }]);
+  });
+
+  it("accepte l'ancien en-tête de format (fichiers exportés avant le renommage RawStudio → RawZero)", () => {
+    const text = JSON.stringify({
+      format: "rawstudio-preset", version: 1,
+      name: "Ancien", settings: { tone: { contrast: 5 } },
+    });
+    expect(parsePresetFile(text)).toEqual([{ name: "Ancien", settings: { tone: { contrast: 5 } } }]);
   });
 });
 
@@ -50,7 +58,7 @@ describe("parse — rejets", () => {
     expect(() => parsePresetFile(JSON.stringify({ format: "autre", presets: [] }))).toThrow();
   });
   it("rejette un bundle sans preset nommé valide", () => {
-    const text = JSON.stringify({ format: "rawstudio-preset", version: 1, presets: [{ settings: {} }] });
+    const text = JSON.stringify({ format: "rawzero-preset", version: 1, presets: [{ settings: {} }] });
     expect(() => parsePresetFile(text)).toThrow();
   });
 });

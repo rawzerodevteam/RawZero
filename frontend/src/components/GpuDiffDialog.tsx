@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "../store";
 import { measureDivergence, type DiffStats } from "../gpu/diff";
+import { Modal } from "./Modal";
 
 /** Outil de diagnostic : compare numériquement l'aperçu GPU au rendu Python (référence)
  *  sur la photo et les réglages courants. Sert à décider si l'export peut rester côté Python. */
@@ -30,13 +31,14 @@ export function GpuDiffDialog({ onClose }: { onClose: () => void }) {
       ? { txt: t("gpuDiff.verdictWarn"), cls: "warn" }
       : { txt: t("gpuDiff.verdictBad"), cls: "bad" });
 
+  const titleId = useId();
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(ev) => ev.stopPropagation()} style={{ minWidth: 380 }}>
-        <header>
-          <h2>{t("gpuDiff.title")}</h2>
-          <button className="mini-btn" onClick={onClose}>✕</button>
-        </header>
+    <Modal labelledBy={titleId} onClose={onClose} style={{ minWidth: 380 }}>
+      <header>
+        <h2 id={titleId}>{t("gpuDiff.title")}</h2>
+        <button className="mini-btn" onClick={onClose}>✕</button>
+      </header>
 
         {busy && <p className="dim">{t("gpuDiff.measuring")}</p>}
         {error && <p className="error-text">{error}</p>}
@@ -61,7 +63,6 @@ export function GpuDiffDialog({ onClose }: { onClose: () => void }) {
           <button className="btn" onClick={run} disabled={busy}>{t("gpuDiff.rerun")}</button>
           <button className="btn" onClick={onClose}>{t("common.close")}</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -5,6 +5,7 @@ import { parseDragIds, hasDragIds } from "../lib/dragPhotos";
 import { promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
 import { ALL_PHOTOS_ID } from "../types";
+import { IconAlbum, IconFolder, IconGrid, IconImport, IconPlus, IconSettings } from "../icons";
 
 /** Écran d'accueil : tous les projets affichés en grandes icônes (couverture + nom + compte). */
 export function HomeView() {
@@ -47,11 +48,11 @@ export function HomeView() {
   return (
     <div className="home">
       <header className="home-header">
-        <strong className="brand">RawStudio</strong>
+        <strong className="brand">RawZero</strong>
         <span className="spacer" />
-        <button className="btn" onClick={() => setView("settings")}>⚙ {t("settings.title")}</button>
+        <button className="btn" onClick={() => setView("settings")}><IconSettings size={14} /> {t("settings.title")}</button>
         <button className="btn" onClick={() => setUI({ showModels: true })}>{t("models.button")}</button>
-        <button className="btn" onClick={() => setUI({ showImport: true })}>⤓ {t("home.import")}</button>
+        <button className="btn" onClick={() => setUI({ showImport: true })}><IconImport size={14} /> {t("home.import")}</button>
       </header>
       <div className="home-body">
         <h1 className="home-title">{t("home.projects")}</h1>
@@ -61,7 +62,7 @@ export function HomeView() {
               <div className="project-cover">
                 {p.cover
                   ? <img src={api.thumbUrl(p.cover, versions[p.cover] ?? 0)} alt="" draggable={false} />
-                  : <span className="project-cover-empty">{p.id === ALL_PHOTOS_ID ? "🗂" : "📁"}</span>}
+                  : <span className="project-cover-empty">{p.id === ALL_PHOTOS_ID ? <IconGrid size={28} /> : <IconFolder size={28} />}</span>}
               </div>
               <div className="project-card-meta">
                 <span className="project-card-name" title={p.name}>{p.name}</span>
@@ -70,7 +71,7 @@ export function HomeView() {
             </button>
           ))}
           <button className="project-card new" onClick={create}>
-            <div className="project-cover"><span className="project-cover-empty">＋</span></div>
+            <div className="project-cover"><span className="project-cover-empty"><IconPlus size={24} /></span></div>
             <div className="project-card-meta">
               <span className="project-card-name">{t("home.newProject")}</span>
             </div>
@@ -92,7 +93,7 @@ export function HomeView() {
               <div className="project-cover">
                 {a.cover
                   ? <img src={api.thumbUrl(a.cover, versions[a.cover] ?? 0)} alt="" draggable={false} />
-                  : <span className="project-cover-empty">📚</span>}
+                  : <span className="project-cover-empty"><IconAlbum size={28} /></span>}
               </div>
               <div className="project-card-meta">
                 <span className="project-card-name" title={a.name}>{a.name}</span>
@@ -101,7 +102,7 @@ export function HomeView() {
             </button>
           ))}
           <button className="project-card new" onClick={createAlb}>
-            <div className="project-cover"><span className="project-cover-empty">＋</span></div>
+            <div className="project-cover"><span className="project-cover-empty"><IconPlus size={24} /></span></div>
             <div className="project-card-meta">
               <span className="project-card-name">{t("home.newAlbum")}</span>
             </div>

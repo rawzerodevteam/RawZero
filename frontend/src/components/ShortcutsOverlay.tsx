@@ -1,19 +1,22 @@
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { ACTION_DEFS, CATEGORIES, formatKey, getBinding, useKeybindings } from "../keybindings";
 import { useStore } from "../store";
+import { Modal } from "./Modal";
+import { IconClose, IconSettings } from "../icons";
 
 export function ShortcutsOverlay() {
   const { t } = useTranslation();
   useKeybindings(); // reflète les raccourcis personnalisés
   const setUI = useStore((s) => s.setUI);
   const setView = useStore((s) => s.setView);
+  const titleId = useId();
   return (
-    <div className="modal-backdrop" onClick={() => setUI({ showHelp: false })}>
-      <div className="modal shortcuts-modal" onClick={(ev) => ev.stopPropagation()}>
-        <header>
-          <h2>{t("shortcuts.title")}</h2>
-          <button className="mini-btn" onClick={() => setUI({ showHelp: false })}>✕</button>
-        </header>
+    <Modal className="shortcuts-modal" labelledBy={titleId} onClose={() => setUI({ showHelp: false })}>
+      <header>
+        <h2 id={titleId}>{t("shortcuts.title")}</h2>
+        <button className="mini-btn" onClick={() => setUI({ showHelp: false })} aria-label={t("common.close")}><IconClose size={12} /></button>
+      </header>
         <div className="shortcuts-body">
           {CATEGORIES.map((cat) => (
             <div key={cat} className="shortcuts-cat">
@@ -38,10 +41,9 @@ export function ShortcutsOverlay() {
         </div>
         <footer className="shortcuts-foot">
           <button className="btn" onClick={() => { setUI({ showHelp: false }); setView("settings"); }}>
-            ⚙ {t("shortcuts.customize")}
+            <IconSettings size={14} /> {t("shortcuts.customize")}
           </button>
         </footer>
-      </div>
-    </div>
+    </Modal>
   );
 }

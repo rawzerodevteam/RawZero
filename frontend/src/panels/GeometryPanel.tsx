@@ -4,6 +4,7 @@ import { PanelSection } from "../components/PanelSection";
 import { CROP_ASPECTS as ASPECTS } from "../lib/cropAspects";
 import { useStore } from "../store";
 import { defaultEdits } from "../types";
+import { IconFlipH, IconFlipV, IconRotateLeft, IconRotateRight } from "../icons";
 
 export function GeometryPanel() {
   const { t } = useTranslation();
@@ -30,19 +31,19 @@ export function GeometryPanel() {
       <div className="row-actions">
         <button className="btn" title={t("geometry.rotateCcw")}
           onClick={() => updateEdits((e) => { e.geometry.rotate = (e.geometry.rotate + 270) % 360; })}>
-          ⟲ 90°
+          <IconRotateLeft size={14} /> 90°
         </button>
         <button className="btn" title={t("geometry.rotateCw")}
           onClick={() => updateEdits((e) => { e.geometry.rotate = (e.geometry.rotate + 90) % 360; })}>
-          ⟳ 90°
+          <IconRotateRight size={14} /> 90°
         </button>
         <button className={"btn" + (flipH ? " active" : "")} title={t("geometry.flipH")}
           onClick={() => updateEdits((e) => { e.geometry.flip_h = !e.geometry.flip_h; })}>
-          ⇋ H
+          <IconFlipH size={14} /> H
         </button>
         <button className={"btn" + (flipV ? " active" : "")} title={t("geometry.flipV")}
           onClick={() => updateEdits((e) => { e.geometry.flip_v = !e.geometry.flip_v; })}>
-          ⇵ V
+          <IconFlipV size={14} /> V
         </button>
       </div>
       <EditSlider label={t("geometry.straighten")} get={(e) => e.geometry.straighten} min={-10} max={10} step={0.1}

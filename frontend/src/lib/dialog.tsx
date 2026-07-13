@@ -1,5 +1,6 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { useFocusTrap } from "./useFocusTrap";
 
 type DialogRequest =
   | { kind: "confirm"; message: string; danger?: boolean; resolve: (v: boolean) => void }
@@ -29,6 +30,7 @@ export function DialogHost() {
   const { t } = useTranslation();
   const [req, setReq] = useState<DialogRequest | null>(current);
   const [value, setValue] = useState("");
+  const trapRef = useFocusTrap<HTMLDivElement>(req !== null);
 
   useEffect(() => {
     setter = setReq;
@@ -58,12 +60,14 @@ export function DialogHost() {
   return (
     <div className="modal-backdrop" onClick={() => finish(cancelValue)}>
       <div
+        ref={trapRef}
         className="modal dialog-modal"
         onClick={(ev) => ev.stopPropagation()}
         onKeyDown={onKeyDown}
         role="dialog"
         aria-modal="true"
         aria-label={req.message}
+        tabIndex={-1}
       >
         <p className="dialog-message">{req.message}</p>
         {req.kind === "prompt" && (

@@ -2,7 +2,7 @@
  *  Le handle de dossier est stocké dans IndexedDB : on choisit le dossier une fois,
  *  et l'app le réutilise ensuite sans redemander à chaque export. */
 
-const DB_NAME = "rawstudio";
+const DB_NAME = "rawzero";
 const STORE = "handles";
 const KEY = "exportDir";
 
@@ -47,7 +47,7 @@ export async function loadExportDir(): Promise<any | null> {
 
 /** Ouvre le sélecteur natif et mémorise le dossier choisi. */
 export async function chooseExportDir(): Promise<any | null> {
-  const dir = await (window as any).showDirectoryPicker({ id: "rawstudio-export", mode: "readwrite" });
+  const dir = await (window as any).showDirectoryPicker({ id: "rawzero-export", mode: "readwrite" });
   await idbSet(dir);
   return dir;
 }

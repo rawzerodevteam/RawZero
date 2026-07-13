@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { confirmDialog, promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
 import { ALL_PHOTOS_ID } from "../types";
+import { IconChevron, IconEdit, IconFolder, IconPlus, IconTrash } from "../icons";
 
 /** Sélecteur de projet (dossier d'import) en haut à gauche : changer / créer / renommer / supprimer. */
 export function ProjectMenu() {
@@ -13,7 +14,6 @@ export function ProjectMenu() {
   const createProject = useStore((s) => s.createProject);
   const renameProject = useStore((s) => s.renameProject);
   const deleteProject = useStore((s) => s.deleteProject);
-  const setView = useStore((s) => s.setView);
   const notify = useStore((s) => s.notify);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -53,9 +53,8 @@ export function ProjectMenu() {
 
   return (
     <div className="project-menu" ref={ref}>
-      <button className="project-home" title={t("project.homeTitle")} aria-label={t("project.homeTitle")} onClick={() => setView("home")}>🏠</button>
       <button className="project-trigger" onClick={() => setOpen((v) => !v)} title={t("project.triggerTitle")}>
-        📁 <span className="pm-name">{current?.name ?? t("import.defaultProject")}</span> ▾
+        <IconFolder size={13} /> <span className="pm-name">{current?.name ?? t("import.defaultProject")}</span> <IconChevron size={9} className={"chev" + (open ? " open" : "")} />
       </button>
       {open && (
         <div className="project-dropdown">
@@ -68,9 +67,9 @@ export function ProjectMenu() {
             </button>
           ))}
           <div className="pm-sep" />
-          <button className="pm-item" onClick={create}>＋ {t("home.newProject")}</button>
-          <button className="pm-item" onClick={rename} disabled={!isReal}>✎ {t("project.rename")}</button>
-          <button className="pm-item danger" onClick={remove} disabled={!isReal || realCount <= 1}>🗑 {t("common.delete")}</button>
+          <button className="pm-item" onClick={create}><IconPlus size={12} /> {t("home.newProject")}</button>
+          <button className="pm-item" onClick={rename} disabled={!isReal}><IconEdit size={12} /> {t("project.rename")}</button>
+          <button className="pm-item danger" onClick={remove} disabled={!isReal || realCount <= 1}><IconTrash size={12} /> {t("common.delete")}</button>
         </div>
       )}
     </div>

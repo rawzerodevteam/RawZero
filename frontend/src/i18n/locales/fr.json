@@ -149,7 +149,8 @@
     "emptyCatalog": "Aucune photo dans le catalogue (ou aucune ne passe les filtres).",
     "importPhotos": "Importer des photos",
     "developBtn": "Développer (D)",
-    "flagState": { "none": "—", "pick": "Retenue", "reject": "Rejetée" }
+    "flagState": { "none": "—", "pick": "Retenue", "reject": "Rejetée" },
+    "multiSelectHint": "Astuce : Ctrl/Maj+clic, ou glissez sur le fond, pour sélectionner plusieurs photos à la fois."
   },
   "shortcuts": {
     "title": "Raccourcis clavier",
@@ -223,7 +224,7 @@
     "importAll": "Tout importer ({{count}})",
     "clickToImport": "Cliquer pour importer",
     "emptyFolder": "Dossier vide",
-    "referenceHint": "Les photos restent à leur emplacement d'origine (aucune copie n'est faite) : ne déplacez pas les fichiers importés en dehors de RawStudio.",
+    "referenceHint": "Les photos restent à leur emplacement d'origine (aucune copie n'est faite) : ne déplacez pas les fichiers importés en dehors de RawZero.",
     "status": {
       "imported": "importée",
       "duplicate": "doublon ignoré",
@@ -468,7 +469,9 @@
     "advancedTitle": "Outils avancés / débogage",
     "gpuLabel": "Aperçu GPU temps réel",
     "diffLabel": "Écart GPU ↔ Python…",
-    "positionOf": "{{n}} sur {{total}}"
+    "positionOf": "{{n}} sur {{total}}",
+    "togglePanelsTitle": "Afficher/masquer les panneaux",
+    "viewerHint": "Molette : zoom · Espace + glisser : déplacer · Z : ajusté ↔ 100 %"
   },
   "crop": {
     "ratio": "Ratio",

@@ -1,4 +1,4 @@
-﻿
+
 
 
 
@@ -121,7 +121,7 @@
 
 <#
 .SYNOPSIS
-  Installe tout l'outillage de dev de RawStudio depuis un clone vierge (zéro prérequis système).
+  Installe tout l'outillage de dev de RawZero depuis un clone vierge (zéro prérequis système).
 
 .DESCRIPTION
   À lancer une fois après `git clone`. Met en place l'outillage *portable* dans .tools\

@@ -21,7 +21,7 @@ from PIL import Image
 from . import config, db, denoise, pipeline, raw_loader
 
 log = logging.getLogger(__name__)
-executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rawstudio-bg")
+executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rawzero-bg")
 
 # Cache « froid » : float16, borne la RAM sur un grand nombre de photos (cf. O2).
 # Cache « chaud » : float32 de la/les photo(s) en cours d'édition, pour que les rendus

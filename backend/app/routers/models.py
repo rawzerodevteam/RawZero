@@ -34,9 +34,9 @@ class ModelFile:
 
 # URL de base d'hébergement des modèles (repo GitHub PUBLIC à nous, fichiers à la racine de la
 # branche par défaut → servis en brut via raw.githubusercontent.com). Surchargeable par env
-# (RAWSTUDIO_MODELS_URL) pour pointer un autre repo/branche sans rebuild. URL fichier = {base}/{nom}.
+# (RAWZERO_MODELS_URL) pour pointer un autre repo/branche sans rebuild. URL fichier = {base}/{nom}.
 MODELS_BASE_URL = os.environ.get(
-    "RAWSTUDIO_MODELS_URL",
+    "RAWZERO_MODELS_URL",
     "https://raw.githubusercontent.com/rawzerodevteam/RawZeroModelsDownload/main",
 ).rstrip("/")
 

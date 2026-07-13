@@ -1,4 +1,4 @@
-# RawStudio
+# RawZero
 
 A local, non-destructive **RAW photo editor** — inspired by Lightroom / Darktable.
 Ships as a **desktop app** (Tauri) and runs as a **web app** (Podman / Docker).

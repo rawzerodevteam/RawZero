@@ -11,18 +11,7 @@ import {
   resetAccent, setAccent, setCustomBg, setTheme,
 } from "../theme";
 import { useStore } from "../store";
-
-// Icônes SVG (currentColor) : évite le rendu 2 couleurs (franges ClearType) des glyphes texte ✕/↺.
-const IconReset = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-    <path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5V6h-3.5" strokeLinejoin="round" />
-  </svg>
-);
-const IconClose = () => (
-  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-    <path d="M2 2l12 12M14 2L2 14" />
-  </svg>
-);
+import { IconClose, IconReset } from "../icons";
 
 /** Onglet « Paramètres » : apparence (langue, couleur d'accent) + raccourcis clavier. */
 export function SettingsView() {
@@ -167,7 +156,7 @@ export function SettingsView() {
                         <button className="mini-btn" title={t("settings.resetDefault")} disabled={!overridden}
                           onClick={() => resetBinding(a.id)}><IconReset /></button>
                         <button className="mini-btn" title={t("settings.unassign")} disabled={!cur}
-                          onClick={() => clearBinding(a.id)}><IconClose /></button>
+                          onClick={() => clearBinding(a.id)}><IconClose size={11} /></button>
                       </span>
                     </div>
                   );

@@ -1,15 +1,18 @@
 /** Lecture / écriture des fichiers de presets `.rsp` (JSON).
  *
  *  Format bundle (1..N presets) :
- *    { "format": "rawstudio-preset", "version": 1,
+ *    { "format": "rawzero-preset", "version": 1,
  *      "presets": [ { "name": "...", "settings": { ...Partial<EditState> } } ] }
  *
- *  L'import tolère aussi la forme « preset unique » : { format, version, name, settings }.
+ *  L'import tolère aussi la forme « preset unique » : { format, version, name, settings },
+ *  ainsi que l'ancien en-tête `PRESET_FORMAT_LEGACY` (fichiers `.rsp` exportés avant le
+ *  renommage du projet RawStudio → RawZero, cf. mémoire rawstudio-project-name).
  *  Les `settings` sont assainis : un preset ne porte que le rendu (pas de géométrie ni de
  *  masques locaux), cf. PresetsPanel (sauvegarde) et le backend (assainissement serveur). */
 import type { EditState, Preset } from "../types";
 
-export const PRESET_FORMAT = "rawstudio-preset";
+export const PRESET_FORMAT = "rawzero-preset";
+const PRESET_FORMAT_LEGACY = "rawstudio-preset";
 export const PRESET_FILE_VERSION = 1;
 
 /** Sections de rendu conservées dans un preset (tout le reste est jeté). */
@@ -45,7 +48,8 @@ export function parsePresetFile(text: string): PresetFileEntry[] {
   } catch {
     throw new Error("invalid-json");
   }
-  if (!data || typeof data !== "object" || data.format !== PRESET_FORMAT) {
+  if (!data || typeof data !== "object" ||
+      (data.format !== PRESET_FORMAT && data.format !== PRESET_FORMAT_LEGACY)) {
     throw new Error("invalid-format");
   }
   // Bundle (presets[]) ou preset unique (name + settings).

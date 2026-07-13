@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { useStore } from "../store";
 import { chooseExportDir, ensureWritable, fsAccessSupported, loadExportDir, writeFile } from "../lib/exportDir";
+import { Modal } from "./Modal";
+import { IconClose, IconFolder } from "../icons";
 
 type Scope = "selection" | "current" | "all";
 
@@ -110,16 +112,16 @@ export function ExportDialog() {
   };
 
   const close = () => { setExportIds(null); setUI({ showExport: false }); };
+  const titleId = useId();
 
   const pct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
 
   return (
-    <div className="modal-backdrop" onClick={busy ? undefined : close}>
-      <div className="modal export-modal" onClick={(ev) => ev.stopPropagation()}>
-        <header>
-          <h2>{t("export.title")}</h2>
-          <button className="mini-btn" onClick={close} disabled={busy}>✕</button>
-        </header>
+    <Modal className="export-modal" labelledBy={titleId} onClose={close} closeOnBackdrop={!busy}>
+      <header>
+        <h2 id={titleId}>{t("export.title")}</h2>
+        <button className="mini-btn" onClick={close} disabled={busy} aria-label={t("common.close")}><IconClose size={12} /></button>
+      </header>
 
         <div className="form-row">
           <label>{t("export.photos")}</label>
@@ -133,7 +135,7 @@ export function ExportDialog() {
         {fsAccessSupported && (
           <div className="form-row">
             <label>{t("export.destination")}</label>
-            <button className="btn" onClick={() => void pickFolder()} disabled={busy}>📁 {dirName ? t("export.change") : t("export.choose")}</button>
+            <button className="btn" onClick={() => void pickFolder()} disabled={busy}><IconFolder size={14} /> {dirName ? t("export.change") : t("export.choose")}</button>
             <span className="dim folder-name">{dirName || t("export.askOnExport")}</span>
           </div>
         )}
@@ -192,7 +194,6 @@ export function ExportDialog() {
             {errors.map((e) => (e.id >= 0 ? `#${e.id} : ` : "") + e.error).join(" · ")}
           </p>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
