@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import i18n from "./i18n";
 import { actionForEvent } from "./keybindings";
+import { confirmDialog } from "./lib/dialog";
 import { useStore } from "./store";
 
 function isTyping(): boolean {
@@ -88,8 +89,9 @@ function dispatch(action: string, s: ReturnType<typeof useStore.getState>, ev: K
       return;
     case "export": ev.preventDefault(); s.setUI({ showExport: true }); return;
     case "remove":
-      if (s.currentId !== null && window.confirm(i18n.t("shortcuts.confirmRemoveCurrent"))) {
-        void s.removeCurrent(false);
+      if (s.currentId !== null) {
+        void confirmDialog(i18n.t("shortcuts.confirmRemoveCurrent"), { danger: true })
+          .then((ok) => { if (ok) void s.removeCurrent(false); });
       }
       return;
     case "help": s.setUI({ showHelp: !s.showHelp }); return;

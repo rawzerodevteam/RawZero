@@ -70,7 +70,7 @@ export function ExportDialog() {
         if (!target) return;
         setDir(target);
       }
-      if (!(await ensureWritable(target))) { notify(t("export.dirDenied")); return; }
+      if (!(await ensureWritable(target))) { notify(t("export.dirDenied"), "error"); return; }
     }
     setBusy(true);
     setErrors([]);
@@ -104,7 +104,7 @@ export function ExportDialog() {
     setDoneCount(ok);
     setBusy(false);
     if (ok > 0 && !errs.length) {
-      notify(t("export.exported", { count: ok }) + (dirName ? ` → ${dirName}` : ""));
+      notify(t("export.exported", { count: ok }) + (dirName ? ` → ${dirName}` : ""), "success");
       close();
     }
   };

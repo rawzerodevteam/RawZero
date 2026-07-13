@@ -6,6 +6,8 @@ import { ImportPanel } from "./components/ImportPanel";
 import { ModelsDialog } from "./components/ModelsDialog";
 import { RelinkDialog } from "./components/RelinkDialog";
 import { ShortcutsOverlay } from "./components/ShortcutsOverlay";
+import { ToastStack } from "./components/ToastStack";
+import { DialogHost } from "./lib/dialog";
 import { useGlobalShortcuts } from "./shortcuts";
 import i18n from "./i18n";
 import { useStore } from "./store";
@@ -20,7 +22,6 @@ export function App() {
   const showImport = useStore((s) => s.showImport);
   const showExport = useStore((s) => s.showExport);
   const showModels = useStore((s) => s.showModels);
-  const toast = useStore((s) => s.toast);
   const init = useStore((s) => s.init);
   const loadProjects = useStore((s) => s.loadProjects);
   useGlobalShortcuts();
@@ -44,7 +45,8 @@ export function App() {
       {showHelp && <ShortcutsOverlay />}
       <RelinkDialog />
       <ContextMenu />
-      {toast && <div className="toast">{toast}</div>}
+      <ToastStack />
+      <DialogHost />
       <DevOverlay />
     </div>
   );

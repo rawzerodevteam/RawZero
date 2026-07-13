@@ -60,7 +60,7 @@ export function LocalPanel() {
   };
 
   return (
-    <PanelSection title={t("local.title")} defaultOpen={false}>
+    <PanelSection title={t("local.title")} defaultOpen={false} storageKey="local">
       <div className="row-actions">
         {TOOLS.map(({ tool, icon, label, hint }) => (
           <button
@@ -148,10 +148,21 @@ export function LocalPanel() {
             <li
               key={l.id}
               className={l.id === selectedLocalId ? "selected" : ""}
+              role="button"
+              tabIndex={0}
+              aria-pressed={l.id === selectedLocalId}
               onClick={() => setUI({
                 selectedLocalId: l.id === selectedLocalId ? null : l.id,
                 activeTool: l.type === "brush" && l.id !== selectedLocalId ? "brush" : "none",
               })}
+              onKeyDown={(ev) => {
+                if (ev.key !== "Enter" && ev.key !== " ") return;
+                ev.preventDefault();
+                setUI({
+                  selectedLocalId: l.id === selectedLocalId ? null : l.id,
+                  activeTool: l.type === "brush" && l.id !== selectedLocalId ? "brush" : "none",
+                });
+              }}
             >
               <span>{i + 1}. {t(l.type === "ai" && l.params.kind === "sky" ? "local.type.sky" : `local.type.${l.type}`)}</span>
               {l.invert && <span className="tag">{t("local.invTag")}</span>}

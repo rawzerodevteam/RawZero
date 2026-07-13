@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { parseDragIds, hasDragIds } from "../lib/dragPhotos";
+import { promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
 import { ALL_PHOTOS_ID } from "../types";
 
@@ -24,13 +25,15 @@ export function HomeView() {
   const openAlbum = (id: number) => { void setAlbum(id); };
 
   const create = () => {
-    const name = window.prompt(t("home.promptProjectName"), t("home.newProject"));
-    if (name && name.trim()) void createProject(name.trim());
+    void promptDialog(t("home.promptProjectName"), t("home.newProject")).then((name) => {
+      if (name) void createProject(name);
+    });
   };
 
   const createAlb = () => {
-    const name = window.prompt(t("home.promptAlbumName"), t("home.newAlbum"));
-    if (name && name.trim()) void createAlbum(name.trim());
+    void promptDialog(t("home.promptAlbumName"), t("home.newAlbum")).then((name) => {
+      if (name) void createAlbum(name);
+    });
   };
 
   // Glisser-déposer de photos (depuis la grille) sur une carte d'album.

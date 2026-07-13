@@ -5,6 +5,10 @@ import { describeEditChange } from "./lib/historyLabel";
 import { cloneLocalMask } from "./lib/localMask";
 import i18n from "./i18n";
 
+export type ToastType = "info" | "success" | "error";
+export interface ToastItem { id: number; msg: string; type: ToastType; action?: { label: string; onClick: () => void } }
+let nextToastId = 1;
+
 // Libellé de l'étape « origine » de l'historique, dans la langue courante.
 const originLabel = () => i18n.t("history.origin");
 
@@ -137,7 +141,7 @@ interface Store {
   aiPointAvailable: boolean;      // modèle « clic » (EdgeSAM) présent
   aiDenoiseAvailable: boolean;    // modèle de débruitage IA (FFDNet) présent
   aiMaskBusy: boolean;            // calcul d'un masque IA en cours
-  toast: string;
+  toasts: ToastItem[];
 
   init(): Promise<void>;
   loadProjects(): Promise<void>;
@@ -190,6 +194,7 @@ interface Store {
   applyPartial(settings: Partial<EditState>): void;
   copyEdits(): void;
   pasteEdits(): void;
+  pasteEditsToSelection(ids: number[]): Promise<void>;
   copyLocalMask(): void;
   cutLocalMask(): void;
   pasteLocalMask(): void;
@@ -200,7 +205,8 @@ interface Store {
   setUI(p: Partial<Pick<Store, "beforeAfter" | "showClipping" | "showInfo" | "showHelp" |
     "showImport" | "showExport" | "showModels" | "showAlbums" | "activeTool" | "selectedLocalId" | "showMaskOverlay" |
     "brushSize" | "brushErase" | "cropAspect" | "gridSize">>): void;
-  notify(msg: string): void;
+  notify(msg: string, type?: ToastType, action?: { label: string; onClick: () => void }): void;
+  dismissToast(id: number): void;
   refreshAiAvailability(): Promise<void>;
 }
 
@@ -254,7 +260,7 @@ export const useStore = create<Store>((set, get) => ({
   aiPointAvailable: false,
   aiDenoiseAvailable: false,
   aiMaskBusy: false,
-  toast: "",
+  toasts: [],
 
   // Au démarrage : page d'accueil (projets) par défaut, ou reprise de la dernière session.
   async init() {
@@ -364,7 +370,7 @@ export const useStore = create<Store>((set, get) => ({
       await get().loadAlbums();
       return a.id;
     } catch (e) {
-      get().notify(e instanceof Error ? e.message : "Échec de création de l'album");
+      get().notify(e instanceof Error ? e.message : "Échec de création de l'album", "error");
       return null;
     }
   },
@@ -374,7 +380,7 @@ export const useStore = create<Store>((set, get) => ({
       await api.renameAlbum(id, name);
       await get().loadAlbums();
     } catch (e) {
-      get().notify(e instanceof Error ? e.message : "Échec du renommage");
+      get().notify(e instanceof Error ? e.message : "Échec du renommage", "error");
     }
   },
 
@@ -478,7 +484,7 @@ export const useStore = create<Store>((set, get) => ({
               undoStack: h.undoStack, undoLabels: h.undoLabels, redoStack: h.redoStack, redoLabels: h.redoLabels });
       }
     } catch (e) {
-      get().notify(`Chargement impossible : ${e}`);
+      get().notify(`Chargement impossible : ${e}`, "error");
     }
   },
 
@@ -571,9 +577,9 @@ export const useStore = create<Store>((set, get) => ({
       const label = i18n.t(kind === "sky" ? "history.skyMask" : "history.subjectMask");
       get().updateEdits((e) => { e.locals.push(local); }, true, label);
       set({ selectedLocalId: local.id, activeTool: "none", showMaskOverlay: true });
-      get().notify(i18n.t(kind === "sky" ? "local.skyCreated" : "local.subjectCreated"));
+      get().notify(i18n.t(kind === "sky" ? "local.skyCreated" : "local.subjectCreated"), "success");
     } catch (err) {
-      get().notify(`Masque IA impossible : ${err}`);
+      get().notify(`Masque IA impossible : ${err}`, "error");
     } finally {
       set({ aiMaskBusy: false });
     }
@@ -604,7 +610,7 @@ export const useStore = create<Store>((set, get) => ({
       }
       set({ activeTool: "pointmask" }); // reste actif pour enchaîner les ajouts
     } catch (err) {
-      get().notify(`Segmentation impossible : ${err}`);
+      get().notify(`Segmentation impossible : ${err}`, "error");
     } finally {
       set({ aiMaskBusy: false });
     }
@@ -731,6 +737,28 @@ export const useStore = create<Store>((set, get) => ({
     get().notify("Réglages collés");
   },
 
+  // Colle les réglages copiés sur un lot de photos (menu contextuel de la grille), sans les
+  // ouvrir en développement : lecture/écriture directes via l'API, une par une.
+  async pasteEditsToSelection(ids) {
+    const c = get().clipboard;
+    if (!c || !ids.length) return;
+    let ok = 0;
+    await Promise.all(ids.map(async (id) => {
+      try {
+        const photo = await api.getPhoto(id);
+        const merged = mergeEdits(photo.edits);
+        const keep = merged.geometry;
+        Object.assign(merged, structuredClone(c));
+        merged.geometry = keep;
+        await api.saveEdits(id, merged);
+        get().bumpVersion(id);
+        ok++;
+      } catch { /* on continue les autres photos malgré un échec isolé */ }
+    }));
+    set({ photos: get().photos.map((p) => (ids.includes(p.id) ? { ...p, edited: true } : p)) });
+    get().notify(i18n.t("ctx.pastedToN", { count: ok }), ok === ids.length ? "success" : "error");
+  },
+
   // Copie/colle UN masque local (Ctrl+C/Ctrl+V) — distinct de copyEdits/pasteEdits (tous les
   // réglages). Colle sur la photo courante (la même ou une autre, selon où on est au moment du
   // Ctrl+V) : ajoute une copie légèrement décalée, l'original ne bouge pas.
@@ -802,7 +830,7 @@ export const useStore = create<Store>((set, get) => ({
       });
       window.setTimeout(() => get().bumpVersion(id), 2500); // les previews regénèrent en fond
     } catch (e) {
-      get().notify(`Sauvegarde impossible : ${e}`);
+      get().notify(`Sauvegarde impossible : ${e}`, "error");
     }
   },
 
@@ -815,9 +843,14 @@ export const useStore = create<Store>((set, get) => ({
     set(p);
   },
 
-  notify(msg) {
-    set({ toast: msg });
-    window.setTimeout(() => { if (get().toast === msg) set({ toast: "" }); }, 2600);
+  notify(msg, type = "info", action) {
+    const id = nextToastId++;
+    set({ toasts: [...get().toasts, { id, msg, type, action }] });
+    window.setTimeout(() => get().dismissToast(id), 4200);
+  },
+
+  dismissToast(id) {
+    set({ toasts: get().toasts.filter((t) => t.id !== id) });
   },
 }));
 

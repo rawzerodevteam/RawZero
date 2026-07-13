@@ -12,6 +12,7 @@ export function EffectsPanel() {
     <PanelSection
       title={t("effects.title")}
       defaultOpen={false}
+      storageKey="effects"
       onReset={() => updateEdits((e) => { e.effects = { vignette: 0, grain: 0 }; })}
     >
       <EditSlider label={t("effects.vignette")} get={(e) => e.effects.vignette} min={-100} max={100}

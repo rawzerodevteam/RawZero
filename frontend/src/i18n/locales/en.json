@@ -127,6 +127,9 @@
     "flagReject": "Rejected",
     "flagNone": "Unflagged",
     "label": "Label",
+    "colorName": { "red": "Red", "yellow": "Yellow", "green": "Green", "blue": "Blue", "purple": "Purple" },
+    "colorNone": "No label",
+    "starAria": "Rate {{n}} star(s)",
     "sort": "Sort",
     "sortCapturedAsc": "Capture date ↑",
     "sortCapturedDesc": "Capture date ↓",
@@ -134,6 +137,8 @@
     "sortRatingDesc": "Rating ↓",
     "sortFilename": "Filename",
     "exifFilterTitle": "EXIF filters (camera, lens, ISO, dates)",
+    "filters": "Filters",
+    "filtersTitle": "Filters (rating, flag, label, sort, EXIF)",
     "allFem": "All",
     "minPh": "min",
     "maxPh": "max",
@@ -168,6 +173,12 @@
     "addToAlbum": "Add to album",
     "newAlbum": "New album…",
     "removeFromAlbum": "Remove from album",
+    "pasteSettings": "Paste settings",
+    "pastedToN_one": "Settings pasted on {{count}} photo",
+    "pastedToN_other": "Settings pasted on {{count}} photos",
+    "rating": "Rating",
+    "color": "Color label",
+    "colorClear": "None",
     "pick": "Pick",
     "reject": "Reject",
     "neutral": "Neutral",
@@ -450,7 +461,14 @@
     "gpuTitle": "Real-time GPU preview (WB, exposure, highlights/shadows, whites/blacks, contrast, curve, HSL, vibrance/sat, clarity, dehaze, noise reduction, sharpening, vignette)",
     "diffTitle": "Measure GPU preview ↔ Python render difference",
     "exportTitle": "Export (Ctrl+E)",
-    "beforeBadge": "BEFORE"
+    "beforeBadge": "BEFORE",
+    "undoTitle": "Undo (Ctrl+Z)",
+    "redoTitle": "Redo (Ctrl+Shift+Z)",
+    "advanced": "Advanced",
+    "advancedTitle": "Advanced / debug tools",
+    "gpuLabel": "Real-time GPU preview",
+    "diffLabel": "GPU ↔ Python diff…",
+    "positionOf": "{{n}} of {{total}}"
   },
   "crop": {
     "ratio": "Ratio",
@@ -479,7 +497,9 @@
     "download": "Download",
     "loading": "Loading…",
     "delete": "Delete",
-    "sizeMb": "{{mb}} MB"
+    "sizeMb": "{{mb}} MB",
+    "confirm": "Confirm",
+    "ok": "OK"
   },
   "models": {
     "button": "AI models",

@@ -9,6 +9,7 @@ import { GpuDiffDialog } from "../components/GpuDiffDialog";
 import { ModeTabs } from "../components/ModeTabs";
 import { useStore } from "../store";
 import { useMaskSuppressed } from "../lib/useMaskSuppressed";
+import { CROP_ASPECTS } from "../lib/cropAspects";
 import { BasicPanel } from "../panels/BasicPanel";
 import { CurvePanel } from "../panels/CurvePanel";
 import { DetailPanel } from "../panels/DetailPanel";
@@ -110,21 +111,31 @@ export function DevelopView() {
   const pasteEdits = useStore((s) => s.pasteEdits);
   const resetEdits = useStore((s) => s.resetEdits);
   const openRelink = useStore((s) => s.openRelink);
+  const undo = useStore((s) => s.undo);
+  const redo = useStore((s) => s.redo);
+  const canUndo = useStore((s) => s.undoStack.length > 0);
+  const canRedo = useStore((s) => s.redoStack.length > 0);
   const [gpuPreview, setGpuPreview] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const photos = useStore((s) => s.photos);
   const src = useRenderedImage(gpuPreview);
 
   if (!photo) return <div className="empty-state"><p>{t("develop.noPhoto")}</p></div>;
+
+  const photoIndex = photos.findIndex((p) => p.id === photo.id);
+  const photoTotal = photos.length;
 
   return (
     <div className="develop">
       <div className="develop-main">
         <div className="toolbar">
-          <button className="btn small" title={t("project.homeTitle")} onClick={() => setView("home")}>🏠</button>
+          <button className="btn small" title={t("project.homeTitle")} aria-label={t("project.homeTitle")} onClick={() => setView("home")}>🏠</button>
           <ModeTabs />
           <span className="name">{photo.filename}</span>
           {dirty && <span className="dim" title={t("develop.autosaving")}>●</span>}
           {(photo.edited || dirty) && <span className="edited-chip" title={t("develop.editedTitle")}>{t("develop.edited")}</span>}
+          <span className="name-index">{photoIndex >= 0 ? t("develop.positionOf", { n: photoIndex + 1, total: photoTotal }) : ""}</span>
           <span className="spacer" />
           <StarRating small value={photo.rating} onChange={setRating} />
           <button className={"btn small" + (beforeAfter ? " active" : "")}
@@ -132,17 +143,19 @@ export function DevelopView() {
             {beforeAfter ? t("develop.before") : t("develop.after")}
           </button>
           <button className={"btn small" + (showClipping ? " active" : "")}
-            title={t("develop.clippingTitle")} onClick={() => setUI({ showClipping: !showClipping })}>
+            title={t("develop.clippingTitle")} aria-label={t("develop.clippingTitle")} onClick={() => setUI({ showClipping: !showClipping })}>
             ▲▼
           </button>
+          <button className="btn small" title={t("develop.undoTitle")} aria-label={t("develop.undoTitle")} disabled={!canUndo} onClick={undo}>↶</button>
+          <button className="btn small" title={t("develop.redoTitle")} aria-label={t("develop.redoTitle")} disabled={!canRedo} onClick={redo}>↷</button>
           <button className="btn small" title={t("develop.copyTitle")} onClick={copyEdits}>⧉ {t("develop.copy")}</button>
-          <button className="btn small" title={t("develop.pasteTitle")} onClick={pasteEdits}>⧉ {t("develop.paste")}</button>
-          <button className="btn small" title={t("develop.resetTitle")} onClick={resetEdits}>↺</button>
-          <button className={"btn small" + (gpuPreview ? " active" : "")}
-            title={t("develop.gpuTitle")}
-            onClick={() => setGpuPreview((v) => !v)}>⚡ GPU</button>
-          <button className="btn small" title={t("develop.diffTitle")}
-            onClick={() => setShowDiff(true)}>Δ</button>
+          <button className="btn small" title={t("develop.pasteTitle")} onClick={pasteEdits}>📋 {t("develop.paste")}</button>
+          <button className="btn small" title={t("develop.resetTitle")} aria-label={t("develop.resetTitle")} onClick={resetEdits}>↺</button>
+          <AdvancedMenu
+            show={showAdvanced} setShow={setShowAdvanced}
+            gpuPreview={gpuPreview} setGpuPreview={setGpuPreview}
+            onDiff={() => { setShowDiff(true); setShowAdvanced(false); }}
+          />
           <button className="btn small" title={t("develop.exportTitle")} onClick={() => setUI({ showExport: true })}>⤒</button>
           <button className="btn small" title={t("settings.title")} onClick={() => setView("settings")}>⚙</button>
         </div>
@@ -178,9 +191,38 @@ export function DevelopView() {
   );
 }
 
-const CROP_ASPECTS: [string, number | null][] = [
-  ["Libre", null], ["1:1", 1], ["3:2", 3 / 2], ["4:3", 4 / 3], ["16:9", 16 / 9], ["9:16", 9 / 16],
-];
+/** Menu « Avancé » : regroupe les outils de débogage/QA (aperçu GPU, écart GPU↔Python) hors de
+ * la barre principale, qui doit rester orientée tâche photo (cf. audit UX §6.2). */
+function AdvancedMenu({ show, setShow, gpuPreview, setGpuPreview, onDiff }: {
+  show: boolean; setShow: (v: boolean) => void;
+  gpuPreview: boolean; setGpuPreview: (fn: (v: boolean) => boolean) => void;
+  onDiff: () => void;
+}) {
+  const { t } = useTranslation();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!show) return;
+    const onDown = (ev: MouseEvent) => { if (ref.current && !ref.current.contains(ev.target as Node)) setShow(false); };
+    const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") setShow(false); };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("mousedown", onDown); window.removeEventListener("keydown", onKey); };
+  }, [show, setShow]);
+  return (
+    <div className="advanced-menu" ref={ref}>
+      <button className={"btn small" + (show ? " active" : "")} title={t("develop.advancedTitle")}
+        onClick={() => setShow(!show)}>⋯</button>
+      {show && (
+        <div className="advanced-menu-pop">
+          <button className={gpuPreview ? "active" : ""} onClick={() => setGpuPreview((v) => !v)}>
+            ⚡ {t("develop.gpuLabel")}
+          </button>
+          <button onClick={onDiff}>Δ {t("develop.diffLabel")}</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Barre flottante de ratios de recadrage, visible uniquement quand l'outil crop est actif. */
 function CropBar() {

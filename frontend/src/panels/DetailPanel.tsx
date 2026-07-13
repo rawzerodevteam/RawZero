@@ -22,6 +22,7 @@ export function DetailPanel() {
     <PanelSection
       title={t("detail.title")}
       defaultOpen={false}
+      storageKey="detail"
       onReset={() => updateEdits((e) => { e.detail = defaultEdits().detail; })}
     >
       <h4>{t("detail.sharpen")}</h4>

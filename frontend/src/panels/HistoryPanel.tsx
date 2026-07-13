@@ -24,7 +24,7 @@ export function HistoryPanel() {
   if (!edits) return null;
 
   return (
-    <PanelSection title={t("history.title")} defaultOpen={false}>
+    <PanelSection title={t("history.title")} defaultOpen={false} storageKey="history">
       {steps.length <= 1 ? (
         <p className="hint">{t("history.empty")}</p>
       ) : (
@@ -34,7 +34,11 @@ export function HistoryPanel() {
               key={i}
               className={i === index ? "selected" : (i > index ? "future" : "")}
               title={i === index ? t("history.current") : t("history.goto")}
+              role="button"
+              tabIndex={0}
+              aria-current={i === index}
               onClick={() => jumpHistory(i)}
+              onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); jumpHistory(i); } }}
             >
               <span className="step-label">{steps[i].label}</span>
               <span className="tag">{i + 1}</span>

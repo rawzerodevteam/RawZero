@@ -8,6 +8,7 @@ import { ProjectMenu } from "../components/ProjectMenu";
 import { StarRating } from "../components/StarRating";
 import { useThumbSelection } from "../components/useThumbSelection";
 import { setDragIds, parseDragIds, hasDragIds } from "../lib/dragPhotos";
+import { confirmDialog, promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
 import { COLOR_HEX, COLOR_VALUES } from "../types";
 
@@ -39,10 +40,6 @@ function LeftRail() {
         onClick={() => setView("grid")} title={t("library.gridTitle")}>▦<span>{t("library.grid")}</span></button>
       <button className={"rail-btn" + (showAlbums ? " active" : "")}
         onClick={() => setUI({ showAlbums: !showAlbums })} title={t("library.albumsTitle")}>📚<span>{t("home.albums")}</span></button>
-      <span className="rail-spacer" />
-      <button className="rail-btn" onClick={() => setUI({ showImport: true })} title={t("home.import")}>⤓<span>{t("home.import")}</span></button>
-      <button className="rail-btn export" onClick={() => setUI({ showExport: true })}
-        title={t("develop.exportTitle")}>⤒<span>{t("export.title")}</span></button>
     </nav>
   );
 }
@@ -66,16 +63,19 @@ function Collections() {
   const projectName = projects.find((p) => p.id === currentProjectId)?.name ?? t("import.defaultProject");
 
   const create = () => {
-    const name = window.prompt(t("home.promptAlbumName"), t("home.newAlbum"));
-    if (name && name.trim()) void createAlbum(name.trim()).then((id) => { if (id) void setAlbum(id); });
+    void promptDialog(t("home.promptAlbumName"), t("home.newAlbum")).then((name) => {
+      if (name) void createAlbum(name).then((id) => { if (id) void setAlbum(id); });
+    });
   };
   const rename = (id: number, cur: string) => {
-    const name = window.prompt(t("library.renameAlbumPrompt"), cur);
-    if (name && name.trim() && name.trim() !== cur) void renameAlbum(id, name.trim());
+    void promptDialog(t("library.renameAlbumPrompt"), cur).then((name) => {
+      if (name && name !== cur) void renameAlbum(id, name);
+    });
   };
   const remove = (id: number, name: string) => {
-    if (window.confirm(t("library.confirmDeleteAlbum", { name })))
-      void deleteAlbum(id);
+    void confirmDialog(t("library.confirmDeleteAlbum", { name }), { danger: true }).then((ok) => {
+      if (ok) void deleteAlbum(id);
+    });
   };
   const onDrop = (id: number) => (ev: React.DragEvent) => {
     ev.preventDefault();
@@ -103,7 +103,11 @@ function Collections() {
         <div
           key={a.id}
           className={"coll-item" + (currentAlbumId === a.id ? " active" : "") + (dropId === a.id ? " drop-target" : "")}
+          role="button"
+          tabIndex={0}
+          aria-current={currentAlbumId === a.id}
           onClick={() => void setAlbum(a.id)}
+          onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); void setAlbum(a.id); } }}
           onDragOver={(ev) => { if (hasDragIds(ev)) { ev.preventDefault(); setDropId(a.id); } }}
           onDragLeave={() => setDropId((d) => (d === a.id ? null : d))}
           onDrop={onDrop(a.id)}
@@ -135,12 +139,26 @@ function Toolbar() {
   const setAlbum = useStore((s) => s.setAlbum);
   const setView = useStore((s) => s.setView);
   const currentAlbum = albums.find((a) => a.id === currentAlbumId);
-  const [showExif, setShowExif] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
   const exifActive = !!(filters.camera || filters.lens || filters.isoMin || filters.isoMax
     || filters.dateFrom || filters.dateTo);
+  const filtersActive = filters.minRating > 0 || !!filters.flag || !!filters.color || exifActive;
+
+  useEffect(() => {
+    if (!showFilters) return;
+    const onDown = (ev: MouseEvent) => { if (filtersRef.current && !filtersRef.current.contains(ev.target as Node)) setShowFilters(false); };
+    const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") setShowFilters(false); };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("mousedown", onDown); window.removeEventListener("keydown", onKey); };
+  }, [showFilters]);
+
   return (
     <div className="toolbar">
-      <strong className="brand">RawStudio</strong>
+      <button className="brand-btn" title={t("project.homeTitle")} onClick={() => setView("home")}>
+        <strong className="brand">RawStudio</strong>
+      </button>
       <ProjectMenu />
       <ModeTabs />
       {currentAlbum && (
@@ -151,44 +169,52 @@ function Toolbar() {
       )}
       <span className="dim">{t("home.photoCount", { count: photos.length })}</span>
       <span className="sep" />
-      <label>{t("library.ratingGte")}</label>
-      <StarRating small value={filters.minRating} onChange={(v) => setFilters({ minRating: v })} />
-      <label>{t("library.flag")}</label>
-      <select value={filters.flag} onChange={(ev) => setFilters({ flag: ev.target.value })}>
-        <option value="">{t("library.flagAll")}</option>
-        <option value="pick">{t("library.flagPick")}</option>
-        <option value="reject">{t("library.flagReject")}</option>
-        <option value="none">{t("library.flagNone")}</option>
-      </select>
-      <label>{t("library.label")}</label>
-      <div className="color-filter">
-        {COLOR_VALUES.map((c) => (
-          <span
-            key={c}
-            className={"color-dot" + (filters.color === c ? " active" : "")}
-            style={{ background: COLOR_HEX[c] }}
-            onClick={() => setFilters({ color: filters.color === c ? "" : c })}
-          />
-        ))}
-      </div>
-      <label>{t("library.sort")}</label>
-      <select value={filters.sort} onChange={(ev) => setFilters({ sort: ev.target.value })}>
-        <option value="captured_asc">{t("library.sortCapturedAsc")}</option>
-        <option value="captured_desc">{t("library.sortCapturedDesc")}</option>
-        <option value="imported_desc">{t("library.sortImportedDesc")}</option>
-        <option value="rating_desc">{t("library.sortRatingDesc")}</option>
-        <option value="filename">{t("library.sortFilename")}</option>
-      </select>
-      <span className="exif-filter">
+      <span className="exif-filter" ref={filtersRef}>
         <button
-          className={"btn" + (exifActive ? " active" : "")}
-          title={t("library.exifFilterTitle")}
-          onClick={() => setShowExif((v) => !v)}
+          className={"btn" + (filtersActive ? " active" : "")}
+          title={t("library.filtersTitle")}
+          onClick={() => setShowFilters((v) => !v)}
         >
-          ⚲ EXIF{exifActive ? " •" : ""}
+          ⚲ {t("library.filters")}{filtersActive ? " •" : ""}
         </button>
-        {showExif && (
-          <div className="exif-filter-pop" onPointerDown={(e) => e.stopPropagation()}>
+        {showFilters && (
+          <div className="exif-filter-pop filters-pop" onPointerDown={(e) => e.stopPropagation()}>
+            <label>{t("library.ratingGte")}</label>
+            <StarRating small value={filters.minRating} onChange={(v) => setFilters({ minRating: v })} />
+            <label>{t("library.flag")}</label>
+            <select value={filters.flag} onChange={(ev) => setFilters({ flag: ev.target.value })}>
+              <option value="">{t("library.flagAll")}</option>
+              <option value="pick">{t("library.flagPick")}</option>
+              <option value="reject">{t("library.flagReject")}</option>
+              <option value="none">{t("library.flagNone")}</option>
+            </select>
+            <label>{t("library.label")}</label>
+            <div className="color-filter">
+              {COLOR_VALUES.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className={"color-dot" + (filters.color === c ? " active" : "")}
+                  style={{ background: COLOR_HEX[c] }}
+                  title={t(`library.colorName.${c}`)}
+                  aria-label={t(`library.colorName.${c}`)}
+                  aria-pressed={filters.color === c}
+                  onClick={() => setFilters({ color: filters.color === c ? "" : c })}
+                />
+              ))}
+              {filters.color && (
+                <button type="button" className="color-dot none" title={t("library.colorNone")}
+                  aria-label={t("library.colorNone")} onClick={() => setFilters({ color: "" })}>✕</button>
+              )}
+            </div>
+            <label>{t("library.sort")}</label>
+            <select value={filters.sort} onChange={(ev) => setFilters({ sort: ev.target.value })}>
+              <option value="captured_asc">{t("library.sortCapturedAsc")}</option>
+              <option value="captured_desc">{t("library.sortCapturedDesc")}</option>
+              <option value="imported_desc">{t("library.sortImportedDesc")}</option>
+              <option value="rating_desc">{t("library.sortRatingDesc")}</option>
+              <option value="filename">{t("library.sortFilename")}</option>
+            </select>
             <label>{t("meta.camera")}</label>
             <select value={filters.camera} onChange={(ev) => setFilters({ camera: ev.target.value })}>
               <option value="">{t("library.allFem")}</option>
@@ -215,7 +241,7 @@ function Toolbar() {
               <input type="date" value={filters.dateTo}
                 onChange={(ev) => setFilters({ dateTo: ev.target.value })} />
             </div>
-            {exifActive && (
+            {filtersActive && (
               <button className="btn exif-reset" onClick={() => resetFilters()}>{t("library.resetFilters")}</button>
             )}
           </div>
@@ -245,6 +271,7 @@ function Grid() {
   const versions = useStore((s) => s.editsVersion);
   const selectPhoto = useStore((s) => s.selectPhoto);
   const setSelection = useStore((s) => s.setSelection);
+  const toggleSelect = useStore((s) => s.toggleSelect);
   const setView = useStore((s) => s.setView);
   const setRating = useStore((s) => s.setRating);
   const setUI = useStore((s) => s.setUI);
@@ -326,10 +353,12 @@ function Grid() {
   }
 
   return (
-    <div className="grid" ref={ref}
-      style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${gridSize}px, 1fr))` }}
-      onPointerDown={onPointerDown} onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp} onPointerLeave={onPointerUp}>
+    <>
+      <SelectionBar />
+      <div className="grid" ref={ref} role="listbox" aria-multiselectable="true"
+        style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${gridSize}px, 1fr))` }}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp} onPointerLeave={onPointerUp}>
       {marquee && (
         <div className="marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />
       )}
@@ -340,6 +369,9 @@ function Grid() {
           className={"cell" + (p.id === currentId ? " current" : "") +
             (selection.includes(p.id) ? " selected" : "") + (p.flag === "reject" ? " rejected" : "")}
           draggable
+          role="option"
+          aria-selected={selection.includes(p.id)}
+          tabIndex={p.id === currentId ? 0 : -1}
           onDragStart={(ev) => {
             // glisse la sélection si la vignette en fait partie, sinon juste celle-ci.
             const ids = selection.includes(p.id) ? selection : [p.id];
@@ -350,6 +382,10 @@ function Grid() {
           onPointerUp={(ev) => onCellPointerUp(ev, p.id)}
           onContextMenu={(ev) => onContextMenu(ev, p.id)}
           onDoubleClick={() => { selectPhoto(p.id); setView("loupe"); }}
+          onKeyDown={(ev) => {
+            if (ev.key === "Enter") { ev.preventDefault(); selectPhoto(p.id); setView("loupe"); }
+            else if (ev.key === " ") { ev.preventDefault(); toggleSelect(p.id); }
+          }}
         >
           <div className="cell-img">
             <img src={api.thumbUrl(p.id, versions[p.id] ?? 0)} alt={p.filename} loading="lazy" draggable={false} />
@@ -371,6 +407,45 @@ function Grid() {
           </div>
         </div>
       ))}
+      </div>
+    </>
+  );
+}
+
+/** Bandeau flottant d'actions par lot, visible dès que plusieurs photos sont sélectionnées
+ * (cf. audit UX §4.2) : rend visible ce qui n'était accessible qu'au clic droit ou au clavier. */
+function SelectionBar() {
+  const { t } = useTranslation();
+  const selection = useStore((s) => s.selection);
+  const setSelection = useStore((s) => s.setSelection);
+  const patchSelection = useStore((s) => s.patchSelection);
+  const setExportIds = useStore((s) => s.setExportIds);
+  const setUI = useStore((s) => s.setUI);
+  const albums = useStore((s) => s.albums);
+  const addToAlbum = useStore((s) => s.addToAlbum);
+  const [albumOpen, setAlbumOpen] = useState(false);
+  if (selection.length < 2) return null;
+  return (
+    <div className="selection-bar">
+      <span className="selection-count">{t("home.photoCount", { count: selection.length })}</span>
+      <button className="btn small" onClick={() => { setExportIds(selection); setUI({ showExport: true }); }}>
+        ⤒ {t("export.title")}
+      </button>
+      <button className="btn small" onClick={() => patchSelection({ flag: "pick" })}>⚑ {t("ctx.pick")}</button>
+      <button className="btn small" onClick={() => patchSelection({ flag: "reject" })}>✕ {t("ctx.reject")}</button>
+      <span className="selection-album">
+        <button className="btn small" onClick={() => setAlbumOpen((v) => !v)}>📚 {t("ctx.addToAlbum")}</button>
+        {albumOpen && (
+          <div className="selection-album-pop">
+            {albums.length === 0 && <p className="hint">{t("library.noAlbums")}</p>}
+            {albums.map((a) => (
+              <button key={a.id} onClick={() => { void addToAlbum(a.id, selection); setAlbumOpen(false); }}>{a.name}</button>
+            ))}
+          </div>
+        )}
+      </span>
+      <span className="spacer" />
+      <button className="btn small" onClick={() => setSelection([])}>✕ {t("common.close")}</button>
     </div>
   );
 }

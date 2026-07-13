@@ -18,6 +18,7 @@ export function HSLPanel() {
     <PanelSection
       title={t("hsl.title")}
       defaultOpen={false}
+      storageKey="hsl"
       onReset={() => updateEdits((e) => { e.hsl = defaultEdits().hsl; })}
     >
       <div className="hsl-tabs">

@@ -12,6 +12,7 @@ export function CurvePanel() {
     <PanelSection
       title={t("curve.title")}
       defaultOpen={false}
+      storageKey="curve"
       onReset={() => updateEdits((e) => {
         e.curve.points = [[0, 0], [1, 1]];
         e.curve.r = [[0, 0], [1, 1]];

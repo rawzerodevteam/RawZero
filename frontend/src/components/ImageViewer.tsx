@@ -33,6 +33,8 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
   const [, setTick] = useState(0);
   const [spaceHeld, setSpaceHeld] = useState(false); // Espace maintenu → déplacement (Krita/Photoshop)
   const spaceRef = useRef(false);                     // lu dans les handlers pointeur (toujours à jour)
+  const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
+  const zoomMenuRef = useRef<HTMLDivElement>(null);
 
   const activeTool = useStore((s) => (interactive ? s.activeTool : "none"));
   const showClipping = useStore((s) => interactive && s.showClipping);
@@ -173,6 +175,16 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
     return () => el.removeEventListener("wheel", onWheel);
   }, [zoomScale, activeTool, zoomAt]);
 
+  // Menu de niveaux de zoom : fermeture au clic extérieur / Échap.
+  useEffect(() => {
+    if (!zoomMenuOpen) return;
+    const onDown = (ev: MouseEvent) => { if (zoomMenuRef.current && !zoomMenuRef.current.contains(ev.target as Node)) setZoomMenuOpen(false); };
+    const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") setZoomMenuOpen(false); };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("mousedown", onDown); window.removeEventListener("keydown", onKey); };
+  }, [zoomMenuOpen]);
+
   const createLocal = (local: LocalAdjust) => {
     updateEdits((e) => { e.locals.push(local); });
     setUI({ selectedLocalId: local.id, activeTool: local.type === "brush" ? "brush" : "none" });
@@ -188,9 +200,9 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
       updateEdits((e) => { e.wb.temp = temp; e.wb.tint = tint; }, true, t("viewer.wbHistory"));
       notify(t("viewer.wbDone", {
         temp: `${temp >= 0 ? "+" : ""}${temp}`, tint: `${tint >= 0 ? "+" : ""}${tint}`,
-      }));
+      }), "success");
     } catch (err) {
-      notify(t("viewer.wbFailed", { error: String(err) }));
+      notify(t("viewer.wbFailed", { error: String(err) }), "error");
     }
   };
 
@@ -349,7 +361,18 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
       {gpu && gpuState.error && <div className="viewer-empty">{t("viewer.gpuUnavailable", { error: gpuState.error })}</div>}
       {gpu && !gpuState.error && !gpuState.ready && <div className="viewer-empty">{t("viewer.loadingBase")}</div>}
       {!gpu && !src && <div className="viewer-empty">{t("common.loading")}</div>}
-      <div className="zoom-indicator">{zoomScale <= 1.001 ? t("viewer.fitted") : Math.round(s * 100) + " %"}</div>
+      <div className="zoom-indicator" ref={zoomMenuRef}>
+        <button onClick={(ev) => { ev.stopPropagation(); setZoomMenuOpen((v) => !v); }}>
+          {zoomScale <= 1.001 ? t("viewer.fitted") : Math.round(s * 100) + " %"}
+        </button>
+        {zoomMenuOpen && (
+          <div className="zoom-menu" onPointerDown={(ev) => ev.stopPropagation()}>
+            <button onClick={() => { zoomAt(1); setZoomMenuOpen(false); }}>{t("viewer.fitted")}</button>
+            <button onClick={() => { zoomAt(1 / Math.max(fitScale, 1e-3)); setZoomMenuOpen(false); }}>100 %</button>
+            <button onClick={() => { zoomAt(2 / Math.max(fitScale, 1e-3)); setZoomMenuOpen(false); }}>200 %</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

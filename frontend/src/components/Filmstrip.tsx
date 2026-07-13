@@ -34,7 +34,7 @@ export function Filmstrip() {
   }, []);
 
   return (
-    <div className="filmstrip" ref={ref}>
+    <div className="filmstrip" ref={ref} role="listbox" aria-multiselectable="true">
       {photos.map((p) => (
         <div
           key={p.id}
@@ -42,8 +42,12 @@ export function Filmstrip() {
           className={"film-thumb" + (p.id === currentId ? " current" : "") +
             (selection.includes(p.id) ? " selected" : "") + (p.flag === "reject" ? " rejected" : "")}
           style={p.color ? { borderColor: COLOR_HEX[p.color] } : undefined}
+          role="option"
+          aria-selected={selection.includes(p.id)}
+          tabIndex={p.id === currentId ? 0 : -1}
           onClick={(ev) => onClick(ev, p.id)}
           onContextMenu={(ev) => onContextMenu(ev, p.id)}
+          onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); onClick(ev as any, p.id); } }}
           title={p.filename}
         >
           <img src={api.thumbUrl(p.id, versions[p.id] ?? 0)} alt={p.filename} loading="lazy" draggable={false} />

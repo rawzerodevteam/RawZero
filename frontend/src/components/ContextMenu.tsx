@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { confirmDialog, promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
+import { COLOR_HEX, COLOR_VALUES } from "../types";
+import { StarRating } from "./StarRating";
+
+type Sub = "album" | "rating" | "color" | null;
 
 /** Menu contextuel (clic droit sur une vignette) : actions par lot sur la sélection. */
 export function ContextMenu() {
@@ -19,7 +24,9 @@ export function ContextMenu() {
   const addToAlbum = useStore((s) => s.addToAlbum);
   const removeFromAlbum = useStore((s) => s.removeFromAlbum);
   const createAlbum = useStore((s) => s.createAlbum);
-  const [albumOpen, setAlbumOpen] = useState(false);
+  const clipboard = useStore((s) => s.clipboard);
+  const pasteEditsToSelection = useStore((s) => s.pasteEditsToSelection);
+  const [sub, setSub] = useState<Sub>(null);
 
   useEffect(() => {
     if (!menu) return;
@@ -28,7 +35,7 @@ export function ContextMenu() {
     return () => window.removeEventListener("keydown", onKey);
   }, [menu, close]);
 
-  useEffect(() => { setAlbumOpen(false); }, [menu]);
+  useEffect(() => { setSub(null); }, [menu]);
 
   if (!menu) return null;
   const ids = selection.length ? selection : (currentId !== null ? [currentId] : []);
@@ -46,16 +53,18 @@ export function ContextMenu() {
         <div className="ctx-head">{t("home.photoCount", { count })}</div>
         <button onClick={act(() => { setExportIds(ids); setUI({ showExport: true }); })}>⤒ {t("export.title")}{count > 1 ? ` (${count})` : ""}</button>
         <button disabled={target === null} onClick={act(() => { if (target !== null) void openDevelop(target); })}>✎ {t("ctx.develop")}</button>
+        <button disabled={!clipboard} onClick={act(() => void pasteEditsToSelection(ids))}>📋 {t("ctx.pasteSettings")}</button>
         <div className="ctx-sep" />
-        <button onClick={() => setAlbumOpen((v) => !v)}>📚 {t("ctx.addToAlbum")} {albumOpen ? "▾" : "▸"}</button>
-        {albumOpen && (
+        <button onClick={() => setSub(sub === "album" ? null : "album")}>📚 {t("ctx.addToAlbum")} {sub === "album" ? "▾" : "▸"}</button>
+        {sub === "album" && (
           <div className="ctx-sub">
             {albums.map((a) => (
               <button key={a.id} onClick={act(() => void addToAlbum(a.id, ids))}>{a.name}</button>
             ))}
             <button className="ctx-new" onClick={act(() => {
-              const name = window.prompt(t("home.promptAlbumName"), t("home.newAlbum"));
-              if (name && name.trim()) void createAlbum(name.trim()).then((id) => { if (id) void addToAlbum(id, ids); });
+              void promptDialog(t("home.promptAlbumName"), t("home.newAlbum")).then((name) => {
+                if (name) void createAlbum(name).then((id) => { if (id) void addToAlbum(id, ids); });
+              });
             })}>＋ {t("ctx.newAlbum")}</button>
           </div>
         )}
@@ -63,13 +72,32 @@ export function ContextMenu() {
           <button onClick={act(() => void removeFromAlbum(currentAlbumId, ids))}>📕 {t("ctx.removeFromAlbum")}</button>
         )}
         <div className="ctx-sep" />
+        <button onClick={() => setSub(sub === "rating" ? null : "rating")}>★ {t("ctx.rating")} {sub === "rating" ? "▾" : "▸"}</button>
+        {sub === "rating" && (
+          <div className="ctx-sub ctx-sub-rating">
+            <StarRating value={0} onChange={(v) => { patchSelection({ rating: v }); close(); }} />
+          </div>
+        )}
+        <button onClick={() => setSub(sub === "color" ? null : "color")}>🎨 {t("ctx.color")} {sub === "color" ? "▾" : "▸"}</button>
+        {sub === "color" && (
+          <div className="ctx-sub ctx-sub-color">
+            <button className="ctx-color-clear" onClick={act(() => patchSelection({ color: "" }))}>{t("ctx.colorClear")}</button>
+            {COLOR_VALUES.map((c) => (
+              <button key={c} className="ctx-color-dot" style={{ background: COLOR_HEX[c] }}
+                title={t(`library.colorName.${c}`)} aria-label={t(`library.colorName.${c}`)}
+                onClick={act(() => patchSelection({ color: c }))} />
+            ))}
+          </div>
+        )}
+        <div className="ctx-sep" />
         <button onClick={act(() => patchSelection({ flag: "pick" }))}>⚑ {t("ctx.pick")}</button>
         <button onClick={act(() => patchSelection({ flag: "reject" }))}>✕ {t("ctx.reject")}</button>
         <button onClick={act(() => patchSelection({ flag: "none" }))}>○ {t("ctx.neutral")}</button>
         <div className="ctx-sep" />
         <button className="danger" onClick={act(() => {
-          if (window.confirm(t("ctx.confirmRemove", { count })))
-            void removeSelection(false);
+          void confirmDialog(t("ctx.confirmRemove", { count }), { danger: true }).then((ok) => {
+            if (ok) void removeSelection(false);
+          });
         })}>🗑 {t("ctx.removeFromCatalog")}</button>
       </div>
     </div>

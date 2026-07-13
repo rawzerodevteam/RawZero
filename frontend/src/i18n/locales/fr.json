@@ -127,6 +127,9 @@
     "flagReject": "Rejetées",
     "flagNone": "Sans drapeau",
     "label": "Label",
+    "colorName": { "red": "Rouge", "yellow": "Jaune", "green": "Vert", "blue": "Bleu", "purple": "Violet" },
+    "colorNone": "Aucun label",
+    "starAria": "Noter {{n}} étoile(s)",
     "sort": "Tri",
     "sortCapturedAsc": "Date de capture ↑",
     "sortCapturedDesc": "Date de capture ↓",
@@ -134,6 +137,8 @@
     "sortRatingDesc": "Note ↓",
     "sortFilename": "Nom de fichier",
     "exifFilterTitle": "Filtres EXIF (caméra, objectif, ISO, dates)",
+    "filters": "Filtres",
+    "filtersTitle": "Filtres (note, drapeau, label, tri, EXIF)",
     "allFem": "Toutes",
     "minPh": "min",
     "maxPh": "max",
@@ -168,6 +173,12 @@
     "addToAlbum": "Ajouter à l'album",
     "newAlbum": "Nouvel album…",
     "removeFromAlbum": "Retirer de l'album",
+    "pasteSettings": "Coller les réglages",
+    "pastedToN_one": "Réglages collés sur {{count}} photo",
+    "pastedToN_other": "Réglages collés sur {{count}} photos",
+    "rating": "Note",
+    "color": "Label couleur",
+    "colorClear": "Aucun",
     "pick": "Retenir",
     "reject": "Rejeter",
     "neutral": "Neutre",
@@ -450,7 +461,14 @@
     "gpuTitle": "Aperçu GPU temps réel (WB, expo, HL/ombres, blancs/noirs, contraste, courbe, HSL, vibrance/sat, clarté, dehaze, réduction de bruit, netteté, vignette)",
     "diffTitle": "Mesurer l'écart aperçu GPU ↔ rendu Python",
     "exportTitle": "Exporter (Ctrl+E)",
-    "beforeBadge": "AVANT"
+    "beforeBadge": "AVANT",
+    "undoTitle": "Annuler (Ctrl+Z)",
+    "redoTitle": "Rétablir (Ctrl+Maj+Z)",
+    "advanced": "Avancé",
+    "advancedTitle": "Outils avancés / débogage",
+    "gpuLabel": "Aperçu GPU temps réel",
+    "diffLabel": "Écart GPU ↔ Python…",
+    "positionOf": "{{n}} sur {{total}}"
   },
   "crop": {
     "ratio": "Ratio",
@@ -479,7 +497,9 @@
     "download": "Télécharger",
     "loading": "Chargement…",
     "delete": "Supprimer",
-    "sizeMb": "{{mb}} Mo"
+    "sizeMb": "{{mb}} Mo",
+    "confirm": "Confirmer",
+    "ok": "OK"
   },
   "models": {
     "button": "Modèles IA",

@@ -27,7 +27,7 @@ export function MetaPanel() {
   ];
 
   return (
-    <PanelSection title="EXIF" defaultOpen={false}>
+    <PanelSection title="EXIF" defaultOpen={false} storageKey="meta">
       <table className="meta-table">
         <tbody>
           {rows.map(([k, v]) => (

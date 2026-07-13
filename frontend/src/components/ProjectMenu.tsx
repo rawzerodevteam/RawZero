@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { confirmDialog, promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
 import { ALL_PHOTOS_ID } from "../types";
 
@@ -29,27 +30,30 @@ export function ProjectMenu() {
   const realCount = projects.filter((p) => p.id !== ALL_PHOTOS_ID).length;
 
   const create = () => {
-    const name = window.prompt(t("home.promptProjectName"), t("home.newProject"));
-    if (name && name.trim()) void createProject(name.trim());
     setOpen(false);
+    void promptDialog(t("home.promptProjectName"), t("home.newProject")).then((name) => {
+      if (name) void createProject(name);
+    });
   };
   const rename = () => {
     if (!current || !isReal) return;
-    const name = window.prompt(t("project.renamePrompt"), current.name);
-    if (name && name.trim()) void renameProject(current.id, name.trim());
     setOpen(false);
+    void promptDialog(t("project.renamePrompt"), current.name).then((name) => {
+      if (name) void renameProject(current.id, name);
+    });
   };
   const remove = () => {
     if (!current || !isReal) return;
-    if (realCount <= 1) { notify(t("project.cantDeleteLast")); setOpen(false); return; }
-    if (window.confirm(t("project.confirmDelete", { name: current.name })))
-      void deleteProject(current.id);
     setOpen(false);
+    if (realCount <= 1) { notify(t("project.cantDeleteLast")); return; }
+    void confirmDialog(t("project.confirmDelete", { name: current.name }), { danger: true }).then((ok) => {
+      if (ok) void deleteProject(current.id);
+    });
   };
 
   return (
     <div className="project-menu" ref={ref}>
-      <button className="project-home" title={t("project.homeTitle")} onClick={() => setView("home")}>🏠</button>
+      <button className="project-home" title={t("project.homeTitle")} aria-label={t("project.homeTitle")} onClick={() => setView("home")}>🏠</button>
       <button className="project-trigger" onClick={() => setOpen((v) => !v)} title={t("project.triggerTitle")}>
         📁 <span className="pm-name">{current?.name ?? t("import.defaultProject")}</span> ▾
       </button>

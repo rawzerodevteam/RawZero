@@ -29,15 +29,16 @@ export function BasicPanel() {
         e.wb.temp = suggested.wb.temp;
         e.wb.tint = suggested.wb.tint;
       });
-      notify(t("basic.autoDone"));
+      notify(t("basic.autoDone"), "success");
     } catch (err) {
-      notify(t("basic.autoFailed", { error: String(err) }));
+      notify(t("basic.autoFailed", { error: String(err) }), "error");
     }
   };
 
   return (
     <PanelSection
       title={t("basic.title")}
+      storageKey="basic"
       onReset={() => updateEdits((e) => { e.wb = d.wb; e.tone = d.tone; e.presence = d.presence; })}
     >
       <div className="row-actions">

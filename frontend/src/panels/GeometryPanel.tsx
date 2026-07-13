@@ -1,12 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { EditSlider } from "../components/EditSlider";
 import { PanelSection } from "../components/PanelSection";
+import { CROP_ASPECTS as ASPECTS } from "../lib/cropAspects";
 import { useStore } from "../store";
 import { defaultEdits } from "../types";
-
-const ASPECTS: [string, number | null][] = [
-  ["Libre", null], ["1:1", 1], ["3:2", 3 / 2], ["4:3", 4 / 3], ["16:9", 16 / 9],
-];
 
 export function GeometryPanel() {
   const { t } = useTranslation();
@@ -24,6 +21,7 @@ export function GeometryPanel() {
     <PanelSection
       title={t("geometry.title")}
       defaultOpen={false}
+      storageKey="geometry"
       onReset={() => {
         updateEdits((e) => { e.geometry = defaultEdits().geometry; });
         setUI({ activeTool: "none", cropAspect: null });

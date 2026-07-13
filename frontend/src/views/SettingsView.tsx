@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "../components/LanguageSwitcher";
+import { confirmDialog } from "../lib/dialog";
 import {
   ACTION_DEFS, CATEGORIES, clearBinding, formatKey, getBinding,
   normalizeEvent, resetAllBindings, resetBinding, setBinding, useKeybindings,
@@ -53,7 +54,7 @@ export function SettingsView() {
         <strong className="brand">{t("settings.title")}</strong>
         <span className="spacer" />
         <button className="btn" onClick={() => {
-          if (window.confirm(t("settings.confirmResetShortcuts"))) resetAllBindings();
+          void confirmDialog(t("settings.confirmResetShortcuts")).then((ok) => { if (ok) resetAllBindings(); });
         }}>{t("settings.resetShortcuts")}</button>
       </header>
 

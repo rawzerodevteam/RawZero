@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { PanelSection } from "../components/PanelSection";
+import { confirmDialog, promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
 import type { EditState, Preset } from "../types";
 import {
@@ -22,26 +23,26 @@ export function PresetsPanel() {
 
   const saveCurrent = async () => {
     if (!edits) return;
-    const name = window.prompt(t("presets.namePrompt"));
-    if (!name?.trim()) return;
+    const name = await promptDialog(t("presets.namePrompt"));
+    if (!name) return;
     // Un preset ne porte que le rendu : la géométrie et les masques restent propres à chaque photo.
     const { geometry: _g, locals: _l, ...settings } = structuredClone(edits) as EditState;
     try {
-      await api.createPreset(name.trim(), settings);
-      notify(t("presets.saved", { name: name.trim() }));
+      await api.createPreset(name, settings);
+      notify(t("presets.saved", { name }), "success");
       void reload();
     } catch (e) {
-      notify(t("presets.saveFailed", { error: String(e) }));
+      notify(t("presets.saveFailed", { error: String(e) }), "error");
     }
   };
 
   const remove = async (p: Preset) => {
-    if (!window.confirm(t("presets.confirmDelete", { name: p.name }))) return;
+    if (!await confirmDialog(t("presets.confirmDelete", { name: p.name }), { danger: true })) return;
     try {
       await api.deletePreset(p.id);
       void reload();
     } catch (e) {
-      notify(t("presets.deleteFailed", { error: String(e) }));
+      notify(t("presets.deleteFailed", { error: String(e) }), "error");
     }
   };
 
@@ -82,7 +83,7 @@ export function PresetsPanel() {
   const hasCustoms = presets.some((p) => !p.builtin);
 
   return (
-    <PanelSection title={t("presets.title")} defaultOpen={false}>
+    <PanelSection title={t("presets.title")} defaultOpen={false} storageKey="presets">
       <input
         ref={fileInput} type="file" accept=".rsp,application/json" multiple hidden
         onChange={(e) => { void onImportFiles(e.target.files); e.target.value = ""; }}

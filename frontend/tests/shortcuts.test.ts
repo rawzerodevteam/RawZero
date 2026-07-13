@@ -10,7 +10,13 @@ vi.mock("../src/api", () => ({
   },
 }));
 
+vi.mock("../src/lib/dialog", () => ({
+  confirmDialog: vi.fn(async () => true),
+  promptDialog: vi.fn(async () => null),
+}));
+
 import { api } from "../src/api";
+import { confirmDialog } from "../src/lib/dialog";
 import { handleGlobalKey } from "../src/shortcuts";
 import { useStore } from "../src/store";
 import { defaultEdits, type Photo } from "../src/types";
@@ -37,7 +43,6 @@ beforeEach(() => {
   useStore.setState({ photos: [photo(1), photo(2)], currentId: 1 });
   vi.clearAllMocks();
   document.body.innerHTML = "";
-  window.confirm = vi.fn(() => true);
 });
 
 describe("garde de saisie", () => {
@@ -179,10 +184,10 @@ describe("bascules du mode développement", () => {
 });
 
 describe("suppression", () => {
-  it("Suppr demande confirmation avant de retirer", () => {
-    window.confirm = vi.fn(() => false);
+  it("Suppr demande confirmation avant de retirer", async () => {
+    (confirmDialog as ReturnType<typeof vi.fn>).mockResolvedValueOnce(false);
     press("Delete");
-    expect(window.confirm).toHaveBeenCalled();
+    await vi.waitFor(() => expect(confirmDialog).toHaveBeenCalled());
     expect(api.deletePhoto).not.toHaveBeenCalled();
   });
 
