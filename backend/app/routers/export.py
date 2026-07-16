@@ -10,6 +10,7 @@ Deux endpoints :
 import json
 import logging
 import os
+import shutil
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -34,6 +35,29 @@ FORMATS = {"jpeg": ".jpg", "png": ".png", "tiff": ".tif"}
 EXPORT_WORKERS = int(os.environ.get("EXPORT_WORKERS", 0)) or min((os.cpu_count() or 2), 4)
 
 _name_lock = threading.Lock()   # réservation atomique des noms de fichiers (export parallèle)
+
+# Rétention des dossiers d'export sous data/exports/ (en jours). Chaque export y dépose des copies
+# pleine résolution ; sans purge, le disque se remplit indéfiniment (l'utilisateur récupère déjà ses
+# fichiers ailleurs via l'écriture directe navigateur). Purge appelée au démarrage. 0 = jamais purger.
+EXPORT_RETENTION_DAYS = float(os.environ.get("RAWZERO_EXPORT_RETENTION_DAYS", "7"))
+
+
+def purge_old_exports() -> int:
+    """Supprime les dossiers d'export plus vieux que EXPORT_RETENTION_DAYS. Retourne le nombre purgé."""
+    if EXPORT_RETENTION_DAYS <= 0 or not config.EXPORTS_DIR.is_dir():
+        return 0
+    cutoff = time.time() - EXPORT_RETENTION_DAYS * 86400
+    purged = 0
+    for d in config.EXPORTS_DIR.iterdir():
+        try:
+            if d.is_dir() and d.stat().st_mtime < cutoff:
+                shutil.rmtree(d, ignore_errors=True)
+                purged += 1
+        except OSError:
+            log.warning("Purge de l'export %s impossible", d, exc_info=True)
+    if purged:
+        log.info("Purge des exports : %d dossier(s) supprimé(s) (> %g j)", purged, EXPORT_RETENTION_DAYS)
+    return purged
 
 
 class ExportRequest(BaseModel):

@@ -504,6 +504,17 @@
     "confirm": "Confirmer",
     "ok": "OK"
   },
+  "notify": {
+    "loadFailed": "Chargement impossible : {{error}}",
+    "aiMaskFailed": "Masque IA impossible : {{error}}",
+    "maskElementAdded": "Élément ajouté au masque",
+    "clickCreated": "Masque créé (clic)",
+    "pointMaskFailed": "Segmentation impossible : {{error}}",
+    "reset": "Réglages réinitialisés",
+    "copied": "Réglages copiés",
+    "pasted": "Réglages collés",
+    "saveFailed": "Sauvegarde impossible : {{error}}"
+  },
   "models": {
     "button": "Modèles IA",
     "title": "Modèles IA",

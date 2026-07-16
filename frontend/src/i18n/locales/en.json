@@ -504,6 +504,17 @@
     "confirm": "Confirm",
     "ok": "OK"
   },
+  "notify": {
+    "loadFailed": "Load failed: {{error}}",
+    "aiMaskFailed": "AI mask failed: {{error}}",
+    "maskElementAdded": "Element added to mask",
+    "clickCreated": "Mask created (click)",
+    "pointMaskFailed": "Segmentation failed: {{error}}",
+    "reset": "Settings reset",
+    "copied": "Settings copied",
+    "pasted": "Settings pasted",
+    "saveFailed": "Save failed: {{error}}"
+  },
   "models": {
     "button": "AI models",
     "title": "AI models",

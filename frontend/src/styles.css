@@ -106,8 +106,11 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
   min-height: 44px;
 }
 .toolbar .brand { color: var(--accent); letter-spacing: 0.4px; }
-.brand-btn { background: none; border: none; padding: 2px 4px; cursor: pointer; border-radius: 4px; }
+.brand-btn { background: none; border: none; padding: 2px 4px; cursor: pointer; border-radius: 4px; display: inline-flex; align-items: center; }
 .brand-btn:hover .brand { text-decoration: underline; }
+.brand-btn:hover .brand-mark { opacity: 0.8; }
+.brand-mark { height: 26px; width: auto; display: block; }
+.brand-mark.small { height: 18px; }
 .toolbar .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sep { width: 1px; height: 20px; background: var(--border); }
 .spacer { flex: 1; }
@@ -1333,6 +1336,9 @@ kbd {
   display: flex; align-items: center; gap: 12px; padding: 12px 18px;
   border-bottom: 1px solid var(--border); background: var(--bg-panel);
 }
+.brand-lockup { display: inline-flex; align-items: center; gap: 12px; }
+.brand-logo-mark { height: 52px; width: auto; display: block; }
+.brand-logo-text { height: 30px; width: auto; display: block; }
 .home-body { flex: 1; overflow: auto; padding: 26px 32px; }
 .home-title { font-size: 22px; margin: 0 0 20px; font-weight: 600; }
 .project-grid {

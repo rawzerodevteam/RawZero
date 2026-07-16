@@ -14,6 +14,7 @@ import { setDragIds, parseDragIds, hasDragIds } from "../lib/dragPhotos";
 import { confirmDialog, promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
 import { COLOR_HEX, COLOR_VALUES } from "../types";
+import logoMark from "../assets/logo-mark.png";
 
 export function LibraryView() {
   const view = useStore((s) => s.view);
@@ -159,8 +160,8 @@ function Toolbar() {
 
   return (
     <div className="toolbar">
-      <button className="brand-btn" title={t("project.homeTitle")} onClick={() => setView("home")}>
-        <strong className="brand">RawZero</strong>
+      <button className="brand-btn" title={t("project.homeTitle")} aria-label={t("project.homeTitle")} onClick={() => setView("home")}>
+        <img src={logoMark} alt="" className="brand-mark" />
       </button>
       <ProjectMenu />
       <ModeTabs />

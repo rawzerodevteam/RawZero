@@ -496,7 +496,7 @@ export const useStore = create<Store>((set, get) => ({
               undoStack: h.undoStack, undoLabels: h.undoLabels, redoStack: h.redoStack, redoLabels: h.redoLabels });
       }
     } catch (e) {
-      get().notify(`Chargement impossible : ${e}`, "error");
+      get().notify(i18n.t("notify.loadFailed", { error: String(e) }), "error");
     }
   },
 
@@ -591,7 +591,7 @@ export const useStore = create<Store>((set, get) => ({
       set({ selectedLocalId: local.id, activeTool: "none", showMaskOverlay: true });
       get().notify(i18n.t(kind === "sky" ? "local.skyCreated" : "local.subjectCreated"), "success");
     } catch (err) {
-      get().notify(`Masque IA impossible : ${err}`, "error");
+      get().notify(i18n.t("notify.aiMaskFailed", { error: String(err) }), "error");
     } finally {
       set({ aiMaskBusy: false });
     }
@@ -614,15 +614,15 @@ export const useStore = create<Store>((set, get) => ({
           const loc = e.locals.find((l) => l.id === target.id);
           if (loc) loc.params = { ...loc.params, ref: local.params.ref };
         }, true, i18n.t("history.maskElementAdded"));
-        get().notify("Élément ajouté au masque");
+        get().notify(i18n.t("notify.maskElementAdded"));
       } else {
         get().updateEdits((e) => { e.locals.push(local); }, true, i18n.t("history.clickMask"));
         set({ selectedLocalId: local.id, showMaskOverlay: true });
-        get().notify("Masque créé (clic)");
+        get().notify(i18n.t("notify.clickCreated"));
       }
       set({ activeTool: "pointmask" }); // reste actif pour enchaîner les ajouts
     } catch (err) {
-      get().notify(`Segmentation impossible : ${err}`, "error");
+      get().notify(i18n.t("notify.pointMaskFailed", { error: String(err) }), "error");
     } finally {
       set({ aiMaskBusy: false });
     }
@@ -720,7 +720,7 @@ export const useStore = create<Store>((set, get) => ({
 
   resetEdits() {
     get().updateEdits((e) => Object.assign(e, defaultEdits()), true, i18n.t("history.reset"));
-    get().notify("Réglages réinitialisés");
+    get().notify(i18n.t("notify.reset"));
   },
 
   applyPartial(settings) {
@@ -734,7 +734,7 @@ export const useStore = create<Store>((set, get) => ({
     const e = get().edits;
     if (e) {
       set({ clipboard: structuredClone(e) });
-      get().notify("Réglages copiés");
+      get().notify(i18n.t("notify.copied"));
     }
   },
 
@@ -746,7 +746,7 @@ export const useStore = create<Store>((set, get) => ({
       Object.assign(e, structuredClone(c));
       e.geometry = keep;
     }, true, i18n.t("history.pasted"));
-    get().notify("Réglages collés");
+    get().notify(i18n.t("notify.pasted"));
   },
 
   // Colle les réglages copiés sur un lot de photos (menu contextuel de la grille), sans les
@@ -842,7 +842,7 @@ export const useStore = create<Store>((set, get) => ({
       });
       window.setTimeout(() => get().bumpVersion(id), 2500); // les previews regénèrent en fond
     } catch (e) {
-      get().notify(`Sauvegarde impossible : ${e}`, "error");
+      get().notify(i18n.t("notify.saveFailed", { error: String(e) }), "error");
     }
   },
 

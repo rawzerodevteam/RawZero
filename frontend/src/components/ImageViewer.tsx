@@ -496,10 +496,20 @@ function ClippingOverlay({ src }: { src: string }) {
       ctx.drawImage(img, 0, 0);
       const id = ctx.getImageData(0, 0, cv.width, cv.height);
       const d = id.data;
+      // Écrêtage PAR CANAL (comme Lightroom) : un pixel saturé sur un seul canal (rouge cramé,
+      // typique) est signalé, pas seulement le blanc pur. Code couleur = canaux écrêtés
+      // (rouge/vert/bleu → primaires, combinaisons → jaune/magenta/cyan, les trois → blanc).
       for (let i = 0; i < d.length; i += 4) {
         const r = d[i], g = d[i + 1], b = d[i + 2];
-        if (r >= 250 && g >= 250 && b >= 250) { d[i] = 235; d[i + 1] = 40; d[i + 2] = 40; d[i + 3] = 255; }
-        else if (r <= 4 && g <= 4 && b <= 4) { d[i] = 50; d[i + 1] = 90; d[i + 2] = 235; d[i + 3] = 255; }
+        const hi = (r >= 254 ? 4 : 0) | (g >= 254 ? 2 : 0) | (b >= 254 ? 1 : 0);
+        const lo = r <= 1 || g <= 1 || b <= 1;   // écrêtage ombres : au moins un canal à zéro
+        if (hi) {
+          // masque de canaux → couleur d'alerte hautes lumières
+          d[i] = hi & 4 ? 255 : 40;
+          d[i + 1] = hi & 2 ? 255 : 40;
+          d[i + 2] = hi & 1 ? 255 : 40;
+          d[i + 3] = 255;
+        } else if (lo) { d[i] = 50; d[i + 1] = 90; d[i + 2] = 235; d[i + 3] = 255; }
         else d[i + 3] = 0;
       }
       ctx.putImageData(id, 0, 0);

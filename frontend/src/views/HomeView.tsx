@@ -6,6 +6,8 @@ import { promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
 import { ALL_PHOTOS_ID } from "../types";
 import { IconAlbum, IconFolder, IconGrid, IconImport, IconPlus, IconSettings } from "../icons";
+import logoMark from "../assets/logo-mark.png";
+import logoText from "../assets/logo-text.png";
 
 /** Écran d'accueil : tous les projets affichés en grandes icônes (couverture + nom + compte). */
 export function HomeView() {
@@ -48,7 +50,10 @@ export function HomeView() {
   return (
     <div className="home">
       <header className="home-header">
-        <strong className="brand">RawZero</strong>
+        <span className="brand-lockup">
+          <img src={logoMark} alt="" className="brand-logo-mark" />
+          <img src={logoText} alt="RawZero" className="brand-logo-text" />
+        </span>
         <span className="spacer" />
         <button className="btn" onClick={() => setView("settings")}><IconSettings size={14} /> {t("settings.title")}</button>
         <button className="btn" onClick={() => setUI({ showModels: true })}>{t("models.button")}</button>

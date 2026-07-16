@@ -77,17 +77,20 @@ def list_photos(min_rating: int = 0, flag: str = "", color: str = "",
 def photo_facets(project_id: int = 0, album_id: int = 0):
     """Valeurs distinctes (caméra, objectif) pour peupler les filtres, restreintes au
     contexte courant (album si fourni, sinon projet, sinon tout le catalogue)."""
+    # (clause FROM/JOIN, condition WHERE de contexte, arguments) — la condition de contexte est
+    # combinée explicitement avec le filtre par colonne, sans supposer que `src` finit par un WHERE.
     if album_id:
-        src = ("photos JOIN album_photos ON album_photos.photo_id = photos.id "
-               "WHERE album_photos.album_id = ?")
-        args: tuple = (album_id,)
+        src = "photos JOIN album_photos ON album_photos.photo_id = photos.id"
+        cond, args = "album_photos.album_id = ?", (album_id,)
     elif project_id:
-        src, args = "photos WHERE project_id = ?", (project_id,)
+        src, cond, args = "photos", "photos.project_id = ?", (project_id,)
     else:
-        src, args = "photos WHERE 1=1", ()
+        src, cond, args = "photos", "1=1", ()
 
     def distinct(col: str) -> list[str]:
-        rows = db.query(f"SELECT DISTINCT photos.{col} AS v FROM {src} AND photos.{col} != ''", args)
+        rows = db.query(
+            f"SELECT DISTINCT photos.{col} AS v FROM {src} WHERE {cond} AND photos.{col} != ''",
+            args)
         return sorted((r["v"] for r in rows), key=str.lower)
 
     return {"cameras": distinct("camera"), "lenses": distinct("lens")}

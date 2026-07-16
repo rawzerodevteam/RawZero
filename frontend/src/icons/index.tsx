@@ -11,16 +11,6 @@ export interface IconProps {
 
 const base = { fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
 
-export function IconHome({ size = 16, className }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
-      <path d="M2 7.5 8 2l6 5.5" />
-      <path d="M3.5 6.5V14h9V6.5" />
-      <path d="M6.5 14v-4h3v4" />
-    </svg>
-  );
-}
-
 export function IconFolder({ size = 16, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>

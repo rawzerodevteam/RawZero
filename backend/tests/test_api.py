@@ -15,7 +15,9 @@ from app.main import app
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app) as c:
+    # base_url localhost : le middleware guard_host (anti DNS-rebinding) rejette tout Host
+    # non local ; le défaut « testserver » du TestClient serait sinon refusé (403).
+    with TestClient(app, base_url="http://localhost") as c:
         yield c
 
 

@@ -45,6 +45,12 @@ def _url(name: str) -> str:
     return f"{MODELS_BASE_URL}/{name}"
 
 
+# Délai réseau (connexion et chaque lecture de socket). Sans lui, une connexion qui « pend »
+# bloque le thread daemon à vie, laisse `downloading: true` en permanence et interdit tout
+# re-téléchargement (garde 409). Surchargeable par env. Cf. S3 de l'audit.
+DOWNLOAD_TIMEOUT = float(os.environ.get("RAWZERO_DOWNLOAD_TIMEOUT", "30"))
+
+
 # Manifest en dur (3 features). Les noms de fichiers viennent de segment.py / denoise.py (source
 # unique) : renommer un modèle là-bas suffit, téléchargement et dispo suivent. Taille + SHA-256
 # vérifiés à l'octet contre les fichiers de référence locaux.
@@ -87,7 +93,8 @@ def _download_feature(feature: str, files: list[ModelFile]) -> None:
             dest = config.MODELS_DIR / f.name
             part = dest.with_name(dest.name + ".part")
             digest = hashlib.sha256()
-            with urllib.request.urlopen(url) as r, open(part, "wb") as out:  # noqa: S310 (https only)
+            with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT) as r, \
+                    open(part, "wb") as out:  # noqa: S310 (https only)
                 while chunk := r.read(262144):
                     out.write(chunk)
                     digest.update(chunk)
@@ -131,6 +138,7 @@ def status():
 
 class DownloadBody(BaseModel):
     feature: str
+    force: bool = False  # relance même si un précédent téléchargement est marqué « en cours » (bloqué)
 
 
 @router.post("/models/download")
@@ -141,7 +149,7 @@ def download(body: DownloadBody):
     if not MODELS_BASE_URL:
         raise HTTPException(400, "URL de base des modèles non configurée")
     with _lock:
-        if _progress.get(body.feature, {}).get("downloading"):
+        if _progress.get(body.feature, {}).get("downloading") and not body.force:
             raise HTTPException(409, "Téléchargement déjà en cours")
         _progress[body.feature] = {"downloading": True, "received": 0,
                                    "total": sum(f.size for f in files) or None, "error": None}

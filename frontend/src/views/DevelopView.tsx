@@ -7,7 +7,8 @@ import { ImageViewer } from "../components/ImageViewer";
 import { StarRating } from "../components/StarRating";
 import { EmptyState } from "../components/EmptyState";
 import { Coachmark } from "../components/Coachmark";
-import { IconClipHigh, IconClipLow, IconCopy, IconDiff, IconExport, IconGpu, IconHome, IconPaste, IconRedo, IconReset, IconSettings, IconUndo } from "../icons";
+import { IconClipHigh, IconClipLow, IconCopy, IconDiff, IconExport, IconGpu, IconPaste, IconRedo, IconReset, IconSettings, IconUndo } from "../icons";
+import logoMark from "../assets/logo-mark.png";
 import { GpuDiffDialog } from "../components/GpuDiffDialog";
 import { ModeTabs } from "../components/ModeTabs";
 import { useStore } from "../store";
@@ -143,7 +144,7 @@ export function DevelopView() {
     <div className="develop">
       <div className="develop-main">
         <div className="toolbar">
-          <button className="btn small" title={t("project.homeTitle")} aria-label={t("project.homeTitle")} onClick={() => setView("home")}><IconHome size={14} /></button>
+          <button className="btn small brand-btn" title={t("project.homeTitle")} aria-label={t("project.homeTitle")} onClick={() => setView("home")}><img src={logoMark} alt="" className="brand-mark small" /></button>
           <ModeTabs />
           <span className="name">{photo.filename}</span>
           {dirty && <span className="dim" title={t("develop.autosaving")}>●</span>}
