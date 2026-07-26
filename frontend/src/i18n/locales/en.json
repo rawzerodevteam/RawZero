@@ -492,7 +492,11 @@
     "promptProjectName": "New project name?",
     "promptAlbumName": "New album name?",
     "photoCount_one": "{{count}} photo",
-    "photoCount_other": "{{count}} photos"
+    "photoCount_other": "{{count}} photos",
+    "triZero": "Smart triage",
+    "triZeroTitle": "Open the Smart triage extension (TriZero) in a new tab",
+    "triZeroGet": "Get Smart triage",
+    "triZeroGetTitle": "TriZero (Smart triage) isn't running locally — optional extension, get it on GitHub"
   },
   "common": {
     "cancel": "Cancel",

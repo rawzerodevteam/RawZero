@@ -492,7 +492,11 @@
     "promptProjectName": "Nom du nouveau projet ?",
     "promptAlbumName": "Nom du nouvel album ?",
     "photoCount_one": "{{count}} photo",
-    "photoCount_other": "{{count}} photos"
+    "photoCount_other": "{{count}} photos",
+    "triZero": "Tri intelligent",
+    "triZeroTitle": "Ouvrir l'extension Tri intelligent (TriZero) dans un nouvel onglet",
+    "triZeroGet": "Obtenir Tri intelligent",
+    "triZeroGetTitle": "TriZero (Tri intelligent) n'est pas lancé en local — extension optionnelle, à récupérer sur GitHub"
   },
   "common": {
     "cancel": "Annuler",

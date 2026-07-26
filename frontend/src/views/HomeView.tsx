@@ -5,7 +5,8 @@ import { parseDragIds, hasDragIds } from "../lib/dragPhotos";
 import { promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
 import { ALL_PHOTOS_ID } from "../types";
-import { IconAlbum, IconFolder, IconGrid, IconImport, IconPlus, IconSettings } from "../icons";
+import { TRIZERO_REPO_URL, TRIZERO_URL, useTriZeroStatus } from "../lib/useTriZeroStatus";
+import { IconAlbum, IconDownload, IconExternal, IconFolder, IconGrid, IconImport, IconPlus, IconSettings } from "../icons";
 import logoMark from "../assets/logo-mark.png";
 import logoText from "../assets/logo-text.png";
 
@@ -23,6 +24,7 @@ export function HomeView() {
   const addToAlbum = useStore((s) => s.addToAlbum);
   const setUI = useStore((s) => s.setUI);
   const [dropId, setDropId] = useState<number | null>(null);
+  const triZeroStatus = useTriZeroStatus();
 
   const open = (id: number) => { void setProject(id); setView("grid"); };
   const openAlbum = (id: number) => { void setAlbum(id); };
@@ -55,6 +57,15 @@ export function HomeView() {
           <img src={logoText} alt="RawZero" className="brand-logo-text" />
         </span>
         <span className="spacer" />
+        {triZeroStatus === "checking" ? null : triZeroStatus === "available" ? (
+          <a className="btn" href={TRIZERO_URL} target="_blank" rel="noopener noreferrer" title={t("home.triZeroTitle")}>
+            <IconExternal size={14} /> {t("home.triZero")}
+          </a>
+        ) : (
+          <a className="btn" href={TRIZERO_REPO_URL} target="_blank" rel="noopener noreferrer" title={t("home.triZeroGetTitle")}>
+            <IconDownload size={14} /> {t("home.triZeroGet")}
+          </a>
+        )}
         <button className="btn" onClick={() => setView("settings")}><IconSettings size={14} /> {t("settings.title")}</button>
         <button className="btn" onClick={() => setUI({ showModels: true })}>{t("models.button")}</button>
         <button className="btn" onClick={() => setUI({ showImport: true })}><IconImport size={14} /> {t("home.import")}</button>

@@ -68,6 +68,26 @@ export function IconSettings({ size = 16, className }: IconProps) {
   );
 }
 
+export function IconExternal({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
+      <path d="M6.5 2.5H3.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-3" />
+      <path d="M9 2.5h4.5V7" />
+      <path d="M13.3 2.7 7.3 8.7" />
+    </svg>
+  );
+}
+
+export function IconDownload({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
+      <path d="M8 2.5v7.5" />
+      <path d="M4.7 7.2 8 10.5l3.3-3.3" />
+      <path d="M2.5 12.5h11" />
+    </svg>
+  );
+}
+
 export function IconGrid({ size = 16, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
