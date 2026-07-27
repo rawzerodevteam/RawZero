@@ -15,11 +15,14 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from fractions import Fraction
 from pathlib import Path
+from typing import Optional
 
-import cv2
+import tifffile
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from PIL import Image, ImageCms
 from pydantic import BaseModel
 
 from .. import config, db, denoise, pipeline, raw_loader
@@ -29,6 +32,59 @@ router = APIRouter()
 log = logging.getLogger(__name__)
 
 FORMATS = {"jpeg": ".jpg", "png": ".png", "tiff": ".tif"}
+
+# Profil ICC sRGB embarqué dans les exports (le pipeline travaille en sRGB, cf. CLAUDE.md §5) :
+# sans profil, certains éditeurs/visionneuses (Photoshop, navigateurs stricts) supposent un
+# espace non managé et peuvent afficher des couleurs légèrement différentes.
+_SRGB_ICC = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+
+
+def _exif_rational(value) -> Optional[tuple[int, int]]:
+    """Convertit un nombre (ou une fraction texte type '1/200') en rationnel EXIF (num, den)."""
+    try:
+        s = str(value).strip()
+        if "/" in s:
+            num, den = s.split("/", 1)
+            return (int(num), int(den))
+        f = Fraction(float(value)).limit_denominator(100000)
+        return (f.numerator, max(f.denominator, 1))
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
+def _build_exif(row: dict) -> bytes:
+    """Reconstruit un minimum d'EXIF (IFD0 + Exif) depuis les métadonnées du catalogue,
+    embarqué dans les exports JPEG/PNG (perdu sinon : cv2.imwrite n'écrit aucune métadonnée)."""
+    exif = Image.Exif()
+    if row.get("camera"):
+        exif[0x0110] = str(row["camera"])                       # Model
+    if row.get("lens"):
+        exif[0xA434] = str(row["lens"])                         # LensModel
+    captured_at = row.get("captured_at")
+    if captured_at:
+        try:
+            dt = datetime.fromisoformat(str(captured_at))
+            exif[0x9003] = dt.strftime("%Y:%m:%d %H:%M:%S")     # DateTimeOriginal
+        except ValueError:
+            pass
+    if row.get("iso"):
+        try:
+            exif[0x8827] = int(row["iso"])                      # ISOSpeedRatings
+        except (TypeError, ValueError):
+            pass
+    if row.get("aperture"):
+        r = _exif_rational(row["aperture"])
+        if r:
+            exif[0x829D] = r                                    # FNumber
+    if row.get("shutter"):
+        r = _exif_rational(row["shutter"])
+        if r:
+            exif[0x829A] = r                                    # ExposureTime
+    if row.get("focal"):
+        r = _exif_rational(row["focal"])
+        if r:
+            exif[0x920A] = r                                    # FocalLength
+    return exif.tobytes()
 
 # Nombre de photos exportées en parallèle. Borné : chaque worker tient une image pleine
 # résolution en mémoire. Surchageable via la variable d'environnement EXPORT_WORKERS.
@@ -143,9 +199,12 @@ def _export_one(row: dict, out_dir: Path, req: ExportRequest) -> dict:
             denoised = denoise.denoise(base)
         except Exception as e:
             log.warning("Débruitage IA export échoué #%s : %s", row.get("id"), e)
+    # TIFF exporte en pleine dynamique 16 bits (JPEG/PNG restent 8 bits : JPEG l'impose, PNG 16
+    # bits multi-canal n'est pas fiable en écriture avec les bibliothèques disponibles ici).
+    bit_depth = 16 if req.format == "tiff" else 8
     arr = pipeline.render_array(base, edits, req.max_size or 0,
                                 max(base.shape[:2]), denoised_base=denoised,
-                                seed=int(row.get("id") or 0))
+                                seed=int(row.get("id") or 0), bit_depth=bit_depth)
     del base, denoised
     stem = Path(row["filename"]).stem + (req.suffix or "")
     ext = FORMATS[req.format]
@@ -158,16 +217,17 @@ def _export_one(row: dict, out_dir: Path, req: ExportRequest) -> dict:
             dest = out_dir / f"{stem}-{i}{ext}"
             i += 1
         dest.touch()
-    bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
     if req.format == "jpeg":
-        ok = cv2.imwrite(str(dest), bgr,
-                         [int(cv2.IMWRITE_JPEG_QUALITY), int(max(1, min(100, req.quality)))])
+        Image.fromarray(arr, "RGB").save(
+            str(dest), format="JPEG", quality=int(max(1, min(100, req.quality))),
+            icc_profile=_SRGB_ICC, exif=_build_exif(row))
     elif req.format == "png":
-        ok = cv2.imwrite(str(dest), bgr, [int(cv2.IMWRITE_PNG_COMPRESSION), 6])
+        Image.fromarray(arr, "RGB").save(
+            str(dest), format="PNG", compress_level=6,
+            icc_profile=_SRGB_ICC, exif=_build_exif(row))
     else:
-        ok = cv2.imwrite(str(dest), bgr)
-    if not ok:
-        raise RuntimeError("écriture du fichier impossible")
+        tifffile.imwrite(str(dest), arr, photometric="rgb", iccprofile=_SRGB_ICC,
+                         compression="adobe_deflate")
     return {"id": row["id"], "name": dest.name,
             "url": f"/exports/{out_dir.name}/{dest.name}",
             "width": int(arr.shape[1]), "height": int(arr.shape[0]),

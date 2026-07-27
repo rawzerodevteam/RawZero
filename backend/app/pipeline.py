@@ -547,8 +547,10 @@ def apply_pipeline(base: np.ndarray, edits: dict, scale: float = 1.0,
 
 def render_array(base: np.ndarray, edits: dict, max_size: int, full_long_edge: int,
                  show_mask: str = "", skip_crop: bool = False,
-                 denoised_base: Optional[np.ndarray] = None, seed: int = 0) -> np.ndarray:
-    """Pipeline + redimensionnement final ; renvoie uint8 RGB."""
+                 denoised_base: Optional[np.ndarray] = None, seed: int = 0,
+                 bit_depth: int = 8) -> np.ndarray:
+    """Pipeline + redimensionnement final ; renvoie RGB uint8 (bit_depth=8, défaut) ou uint16
+    (bit_depth=16, pour l'export TIFF pleine dynamique)."""
     h, w = base.shape[:2]
     long_edge = max(h, w)
 
@@ -576,6 +578,8 @@ def render_array(base: np.ndarray, edits: dict, max_size: int, full_long_edge: i
         out = cv2.resize(out, (max(int(ow * f), 1), max(int(oh * f), 1)),
                          interpolation=cv2.INTER_AREA)
 
+    if bit_depth == 16:
+        return (np.clip(out, 0.0, 1.0) * 65535.0 + 0.5).astype(np.uint16)
     return (np.clip(out, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
 
 

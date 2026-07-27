@@ -1,5 +1,6 @@
 """Sauvegarde des edits, auto-réglages, presets (filtres globaux)."""
 import json
+import shutil
 import uuid
 from typing import Any
 
@@ -24,9 +25,37 @@ class SaveEditsBody(EditsBody):
     history: dict[str, Any] | None = None  # timeline du panneau « Historique » (optionnel)
 
 
+def _localize_ai_masks(photo_id: int, edits: dict[str, Any]) -> None:
+    """Un masque IA (type "ai") collé depuis une autre photo garde `params.ref` pointant vers
+    le PNG de la photo source (MASKS_DIR/{source_id}/...) : cassé silencieusement si cette photo
+    est supprimée. On copie le bitmap sous cette photo et on réécrit `ref` au moment du collage
+    (donc du prochain save), pour que le masque ne dépende plus que de sa propre photo."""
+    for local in edits.get("locals") or []:
+        if not isinstance(local, dict) or local.get("type") != "ai":
+            continue
+        params = local.get("params")
+        if not isinstance(params, dict):
+            continue
+        ref = str(params.get("ref") or "")
+        if not ref or ref.startswith(f"{photo_id}/"):
+            continue
+        src = (config.MASKS_DIR / ref).resolve()
+        if config.MASKS_DIR.resolve() not in src.parents or not src.is_file():
+            continue
+        dest_dir = config.MASKS_DIR / str(photo_id)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        new_ref = f"{photo_id}/{uuid.uuid4().hex}.png"
+        shutil.copyfile(src, config.MASKS_DIR / new_ref)
+        params["ref"] = new_ref
+
+
 @router.put("/photos/{photo_id}/edits")
 def save_edits(photo_id: int, body: SaveEditsBody):
     get_photo_row(photo_id)
+    _localize_ai_masks(photo_id, body.edits)
+    for step in (body.history or {}).get("steps") or []:
+        if isinstance(step, dict) and isinstance(step.get("edits"), dict):
+            _localize_ai_masks(photo_id, step["edits"])
     if body.history is not None:
         db.execute("UPDATE photos SET edits=?, edited=?, history=? WHERE id=?",
                    (json.dumps(body.edits), int(pipeline.edits_meaningful(body.edits)),

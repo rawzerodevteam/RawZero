@@ -16,12 +16,7 @@ __pycache__/
 .venv/
 
 # notes de travail privées (jamais versionnées)
-AMELIORATION.md
-CLAUDE.md
-étude.md
-TEST_OPTIMISATION.md
-Notes
-transfert_rust.md
+*.md
 
 # Tauri / Rust
 src-tauri/target/
@@ -36,3 +31,5 @@ backend/dist/
 
 # outillage local Claude Code
 .claude/
+
+#md

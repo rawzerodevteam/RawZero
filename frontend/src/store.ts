@@ -758,11 +758,20 @@ export const useStore = create<Store>((set, get) => ({
     await Promise.all(ids.map(async (id) => {
       try {
         const photo = await api.getPhoto(id);
-        const merged = mergeEdits(photo.edits);
+        const before = mergeEdits(photo.edits);
+        const merged = structuredClone(before);
         const keep = merged.geometry;
         Object.assign(merged, structuredClone(c));
         merged.geometry = keep;
-        await api.saveEdits(id, merged);
+        const prior = loadHistory(photo.history, before);
+        const history = historyTimeline({
+          edits: merged,
+          currentLabel: i18n.t("history.pasted"),
+          undoStack: [...prior.undoStack, prior.edits],
+          undoLabels: [...prior.undoLabels, prior.currentLabel],
+          redoStack: [], redoLabels: [],
+        });
+        await api.saveEdits(id, merged, history);
         get().bumpVersion(id);
         ok++;
       } catch { /* on continue les autres photos malgré un échec isolé */ }

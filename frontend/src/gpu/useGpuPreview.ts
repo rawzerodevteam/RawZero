@@ -120,7 +120,7 @@ export function useGpuPreview(
     if (!active || !pipe || !ready) return;
     const ovl = beforeAfter || skipCrop ? null : maskOverlayId;
     const paint = (src: EditState, q: number) => {
-      pipe.render(beforeAfter ? defaultEdits() : src, skipCrop, showClip, ovl, q);
+      pipe.render(beforeAfter ? defaultEdits() : src, skipCrop, showClip, ovl, q, currentId ?? 0);
       const c = canvasRef.current;
       if (c) setDims((d) => (d.w !== c.width || d.h !== c.height ? { w: c.width, h: c.height } : d));
     };
@@ -154,10 +154,10 @@ export function useGpuPreview(
     if (!active || !pipeRef.current || !ready || !edits) return;
     const pipe = pipeRef.current;
     const ovl = beforeAfter || skipCrop ? null : maskOverlayId;
-    pipe.render(beforeAfter ? defaultEdits() : edits, skipCrop, showClip, ovl, isDragging ? 0.6 : 1);
+    pipe.render(beforeAfter ? defaultEdits() : edits, skipCrop, showClip, ovl, isDragging ? 0.6 : 1, currentId ?? 0);
     const c = canvasRef.current;
     if (c) setDims((d) => (d.w !== c.width || d.h !== c.height ? { w: c.width, h: c.height } : d));
-  }, [active, edits, ready, skipCrop, beforeAfter, showClip, maskOverlayId, isDragging, canvasRef, asyncTick]);
+  }, [active, edits, ready, skipCrop, beforeAfter, showClip, maskOverlayId, isDragging, canvasRef, asyncTick, currentId]);
 
   return { ready, error, dims };
 }

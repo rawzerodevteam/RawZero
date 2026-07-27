@@ -161,9 +161,15 @@ void main(){
   o = vec4(mix(c, vec3(l), max(fp, fg)), 1.0);
 }`;
 
-// 6) netteté (masque flou) + vignettage — passe finale (rendu écran)
+// 6) netteté (masque flou) + vignettage + grain — passe finale (rendu écran)
 const F_FINAL = VERSION + PRELUDE + `
 uniform sampler2D u_blur; uniform float u_sharpen; uniform float u_vignette; uniform int u_showClip;
+uniform float u_grain; uniform float u_grainSeed;
+float grainHash(vec2 p, float seed){
+  p = fract(p * vec2(0.1031, 0.1030) + seed);
+  p += dot(p, p.yx + 33.33);
+  return fract((p.x + p.y) * p.x);
+}
 void main(){
   vec3 c = texture(u_tex, v_uv).rgb;
   if(u_sharpen>0.){
@@ -175,6 +181,13 @@ void main(){
     float r = length(p)/1.41421356;
     float ss = smoothstep(0.3, 1.0, r);
     c *= exp2(u_vignette/100.*1.3*ss);
+  }
+  if(u_grain>0.){
+    // moyenne de 4 tirages uniformes (approx. gaussienne, Irwin-Hall) ~ N(0,1)
+    float n = 0.;
+    for(int i=0;i<4;i++) n += grainHash(gl_FragCoord.xy + float(i)*17.3, u_grainSeed + float(i)*7.1);
+    n = (n*0.5 - 1.0) * 1.73;
+    c += n * (u_grain/100. * 0.05);
   }
   c = clamp(c, 0., 1.);
   if(u_showClip==1){                                 // alertes d'écrêtage (mêmes seuils/couleurs que le CPU)
@@ -305,6 +318,7 @@ float computeMask(vec2 muv, vec3 col){
   } else if(u_kind==4){                            // plage de luminance
     float l = luma(col);
     float lo = u_lr.x, hi = u_lr.y, sm = max(u_lr.z, 1e-3);
+    if(hi < lo){ float t = lo; lo = hi; hi = t; }
     m = smoothstep(lo - sm, lo, l) * (1.0 - smoothstep(hi, hi + sm, l));
   } else {                                         // plage de couleur
     vec3 hsv = rgb2hsv(clamp(col, 0.0, 1.0));
@@ -801,7 +815,7 @@ export class GpuPipeline {
     });
   }
 
-  render(e: EditState, skipCrop = false, showClip = false, maskOverlayId: string | null = null, quality = 1) {
+  render(e: EditState, skipCrop = false, showClip = false, maskOverlayId: string | null = null, quality = 1, seed = 0) {
     const gl = this.gl;
     if (!this.workW) return;
     const ovlLoc = maskOverlayId ? e.locals.find((l) => l.id === maskOverlayId) ?? null : null;
@@ -990,6 +1004,8 @@ export class GpuPipeline {
       gl.uniform1i(this.u("final", "u_blur"), 1);
       gl.uniform1f(this.u("final", "u_sharpen"), sharpen);
       gl.uniform1f(this.u("final", "u_vignette"), e.effects.vignette);
+      gl.uniform1f(this.u("final", "u_grain"), e.effects.grain);
+      gl.uniform1f(this.u("final", "u_grainSeed"), (seed % 1000) * 0.618);
       gl.uniform1i(this.u("final", "u_showClip"), showClip ? 1 : 0);
     });
     if (ovlLoc && finOut) this.maskOverlay(ovlLoc, finOut, W, H);

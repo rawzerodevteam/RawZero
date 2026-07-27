@@ -16,7 +16,7 @@ function offsetParams(type: LocalAdjust["type"], params: Record<string, any>): R
   }
   if (type === "brush") {
     const strokes = (params.strokes ?? []).map((s: any) => ({
-      ...s, points: (s.points ?? []).map((p: any) => ({ x: clamp01(p.x + OFFSET), y: clamp01(p.y + OFFSET) })),
+      ...s, points: (s.points ?? []).map((p: any) => [clamp01(p[0] + OFFSET), clamp01(p[1] + OFFSET)]),
     }));
     return { ...params, strokes };
   }
