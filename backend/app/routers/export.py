@@ -25,7 +25,7 @@ from fastapi.responses import StreamingResponse
 from PIL import Image, ImageCms
 from pydantic import BaseModel
 
-from .. import config, db, denoise, pipeline, raw_loader
+from .. import config, db, denoise, pipeline, previews, raw_loader
 from .photos import require_original
 
 router = APIRouter()
@@ -193,10 +193,12 @@ def _export_one(row: dict, out_dir: Path, req: ExportRequest) -> dict:
     base = raw_loader.decode_full(original)
     edits = json.loads(row.get("edits") or "{}")
     # Débruitage IA pleine résolution (tuilé) — chemin lent, seulement si le réglage est actif.
+    # Mis en cache disque (previews.get_export_denoised_base) : un ré-export répété de la même
+    # photo ne relance pas l'inférence FFDNet tant que l'original n'a pas changé.
     denoised = None
     if float(edits.get("detail", {}).get("nr_ai", 0.0)) > 0.0 and denoise.available():
         try:
-            denoised = denoise.denoise(base)
+            denoised = previews.get_export_denoised_base(row["id"], base)
         except Exception as e:
             log.warning("Débruitage IA export échoué #%s : %s", row.get("id"), e)
     # TIFF exporte en pleine dynamique 16 bits (JPEG/PNG restent 8 bits : JPEG l'impose, PNG 16

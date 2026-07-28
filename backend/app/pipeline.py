@@ -8,7 +8,6 @@ Ordre : géométrie → (linéaire) WB + exposition → tons (HL/ombres, blancs/
 contraste, courbe) → HSL/vibrance/saturation → clarté/dehaze → retouches locales
 → réduction de bruit → netteté → vignettage/grain.
 """
-import copy
 import functools
 import math
 from typing import Any, Optional
@@ -57,7 +56,11 @@ def merge_edits(edits: Optional[dict]) -> dict:
             return {k: merge(v, value.get(k, v)) for k, v in default.items()}
         return value if value is not None else default
 
-    out = merge(copy.deepcopy(DEFAULT_EDITS), edits or {})
+    # merge() reconstruit récursivement chaque dict traversé (dict comprehension) : la seule
+    # aliasing possible est sur les feuilles non-dict laissées à leur défaut (ex. les listes de
+    # points de courbe quand `edits` ne les fournit pas), jamais mutées en place ailleurs dans le
+    # pipeline → pas besoin de deepcopy(DEFAULT_EDITS) à chaque appel (chemin chaud du rendu).
+    out = merge(DEFAULT_EDITS, edits or {})
     out["locals"] = [
         {"id": loc.get("id", ""), "type": loc.get("type", "radial"),
          "params": loc.get("params", {}), "invert": bool(loc.get("invert", False)),
@@ -194,12 +197,16 @@ def _apply_linear_stage(img: np.ndarray, temp: float, tint: float, exposure: flo
     return linear_to_srgb(lin)
 
 
-def _apply_hl_shadows(img: np.ndarray, highlights: float, shadows: float) -> np.ndarray:
+def _apply_hl_shadows(img: np.ndarray, highlights: float, shadows: float,
+                      ref_long_edge: Optional[int] = None) -> np.ndarray:
+    """`ref_long_edge` : bord long de référence pour le sigma du flou (défaut : celui de `img`).
+    À fournir explicitement quand `img` est un recadrage (retouche locale sur boîte englobante,
+    cf. `_apply_local`), pour que le rayon reste celui de l'image complète."""
     if not (highlights or shadows):
         return img
     hl, sh = highlights / 100.0, shadows / 100.0
     l = luma(img)
-    lb = gauss(l, max(img.shape[:2]) * 0.02)
+    lb = gauss(l, (ref_long_edge or max(img.shape[:2])) * 0.02)
     if rsfast.available():   # combinaison per-pixel (gain) multi-cœur ; flou laissé à cv2
         return rsfast.hl_shadows(img, lb, hl, sh)
     gain = np.ones_like(lb)
@@ -283,25 +290,34 @@ def _eval_lut(lut: np.ndarray, x: np.ndarray) -> np.ndarray:
     return lut[idx]
 
 
-def _apply_curve(img: np.ndarray, curve: dict) -> np.ndarray:
-    """Courbe maître (`points`, appliquée aux 3 canaux) puis courbes par canal (`r`/`g`/`b`).
-
-    Maître et courbe de canal sont pré-composées en une seule LUT par canal :
-    composed(x) = chan(master(x)). Identique au GPU (un seul échantillonnage)."""
-    master = _curve_lut(_pts_key(curve.get("points")))
+@functools.lru_cache(maxsize=64)
+def _composed_curve_luts(points_key: tuple, r_key: tuple, g_key: tuple,
+                         b_key: tuple) -> Optional[tuple]:
+    """LUT composée par canal — composed(x) = chan(master(x)) —, mémoïsée par combinaison de
+    courbes (maître + r/g/b) : un drag de slider hors courbe (expo, contraste…) rejoue le
+    pipeline sans recalculer cette composition. `None` si la courbe est l'identité partout."""
+    master = _curve_lut(points_key)
     n = 1024
     xs = np.linspace(0.0, 1.0, n, dtype=np.float32)
     base = _eval_lut(master, xs) if master is not None else xs  # maître appliqué (ou identité)
     luts: list[Optional[np.ndarray]] = []
     changed = master is not None
-    for key in ("r", "g", "b"):
-        chan = _curve_lut(_pts_key(curve.get(key)))
+    for key in (r_key, g_key, b_key):
+        chan = _curve_lut(key)
         if master is None and chan is None:
             luts.append(None)
             continue
         luts.append((_eval_lut(chan, base) if chan is not None else base).astype(np.float32))
         changed = True
-    if not changed:
+    return tuple(luts) if changed else None
+
+
+def _apply_curve(img: np.ndarray, curve: dict) -> np.ndarray:
+    """Courbe maître (`points`, appliquée aux 3 canaux) puis courbes par canal (`r`/`g`/`b`),
+    pré-composées en une seule LUT par canal (identique au GPU : un seul échantillonnage)."""
+    luts = _composed_curve_luts(_pts_key(curve.get("points")), _pts_key(curve.get("r")),
+                                _pts_key(curve.get("g")), _pts_key(curve.get("b")))
+    if luts is None:
         return img
     if rsfast.available():   # lookup LUT par canal (LUT composées ci-dessus), multi-cœur
         return rsfast.curve(img, luts)
@@ -318,10 +334,36 @@ def _band_weight(hue: np.ndarray, center: float, half_width: float = 45.0) -> np
     return w.astype(np.float32)
 
 
+def _saturation_ratio(s: np.ndarray, vibrance: float, saturation: float) -> np.ndarray:
+    """Ratio multiplicatif appliqué à S (HSV) par vibrance puis saturation — mêmes formules que
+    la branche pleine HSV ci-dessous. `s` = saturation HSV d'origine (utile à la branche
+    vibrance>0 seulement, qui pondère par 1-s)."""
+    ratio = np.ones_like(s)
+    if vibrance:
+        vib = vibrance / 100.0
+        ratio = ratio * ((1.0 + vib * (1.0 - s) * 1.2) if vib > 0 else (1.0 + vib * 0.85))
+    if saturation:
+        ratio = ratio * (1.0 + saturation / 100.0)
+    return ratio
+
+
 def _apply_color(img: np.ndarray, hsl: dict, vibrance: float, saturation: float) -> np.ndarray:
     has_hsl = any(any(abs(v) > 1e-6 for v in band.values()) for band in hsl.values())
     if not (has_hsl or vibrance or saturation):
         return img
+    if not has_hsl:
+        # Pas de bande HSL (teinte/luminance par bande) à appliquer : vibrance/saturation seules
+        # ne dépendent pas de la teinte → on évite l'aller-retour complet cv2.cvtColor RGB<->HSV
+        # (coûteux en pleine résolution, appelé aussi par chaque retouche locale et par le dehaze).
+        # Identité HSV à V et teinte fixes : c' = c·r + V·(1-r), r = S'/S (clampé sur [0,1]).
+        x = np.clip(img, 0.0, 1.0)
+        v = x.max(axis=-1, keepdims=True)
+        mn = x.min(axis=-1, keepdims=True)
+        s = np.where(v > 1e-6, (v - mn) / np.maximum(v, 1e-6), 0.0)
+        ratio = _saturation_ratio(s[..., 0], vibrance, saturation)[..., None]
+        s_new = np.clip(s * ratio, 0.0, 1.0)
+        eff = np.where(s > 1e-6, s_new / np.maximum(s, 1e-6), 1.0)
+        return x * eff + v * (1.0 - eff)
     hsv = cv2.cvtColor(np.clip(img, 0.0, 1.0), cv2.COLOR_RGB2HSV)
     if rsfast.available():   # math 8 bandes + vibrance/sat en place (multi-cœur), cvtColor laissé à OpenCV
         centers = np.array([c for _, c in HSL_BANDS], dtype=np.float32)
@@ -358,12 +400,14 @@ def _apply_color(img: np.ndarray, hsl: dict, vibrance: float, saturation: float)
     return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
 
 
-def _apply_clarity(img: np.ndarray, clarity: float, scale: float) -> np.ndarray:
+def _apply_clarity(img: np.ndarray, clarity: float, scale: float,
+                   ref_long_edge: Optional[int] = None) -> np.ndarray:
+    """`ref_long_edge` : cf. `_apply_hl_shadows` (même besoin pour une retouche locale recadrée)."""
     if not clarity:
         return img
     amt = clarity / 100.0
     l = luma(img)
-    sigma = max(8.0, max(img.shape[:2]) * 0.012)
+    sigma = max(8.0, (ref_long_edge or max(img.shape[:2])) * 0.012)
     blur_l = gauss(l, sigma)
     if rsfast.available():
         return rsfast.clarity(img, blur_l, amt)
@@ -485,6 +529,17 @@ def _apply_grain(img: np.ndarray, grain: float, scale: float, seed: int) -> np.n
 
 # ---------------------------------------------------------------- retouches locales
 
+def _mask_bbox(mask: np.ndarray, eps: float) -> Optional[tuple[int, int, int, int]]:
+    """(y0, y1, x0, x1) exclusif englobant `mask > eps`, ou None si vide."""
+    rows = np.any(mask > eps, axis=1)
+    cols = np.any(mask > eps, axis=0)
+    if not rows.any():
+        return None
+    y0, y1 = np.flatnonzero(rows)[[0, -1]]
+    x0, x1 = np.flatnonzero(cols)[[0, -1]]
+    return int(y0), int(y1) + 1, int(x0), int(x1) + 1
+
+
 def _apply_local(img: np.ndarray, local: dict, scale: float) -> np.ndarray:
     adj = local["adjust"]
     if not any(abs(float(v)) > 1e-6 for v in adj.values()):
@@ -493,17 +548,42 @@ def _apply_local(img: np.ndarray, local: dict, scale: float) -> np.ndarray:
     mask = build_mask(local, h, w, img)   # les masques par plage dépendent du contenu (img)
     if mask is None or float(mask.max()) < 1e-4:
         return img
-    out = img
+    bbox = _mask_bbox(mask, 1e-4)
+    if bbox is None:
+        return img
+    long_edge = max(h, w)
+    # Halo autour de la boîte englobante = ~3σ des flous de la mini-pipeline (HL/ombres, clarté,
+    # netteté), pour que le recadrage voie les mêmes pixels voisins que la pleine image et que le
+    # résultat soit inchangé là où le masque est nul (d'où l'absence d'écart de rendu).
+    halo = 0.0
+    if adj["highlights"] or adj["shadows"]:
+        halo = max(halo, 3.0 * long_edge * 0.02)
+    if adj["clarity"]:
+        halo = max(halo, 3.0 * max(8.0, long_edge * 0.012))
+    if adj["sharpness"]:
+        halo = max(halo, 3.0 * max(1.2 * scale, 0.4))
+    pad = int(math.ceil(halo))
+    y0, y1, x0, x1 = bbox
+    y0, x0 = max(y0 - pad, 0), max(x0 - pad, 0)
+    y1, x1 = min(y1 + pad, h), min(x1 + pad, w)
+
+    sub_img, sub_mask = img[y0:y1, x0:x1], mask[y0:y1, x0:x1]
+    out = sub_img
     out = _apply_linear_stage(out, float(adj["temp"]), float(adj["tint"]), float(adj["exposure"]))
-    out = _apply_hl_shadows(out, float(adj["highlights"]), float(adj["shadows"]))
+    out = _apply_hl_shadows(out, float(adj["highlights"]), float(adj["shadows"]), ref_long_edge=long_edge)
     out = _apply_contrast(out, float(adj["contrast"]))
     if adj["saturation"]:
         out = _apply_color(out, {}, vibrance=0.0, saturation=float(adj["saturation"]))
-    out = _apply_clarity(out, float(adj["clarity"]), scale)
+    out = _apply_clarity(out, float(adj["clarity"]), scale, ref_long_edge=long_edge)
     if adj["sharpness"]:
         out = _apply_sharpen(out, float(adj["sharpness"]), 1.2, scale)
-    m = mask[..., None]
-    return img * (1.0 - m) + out * m
+    m = sub_mask[..., None]
+    blended = sub_img * (1.0 - m) + out * m
+    if (y0, y1, x0, x1) == (0, h, 0, w):
+        return blended
+    result = img.copy()
+    result[y0:y1, x0:x1] = blended
+    return result
 
 
 # ---------------------------------------------------------------- pipeline complet

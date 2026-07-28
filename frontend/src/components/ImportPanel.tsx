@@ -46,14 +46,18 @@ export function ImportPanel() {
   };
 
   const pickAndImportFiles = async () => {
-    const paths = await pickFiles();
-    if (paths) await importPaths(paths);
+    try {
+      const paths = await pickFiles();
+      if (paths) await importPaths(paths);
+    } catch (e) {
+      setResults([{ filename: "import", status: "error", reason: String(e) }]);
+    }
   };
 
   const pickAndImportFolder = async () => {
-    const folder = await pickFolder();
-    if (!folder) return;
     try {
+      const folder = await pickFolder();
+      if (!folder) return;
       const l = await api.browseImport(folder);
       await importPaths(l.files.map((f) => f.path));
     } catch (e) {

@@ -98,6 +98,13 @@ def denoised_base_path(photo_id: int) -> Path:
     return config.BASE_DIR / f"{photo_id}.dn.npy"
 
 
+def export_denoised_path(photo_id: int) -> Path:
+    """Distinct de `denoised_base_path` : celui-ci est débruité à BASE_SIZE (aperçu dev), celui-là
+    à la pleine résolution de l'export (peut donc différer en dimensions d'un export à l'autre
+    si l'original a changé — le hash le garantit via `invalidate` sur relink/suppression)."""
+    return config.BASE_DIR / f"{photo_id}.dnfull.npy"
+
+
 def _resize_long_edge(arr: np.ndarray, size: int) -> np.ndarray:
     h, w = arr.shape[:2]
     long_edge = max(h, w)
@@ -234,6 +241,31 @@ def get_denoised_base(photo_id: int, original: Path) -> "np.ndarray | None":
             return _hot_put(_dn_hot, photo_id, arr16.astype(np.float32), _DN_HOT_MAX)
 
 
+def get_export_denoised_base(photo_id: int, base: np.ndarray) -> "np.ndarray | None":
+    """Base pleine résolution débruitée par IA, cache disque seul (pas de cache mémoire chaud :
+    un export ne la lit qu'une fois). Évite de ré-inférer FFDNet — coûteux, tuilé, pleine réso —
+    à chaque export répété de la même photo tant que rien n'a changé. `base` est le décodage
+    RAW pleine résolution déjà en mémoire (appelant : `routers/export.py`)."""
+    if not denoise.available():
+        return None
+    npy = export_denoised_path(photo_id)
+    if npy.exists():
+        try:
+            arr = np.load(npy)
+            if arr.shape == base.shape:
+                return arr.astype(np.float32)
+        except Exception:
+            pass
+        npy.unlink(missing_ok=True)
+    arr = denoise.denoise(base).astype(np.float16)
+    try:
+        npy.parent.mkdir(parents=True, exist_ok=True)
+        np.save(npy, arr)
+    except Exception as e:
+        log.warning("Cache débruitage export impossible pour #%s : %s", photo_id, e)
+    return arr.astype(np.float32)
+
+
 def invalidate(photo_id: int) -> None:
     with _base_lock:
         _base_cache.pop(photo_id, None)
@@ -242,7 +274,7 @@ def invalidate(photo_id: int) -> None:
         _dn_cache.pop(photo_id, None)
         _dn_hot.pop(photo_id, None)
     for p in (thumb_path(photo_id), preview_path(photo_id), base_path(photo_id),
-              denoised_base_path(photo_id)):
+              denoised_base_path(photo_id), export_denoised_path(photo_id)):
         p.unlink(missing_ok=True)
     mask_dir = config.MASKS_DIR / str(photo_id)
     if mask_dir.exists():

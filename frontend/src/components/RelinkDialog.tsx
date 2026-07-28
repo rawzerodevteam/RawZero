@@ -42,8 +42,12 @@ export function RelinkDialog() {
   };
 
   const pickNative = async () => {
-    const filePath = await pickFile();
-    if (filePath) await pick(filePath);
+    try {
+      const filePath = await pickFile();
+      if (filePath) await pick(filePath);
+    } catch (e) {
+      setError(String(e));
+    }
   };
 
   return (
