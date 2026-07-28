@@ -423,6 +423,7 @@ export class GpuPipeline {
   private hasCurve = false;
   private colorType: number;        // HALF_FLOAT si dispo, sinon UNSIGNED_BYTE
   private colorInternal: number;
+  private quadBuf: WebGLBuffer | null = null;
   workW = 0;
   workH = 0;
   fullLong = 1;
@@ -434,6 +435,7 @@ export class GpuPipeline {
     this.colorInternal = floatRender ? gl.RGBA16F : gl.RGBA8;
 
     const buf = gl.createBuffer();
+    this.quadBuf = buf;
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
 
@@ -457,6 +459,27 @@ export class GpuPipeline {
     this.curveTex = this.newTex();
     gl.bindTexture(gl.TEXTURE_2D, this.curveTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+  }
+
+  /** Libère toutes les ressources GL allouées (programmes/textures/FBO/buffer). À appeler avant
+   *  d'abandonner l'instance : le contexte WebGL du canvas persiste tant que l'aperçu GPU est
+   *  réactivé/désactivé sans démonter le composant, donc chaque `new GpuPipeline(gl)` réutilise
+   *  le même contexte et fuit sinon (programmes/textures/FBO jamais détruits). */
+  dispose(): void {
+    const gl = this.gl;
+    for (const p of Object.values(this.progs)) gl.deleteProgram(p);
+    this.progs = {};
+    for (const { tex, fbo } of this.rts.values()) { gl.deleteTexture(tex); gl.deleteFramebuffer(fbo); }
+    this.rts.clear();
+    gl.deleteTexture(this.baseTex);
+    gl.deleteTexture(this.curveTex);
+    if (this.denoiseTex) gl.deleteTexture(this.denoiseTex);
+    for (const { tex } of this.brushTex.values()) gl.deleteTexture(tex);
+    this.brushTex.clear();
+    for (const { tex } of this.aiTex.values()) gl.deleteTexture(tex);
+    this.aiTex.clear();
+    if (this.quadBuf) gl.deleteBuffer(this.quadBuf);
+    this.quadBuf = null;
   }
 
   private link(vsrc: string, fsrc: string): WebGLProgram {

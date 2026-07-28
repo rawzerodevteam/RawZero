@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "../store";
 import type { EditState } from "../types";
+
+// Délai d'inactivité (ms) après le dernier cran de molette avant de figer le point d'historique :
+// un geste de molette envoie de nombreux events rapprochés, à coalescer en une seule entrée
+// d'historique (comme un drag), pas une par cran.
+const WHEEL_IDLE_MS = 250;
 
 interface Props {
   label: string;
@@ -40,6 +45,47 @@ export function EditSlider({ label, get, min, max, step = 1, reset = 0, fmt, app
 
   const endDragHandler = () => { endDrag(); setLiveValue(null); };
 
+  // Molette de réglage fin (cf. CLAUDE.md §8) : un cran = un pas, coalescé en un seul point
+  // d'historique par geste (comme un drag). Ref-based pour ne pas réabonner le listener non-passif
+  // à chaque tick (nécessaire pour que preventDefault empêche le défilement du panneau).
+  const inputRef = useRef<HTMLInputElement>(null);
+  const stateRef = useRef({ value, min, max, step, apply, liveValue });
+  stateRef.current = { value, min, max, step, apply, liveValue };
+  const wheelIdleRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const onWheel = (ev: WheelEvent) => {
+      ev.preventDefault();
+      const { value: v, min: lo, max: hi, step: st, apply: ap, liveValue: lv } = stateRef.current;
+      const base = lv ?? v;
+      const dir = ev.deltaY < 0 ? 1 : -1;
+      const clamped = Math.min(hi, Math.max(lo, base + dir * st));
+      const next = Math.round(clamped * 1e6) / 1e6; // évite la dérive flottante cumulative
+      if (wheelIdleRef.current === undefined) startDrag();
+      else window.clearTimeout(wheelIdleRef.current);
+      setLiveValue(next);
+      updateEditsLive((e) => ap(e, next));
+      wheelIdleRef.current = window.setTimeout(() => {
+        endDrag();
+        setLiveValue(null);
+        wheelIdleRef.current = undefined;
+      }, WHEEL_IDLE_MS);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      if (wheelIdleRef.current !== undefined) {
+        window.clearTimeout(wheelIdleRef.current);
+        wheelIdleRef.current = undefined;
+        endDrag();
+        setLiveValue(null);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const doReset = () => {
     startDrag();
     updateEdits((e) => apply(e, reset), false);
@@ -68,6 +114,7 @@ export function EditSlider({ label, get, min, max, step = 1, reset = 0, fmt, app
         {label}
       </span>
       <input
+        ref={inputRef}
         type="range"
         min={min}
         max={max}

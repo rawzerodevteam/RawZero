@@ -45,6 +45,14 @@ class TestMergeEdits:
         assert m["locals"][0]["adjust"]["saturation"] == 0.0
         assert m["locals"][0]["adjust"]["exposure"] == 1.0
 
+    def test_malformed_section_falls_back_to_default(self):
+        # une section objet reçue comme scalaire (JSON corrompu/API mal formée) ne doit pas
+        # remplacer le sous-dict par défaut : sinon apply_pipeline plante au prochain rendu.
+        m = merge_edits({"tone": 5, "wb": None, "detail": {"sharpen_amount": 0.0}})
+        assert m["tone"] == DEFAULT_EDITS["tone"]
+        assert m["wb"] == DEFAULT_EDITS["wb"]
+        apply_pipeline(gradient_image(), m)
+
 
 class TestTonal:
     def test_neutral_is_identity(self):
@@ -248,6 +256,31 @@ class TestMasks:
             "strokes": [{"points": [[0.2, 0.5], [0.8, 0.5]], "size": 0.1}]}}, 100, 200)
         assert m[50, 100] > 0.8
         assert m[5, 100] < 0.05
+
+    def test_brush_handles_non_finite_points(self):
+        # points NaN/Infinity (edits corrompus en amont) ne doivent pas planter le rendu
+        # (int(round(nan)) lève ValueError, int(round(inf)) lève OverflowError sans le garde).
+        m = build_mask({"type": "brush", "params": {
+            "feather": 0.3,
+            "strokes": [{"points": [[float("nan"), 0.5], [float("inf"), 0.5]], "size": 0.1}]}}, 100, 200)
+        assert m is not None
+        assert np.isfinite(m).all()
+
+    def test_linear_radial_lumrange_colorrange_handle_non_finite_params(self):
+        # même classe de bug que le pinceau : un paramètre NaN/Infinity ne fait pas planter
+        # ces masques (pas d'int()/round() ici), mais NaN se propageait silencieusement dans le
+        # masque puis l'image finale (pixels corrompus, sans erreur visible) — corrigé via _finite.
+        img = np.random.rand(50, 50, 3).astype(np.float32)
+        m = build_mask({"type": "linear",
+                        "params": {"x0": float("nan"), "y0": 0.2, "x1": 0.5, "y1": 0.8}}, 50, 50)
+        assert np.isfinite(m).all()
+        m = build_mask({"type": "radial",
+                        "params": {"cx": float("nan"), "cy": 0.5, "rx": 0.3, "ry": 0.3}}, 50, 50)
+        assert np.isfinite(m).all()
+        m = build_mask({"type": "lumrange", "params": {"lo": float("nan"), "hi": 0.6}}, 50, 50, img)
+        assert np.isfinite(m).all()
+        m = build_mask({"type": "colorrange", "params": {"hue": float("nan"), "range": 30}}, 50, 50, img)
+        assert np.isfinite(m).all()
 
     def test_unknown_type(self):
         assert build_mask({"type": "nope", "params": {}}, 10, 10) is None

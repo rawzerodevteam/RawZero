@@ -137,11 +137,14 @@ export function normalizeEvent(ev: KeyboardEvent | React.KeyboardEvent): string 
   const k = ev.key;
   if (k === "Control" || k === "Shift" || k === "Alt" || k === "Meta") return "";
   const main = k === " " ? "space" : k.toLowerCase();
-  // Maj implicite sur la ponctuation (ex. « ? » nécessite Maj sur bien des claviers) → ignorée.
-  const isPunct = k.length === 1 && !/[a-z0-9]/i.test(k);
+  // Maj implicite ignorée sur ponctuation ET chiffres : sur AZERTY (et layouts similaires), la
+  // rangée de chiffres ne produit un chiffre qu'avec Maj (ex. touche "1" physique → "&" sans Maj,
+  // "1" avec Maj) — sans ce garde, aucune combinaison physique ne matcherait les raccourcis par
+  // défaut note-0..5/couleur-6..9 sur ces claviers. Les lettres gardent Maj (ex. Ctrl+Maj+C).
+  const isPunctOrDigit = k.length === 1 && !/[a-z]/i.test(k);
   const parts: string[] = [];
   if (ev.ctrlKey || ev.metaKey) parts.push("ctrl");
-  if (ev.shiftKey && !isPunct && main !== "space") parts.push("shift");
+  if (ev.shiftKey && !isPunctOrDigit && main !== "space") parts.push("shift");
   if (ev.altKey) parts.push("alt");
   parts.push(main);
   return parts.join("+");

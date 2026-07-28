@@ -52,7 +52,9 @@ HSL_BANDS = [("red", 0.0), ("orange", 30.0), ("yellow", 60.0), ("green", 120.0),
 def merge_edits(edits: Optional[dict]) -> dict:
     """Fusion récursive avec les valeurs par défaut (tolère un état partiel)."""
     def merge(default: Any, value: Any) -> Any:
-        if isinstance(default, dict) and isinstance(value, dict):
+        if isinstance(default, dict):
+            if not isinstance(value, dict):
+                return default
             return {k: merge(v, value.get(k, v)) for k, v in default.items()}
         return value if value is not None else default
 

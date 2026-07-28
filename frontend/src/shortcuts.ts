@@ -90,8 +90,12 @@ function dispatch(action: string, s: ReturnType<typeof useStore.getState>, ev: K
     case "export": ev.preventDefault(); s.setUI({ showExport: true }); return;
     case "remove":
       if (s.currentId !== null) {
+        // Fige la photo visée au moment de la demande (pas à la résolution) : cf. store.ts
+        // removeCurrent, un 2e Suppr avant fermeture du 1er dialogue ne doit pas dériver vers
+        // la photo suivante si currentId a déjà avancé pendant la 1ʳᵉ suppression.
+        const id = s.currentId;
         void confirmDialog(i18n.t("shortcuts.confirmRemoveCurrent"), { danger: true })
-          .then((ok) => { if (ok) void s.removeCurrent(false); });
+          .then((ok) => { if (ok) void s.removeCurrent(false, id); });
       }
       return;
     case "help": s.setUI({ showHelp: !s.showHelp }); return;

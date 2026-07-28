@@ -255,3 +255,13 @@ def point_mask(img: np.ndarray, x: float, y: float, cache_key: str = "") -> np.n
 def geo_key(photo_id: int, geometry: dict) -> str:
     h = hashlib.sha1(json.dumps(geometry, sort_keys=True).encode()).hexdigest()[:12]
     return f"{photo_id}:{h}"
+
+
+def invalidate(photo_id: int) -> None:
+    """Purge l'embedding EdgeSAM en cache pour cette photo (toutes géométries confondues).
+
+    `_emb_cache` est clé par (photo_id, géométrie) via `geo_key`, pas par le contenu du fichier :
+    si l'original est relié à un nouveau fichier (`relink`) sans changement de géométrie, un clic
+    masque IA suivant réutiliserait sinon l'embedding calculé sur l'ANCIEN contenu de l'image."""
+    for k in [k for k in _emb_cache if k.startswith(f"{photo_id}:")]:
+        _emb_cache.pop(k, None)

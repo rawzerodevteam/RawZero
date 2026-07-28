@@ -6,12 +6,22 @@ type DialogRequest =
   | { kind: "confirm"; message: string; danger?: boolean; resolve: (v: boolean) => void }
   | { kind: "prompt"; message: string; defaultValue: string; resolve: (v: string | null) => void };
 
-let current: DialogRequest | null = null;
+// File d'attente (pas un simple slot) : un raccourci clavier peut redéclencher confirmDialog/
+// promptDialog pendant qu'un dialogue est déjà affiché (ex. Suppr appuyé deux fois vite). Avec un
+// slot unique, la 2e requête écrasait la 1ʳᵉ sans jamais résoudre sa promesse → l'appelant restait
+// bloqué indéfiniment sur `await` (ex. PresetsPanel::saveCurrent qui ne créait alors jamais le
+// preset, sans erreur visible). Les requêtes en attente sont désormais traitées dans l'ordre.
+const queue: DialogRequest[] = [];
 let setter: ((r: DialogRequest | null) => void) | null = null;
 
 function push(req: DialogRequest) {
-  current = req;
-  setter?.(req);
+  queue.push(req);
+  if (queue.length === 1) setter?.(req);
+}
+
+function advance() {
+  queue.shift();
+  setter?.(queue[0] ?? null);
 }
 
 /** Remplace `window.confirm` par un dialogue thématisé (cf. audit UX §1.1). Utilisable partout,
@@ -28,9 +38,9 @@ export function promptDialog(message: string, defaultValue = ""): Promise<string
 /** Monté une seule fois (App.tsx) : affiche le dialogue courant, s'il y en a un. */
 export function DialogHost() {
   const { t } = useTranslation();
-  const [req, setReq] = useState<DialogRequest | null>(current);
+  const [req, setReq] = useState<DialogRequest | null>(queue[0] ?? null);
   const [value, setValue] = useState("");
-  const trapRef = useFocusTrap<HTMLDivElement>(req !== null);
+  const trapRef = useFocusTrap<HTMLDivElement>(req);
 
   useEffect(() => {
     setter = setReq;
@@ -47,8 +57,7 @@ export function DialogHost() {
   const finish = (result: boolean | string | null) => {
     if (req.kind === "confirm") req.resolve(result as boolean);
     else req.resolve(result as string | null);
-    current = null;
-    setReq(null);
+    advance();
   };
   const confirmValue = () => (req.kind === "confirm" ? true : (value.trim() ? value.trim() : null));
 

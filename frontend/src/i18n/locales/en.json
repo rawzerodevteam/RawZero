@@ -517,7 +517,8 @@
     "reset": "Settings reset",
     "copied": "Settings copied",
     "pasted": "Settings pasted",
-    "saveFailed": "Save failed: {{error}}"
+    "saveFailed": "Save failed: {{error}}",
+    "deleteFailed": "Delete failed: {{error}}"
   },
   "models": {
     "button": "AI models",

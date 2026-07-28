@@ -139,6 +139,23 @@ describe("undo / redo", () => {
     s.undo();
     expect(useStore.getState().edits!.tone.exposure).toBe(0); // retour à l'état d'avant le drag
   });
+
+  it("Ctrl+Z pendant un drag en cours est ignoré (ne corrompt pas dragBaseline)", () => {
+    // cf. TODO.md : annuler pendant un drag de poignée de masque/crop désynchronisait
+    // dragBaseline de edits, et le geste ne posait ensuite plus aucun point d'historique.
+    const s = useStore.getState();
+    s.updateEdits((e) => { e.tone.exposure = 1; }); // état antérieur, dans undoStack
+    s.startDrag(); // ex. drag d'une poignée de masque en cours
+    s.updateEdits((e) => { e.tone.contrast = 10; });
+    s.undo(); // devrait être un no-op tant que le drag est en cours
+    expect(useStore.getState().edits!.tone.exposure).toBe(1); // pas rétabli
+    expect(useStore.getState().edits!.tone.contrast).toBe(10); // pas annulé
+    expect(useStore.getState().dragBaseline).not.toBeNull(); // toujours intact
+    s.endDrag();
+    expect(useStore.getState().undoStack).toHaveLength(2); // le drag a bien posé son point
+    s.undo();
+    expect(useStore.getState().edits!.tone.contrast).toBe(0); // undo fonctionne à nouveau après endDrag
+  });
 });
 
 describe("copier / coller / reset", () => {
@@ -253,6 +270,24 @@ describe("sauvegarde différée", () => {
     await useStore.getState().saveNow();
     expect(api.saveEdits).not.toHaveBeenCalled();
   });
+
+  it("setProject flushe une édition en attente avant de perdre currentId (pas de perte silencieuse)", async () => {
+    // cf. TODO.md : une édition modifiée puis un changement de projet avant les 800 ms de
+    // debounce faisait échouer silencieusement le save différé (currentId déjà à null).
+    useStore.setState({ currentId: 1, edits: defaultEdits(), photos: [photo(1)] });
+    useStore.getState().updateEdits((e) => { e.tone.exposure = 1; });
+    expect(api.saveEdits).not.toHaveBeenCalled();
+    await useStore.getState().setProject(2);
+    expect(api.saveEdits).toHaveBeenCalledWith(1, expect.objectContaining({ tone: expect.objectContaining({ exposure: 1 }) }), expect.anything());
+    expect(useStore.getState().currentId).toBe(null);
+  });
+
+  it("setAlbum flushe une édition en attente avant de perdre currentId", async () => {
+    useStore.setState({ currentId: 1, edits: defaultEdits(), photos: [photo(1)] });
+    useStore.getState().updateEdits((e) => { e.tone.contrast = 20; });
+    await useStore.getState().setAlbum(5);
+    expect(api.saveEdits).toHaveBeenCalledWith(1, expect.objectContaining({ tone: expect.objectContaining({ contrast: 20 }) }), expect.anything());
+  });
 });
 
 describe("suppression", () => {
@@ -269,6 +304,32 @@ describe("suppression", () => {
     await useStore.getState().removeCurrent(false);
     expect(useStore.getState().currentId).toBe(null);
     expect(useStore.getState().view).toBe("grid");
+  });
+
+  it("un 2e Suppr rapproché sur la même photo ne déclenche pas un 2e DELETE (déjà en cours)", async () => {
+    // cf. TODO.md : deux confirmations rapprochées (file de dialogues) ne doivent pas doubler
+    // la suppression de la même photo pendant que la 1ʳᵉ requête est encore en vol.
+    let resolveDelete!: () => void;
+    (api.deletePhoto as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      new Promise<void>((res) => { resolveDelete = res; }),
+    );
+    useStore.setState({ photos: [photo(1), photo(2)], currentId: 1 });
+    const first = useStore.getState().removeCurrent(false, 1);
+    const second = useStore.getState().removeCurrent(false, 1); // dialogue 2, même photo, en vol
+    resolveDelete();
+    await Promise.all([first, second]);
+    expect(api.deletePhoto).toHaveBeenCalledTimes(1);
+  });
+
+  it("removeCurrent(id figé) ne dérive pas vers la photo suivante si currentId a déjà avancé", async () => {
+    // cf. TODO.md : le 2e dialogue en file vise la photo confirmée AU MOMENT DE LA DEMANDE,
+    // pas celle devenue courante entre-temps.
+    useStore.setState({ photos: [photo(1), photo(2), photo(3)], currentId: 1 });
+    await useStore.getState().removeCurrent(false, 1); // 1ʳᵉ suppression déjà résolue, currentId → 2
+    expect(useStore.getState().currentId).toBe(2);
+    await useStore.getState().removeCurrent(false, 1); // id figé obsolète : photo déjà absente, no-op
+    expect(api.deletePhoto).toHaveBeenCalledTimes(1);
+    expect(useStore.getState().photos.map((p) => p.id)).toEqual([2, 3]);
   });
 });
 

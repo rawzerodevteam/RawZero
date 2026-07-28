@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 /// Process Python en cours (sidecar). Tué explicitement à la fermeture de l'app.
 struct Sidecar(Mutex<Option<Child>>);
@@ -113,6 +114,23 @@ pub fn run() {
 
             if !wait_for_port(port, Duration::from_secs(20)) {
                 log::error!("Le sidecar backend n'a pas répondu sur le port {port} dans le délai imparti");
+                // Ne pas ouvrir une webview pointée sur un serveur mort en silence (l'utilisateur
+                // verrait juste une page blanche/erreur réseau sans explication) : le processus
+                // sidecar orphelin est tué, un message natif explique le problème, puis on quitte.
+                if let Some(state) = app.try_state::<Sidecar>() {
+                    if let Some(mut child) = state.0.lock().unwrap().take() {
+                        let _ = child.kill();
+                    }
+                }
+                app.dialog()
+                    .message(
+                        "Le serveur RawZero n'a pas démarré à temps. Vérifiez qu'aucune autre \
+                         instance ne tourne déjà, puis relancez l'application.",
+                    )
+                    .kind(MessageDialogKind::Error)
+                    .title("RawZero — échec du démarrage")
+                    .blocking_show();
+                std::process::exit(1);
             }
 
             let url = format!("http://127.0.0.1:{port}/").parse().unwrap();

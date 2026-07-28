@@ -11,6 +11,17 @@ import numpy as np
 from . import config
 
 
+def _finite(v, default: float = 0.0) -> float:
+    """Coerce en float fini : une valeur NaN/Infinity dans des edits corrompus (bug amont, edition
+    manuelle de la DB…) ferait planter `int(round(...))` en aval (ValueError/OverflowError) et
+    rendrait la photo définitivement impossible à développer/exporter (500) sans recours en UI."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return default
+    return f if np.isfinite(f) else default
+
+
 def _grid(h: int, w: int) -> tuple[np.ndarray, np.ndarray]:
     y, x = np.mgrid[0:h, 0:w].astype(np.float32)
     return x / max(w - 1, 1), y / max(h - 1, 1)
@@ -29,11 +40,11 @@ def _lumrange_mask(params: dict, img: Optional[np.ndarray]) -> Optional[np.ndarr
     """Masque par plage de luminance : 1 dans [lo, hi], adouci de `smooth` aux bords."""
     if img is None:
         return None
-    lo = float(np.clip(params.get("lo", 0.25), 0.0, 1.0))
-    hi = float(np.clip(params.get("hi", 0.75), 0.0, 1.0))
+    lo = float(np.clip(_finite(params.get("lo", 0.25), 0.25), 0.0, 1.0))
+    hi = float(np.clip(_finite(params.get("hi", 0.75), 0.75), 0.0, 1.0))
     if hi < lo:
         lo, hi = hi, lo
-    sm = float(np.clip(params.get("smooth", 0.1), 1e-3, 0.5))
+    sm = float(np.clip(_finite(params.get("smooth", 0.1), 0.1), 1e-3, 0.5))
     l = _luma(img)
     m = _smoothstep(lo - sm, lo, l) * (1.0 - _smoothstep(hi, hi + sm, l))
     return m.astype(np.float32)
@@ -44,10 +55,10 @@ def _colorrange_mask(params: dict, img: Optional[np.ndarray]) -> Optional[np.nda
     pondérée par la saturation (au-dessus de `sat_min`)."""
     if img is None:
         return None
-    hue = float(params.get("hue", 0.0))
-    rng = float(max(params.get("range", 30.0), 0.0))
-    sm = float(max(params.get("smooth", 15.0), 1e-3))
-    sat_min = float(max(params.get("sat_min", 0.15), 1e-3))
+    hue = _finite(params.get("hue", 0.0), 0.0)
+    rng = max(_finite(params.get("range", 30.0), 30.0), 0.0)
+    sm = max(_finite(params.get("smooth", 15.0), 15.0), 1e-3)
+    sat_min = max(_finite(params.get("sat_min", 0.15), 0.15), 1e-3)
     hsv = cv2.cvtColor(np.clip(img, 0.0, 1.0), cv2.COLOR_RGB2HSV)
     h, s = hsv[..., 0], hsv[..., 1]
     hd = np.abs(((h - hue) + 180.0) % 360.0 - 180.0)
@@ -58,8 +69,8 @@ def _colorrange_mask(params: dict, img: Optional[np.ndarray]) -> Optional[np.nda
 
 def _linear_mask(params: dict, h: int, w: int) -> np.ndarray:
     """Dégradé : 1 du côté du point de départ, 0 après le point d'arrivée."""
-    x0, y0 = float(params.get("x0", 0.5)), float(params.get("y0", 0.2))
-    x1, y1 = float(params.get("x1", 0.5)), float(params.get("y1", 0.8))
+    x0, y0 = _finite(params.get("x0", 0.5), 0.5), _finite(params.get("y0", 0.2), 0.2)
+    x1, y1 = _finite(params.get("x1", 0.5), 0.5), _finite(params.get("y1", 0.8), 0.8)
     dx, dy = x1 - x0, y1 - y0
     norm2 = dx * dx + dy * dy
     if norm2 < 1e-8:
@@ -70,11 +81,11 @@ def _linear_mask(params: dict, h: int, w: int) -> np.ndarray:
 
 
 def _radial_mask(params: dict, h: int, w: int) -> np.ndarray:
-    cx, cy = float(params.get("cx", 0.5)), float(params.get("cy", 0.5))
-    rx = max(float(params.get("rx", 0.25)), 1e-3)
-    ry = max(float(params.get("ry", 0.25)), 1e-3)
-    angle = float(params.get("angle", 0.0)) * np.pi / 180.0
-    feather = float(np.clip(params.get("feather", 0.5), 0.0, 1.0))
+    cx, cy = _finite(params.get("cx", 0.5), 0.5), _finite(params.get("cy", 0.5), 0.5)
+    rx = max(_finite(params.get("rx", 0.25), 0.25), 1e-3)
+    ry = max(_finite(params.get("ry", 0.25), 0.25), 1e-3)
+    angle = _finite(params.get("angle", 0.0), 0.0) * np.pi / 180.0
+    feather = float(np.clip(_finite(params.get("feather", 0.5), 0.5), 0.0, 1.0))
     gx, gy = _grid(h, w)
     # espace isotrope (corrige l'aspect) puis rotation de l'ellipse
     ar = w / max(h, 1)
@@ -96,10 +107,11 @@ def _brush_mask(params: dict, h: int, w: int) -> np.ndarray:
         pts = stroke.get("points") or []
         if not pts:
             continue
-        radius = max(float(stroke.get("size", 0.05)) * long_edge * 0.5, 1.0)
+        radius = max(_finite(stroke.get("size", 0.05), 0.05) * long_edge * 0.5, 1.0)
         max_radius = max(max_radius, radius)
         value = 0.0 if stroke.get("erase") else 1.0
-        px = [(int(round(float(p[0]) * (w - 1))), int(round(float(p[1]) * (h - 1)))) for p in pts]
+        px = [(int(round(np.clip(_finite(p[0]), 0.0, 1.0) * (w - 1))),
+               int(round(np.clip(_finite(p[1]), 0.0, 1.0) * (h - 1)))) for p in pts]
         r = int(round(radius))
         if len(px) == 1:
             cv2.circle(mask, px[0], r, value, -1, lineType=cv2.LINE_AA)

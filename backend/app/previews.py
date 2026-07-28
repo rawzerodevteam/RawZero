@@ -18,7 +18,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from . import config, db, denoise, pipeline, raw_loader
+from . import config, db, denoise, pipeline, raw_loader, segment
 
 log = logging.getLogger(__name__)
 executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rawzero-bg")
@@ -279,6 +279,7 @@ def invalidate(photo_id: int) -> None:
     mask_dir = config.MASKS_DIR / str(photo_id)
     if mask_dir.exists():
         shutil.rmtree(mask_dir, ignore_errors=True)
+    segment.invalidate(photo_id)
 
 
 def full_long_edge(row: dict) -> int:
@@ -287,6 +288,8 @@ def full_long_edge(row: dict) -> int:
 
 _refresh_pending: "set[int]" = set()
 _refresh_guard = threading.Lock()
+_refresh_seq: "dict[int, int]" = {}          # dernier n° de job démarré, par photo
+_refresh_written: "dict[int, int]" = {}      # n° du dernier job ayant réellement écrit sur disque
 
 
 def schedule_preview_refresh(photo_id: int) -> None:
@@ -306,8 +309,15 @@ def schedule_preview_refresh(photo_id: int) -> None:
 def _refresh_previews_job(photo_id: int) -> None:
     # Libérer le drapeau au démarrage : toute sauvegarde survenant après ce point
     # (donc avec des edits potentiellement plus récents) réenfilera son propre job.
+    # `executor` a 2 workers : un job de coalescence libéré tôt peut donc s'exécuter en
+    # parallèle du suivant. Le job le plus récemment démarré a forcément lu des edits au
+    # moins aussi frais (la DB est écrite avant `schedule_preview_refresh`) ; un n° de
+    # séquence par photo garantit qu'un job plus ancien qui finirait après ne peut jamais
+    # écraser sur disque le résultat d'un job plus récent déjà écrit.
     with _refresh_guard:
         _refresh_pending.discard(photo_id)
+        my_seq = _refresh_seq.get(photo_id, 0) + 1
+        _refresh_seq[photo_id] = my_seq
     try:
         row = db.query_one("SELECT * FROM photos WHERE id=?", (photo_id,))
         if row is None:
@@ -320,6 +330,10 @@ def _refresh_previews_job(photo_id: int) -> None:
         base = get_base(photo_id, original)
         rendered = pipeline.render_array(base, edits, config.PREVIEW_SIZE,
                                          full_long_edge(dict(row)), seed=photo_id)
+        with _refresh_guard:
+            if my_seq < _refresh_written.get(photo_id, 0):
+                return  # un job démarré après celui-ci a déjà écrit un résultat plus frais
+            _refresh_written[photo_id] = my_seq
         _save_jpeg_u8(rendered, preview_path(photo_id), 88)
         _save_jpeg_u8(_resize_long_edge(rendered, config.THUMB_SIZE), thumb_path(photo_id), 82)
     except Exception as e:

@@ -517,7 +517,8 @@
     "reset": "Réglages réinitialisés",
     "copied": "Réglages copiés",
     "pasted": "Réglages collés",
-    "saveFailed": "Sauvegarde impossible : {{error}}"
+    "saveFailed": "Sauvegarde impossible : {{error}}",
+    "deleteFailed": "Suppression impossible : {{error}}"
   },
   "models": {
     "button": "Modèles IA",

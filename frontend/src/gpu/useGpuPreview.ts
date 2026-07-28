@@ -67,7 +67,7 @@ export function useGpuPreview(
     } catch (e) {
       ctxFailed.current = true; setError(String(e));
     }
-    return () => { pipeRef.current = null; };
+    return () => { pipeRef.current?.dispose(); pipeRef.current = null; };
   }, [active, canvasRef]);
 
   // (Re)chargement de la base neutre (annulable) à l'activation / au changement de photo

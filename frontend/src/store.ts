@@ -55,6 +55,12 @@ export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "wb" | "poi
 
 let saveTimer: number | undefined;
 
+// Suppressions en cours (par id) : empêche une double confirmation rapprochée (deux Suppr avant
+// que la 1ʳᵉ boîte de dialogue ne se ferme, cf. la file de `dialog.tsx`) de déclencher un second
+// DELETE pour la même photo, ou — pire — de supprimer la photo suivante si `currentId` a déjà
+// avancé pendant que la 1ʳᵉ suppression était encore en vol.
+const removingIds = new Set<number>();
+
 // Coalescing des mises à jour « live » d'un drag de slider sur une frame d'animation.
 // onChange d'un <input range> peut tirer plusieurs fois par frame (souris haute fréquence) ;
 // chaque appel ferait un structuredClone(edits) + set Zustand → re-rendu de TOUS les panneaux.
@@ -178,7 +184,7 @@ interface Store {
   setFlag(flag: "none" | "pick" | "reject"): void;
   setColor(color: string): void;
   patchSelection(patch: Partial<Pick<Photo, "rating" | "flag" | "color">>): void;
-  removeCurrent(deleteFile: boolean): Promise<void>;
+  removeCurrent(deleteFile: boolean, targetId?: number): Promise<void>;
   removeSelection(deleteFile: boolean): Promise<void>;
   openRelink(id: number): void;
   closeRelink(): void;
@@ -316,6 +322,7 @@ export const useStore = create<Store>((set, get) => ({
 
   async setProject(id) {
     if (id === get().currentProjectId && get().currentAlbumId === null) return;
+    await get().saveNow(); // flush toute édition en attente (débounce 800 ms) avant de perdre currentId
     set({
       currentProjectId: id, currentAlbumId: null, currentId: null, selection: [], view: "grid",
       filters: { ...get().filters, camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "" },
@@ -335,8 +342,9 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   async deleteProject(id) {
-    await api.deleteProject(id);
     const wasCurrent = get().currentProjectId === id;
+    if (wasCurrent) await get().saveNow(); // flush avant de perdre currentId (cf. setProject)
+    await api.deleteProject(id);
     await get().loadProjects();
     if (wasCurrent) {
       const next = get().projects[0]?.id ?? null;
@@ -369,6 +377,7 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   async setAlbum(id) {
+    await get().saveNow(); // cf. setProject : ne pas perdre une édition en attente
     set({
       currentAlbumId: id, currentId: null, selection: [], view: "grid",
       filters: { ...get().filters, camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "" },
@@ -556,14 +565,32 @@ export const useStore = create<Store>((set, get) => ({
     void get().loadAlbums();   // les photos retirées quittent aussi leurs albums (cascade)
   },
 
-  async removeCurrent(deleteFile) {
-    const { currentId, photos } = get();
-    if (currentId === null) return;
-    const idx = photos.findIndex((p) => p.id === currentId);
-    await api.deletePhoto(currentId, deleteFile);
-    const rest = photos.filter((p) => p.id !== currentId);
-    set({ photos: rest, currentId: rest.length ? rest[Math.min(idx, rest.length - 1)].id : null });
-    if (!rest.length) set({ view: "grid" });
+  async removeCurrent(deleteFile, targetId) {
+    // `targetId` fige la photo visée au moment où la confirmation a été DEMANDÉE (cf. shortcuts.ts)
+    // plutôt que de relire `currentId` à la résolution : sinon, deux Suppr rapprochés (2e dialogue
+    // en file pendant que la 1ʳᵉ suppression est encore en vol) pourraient viser la photo suivante
+    // une fois `currentId` déjà avancé, sans que l'utilisateur l'ait distinctement confirmé.
+    const id = targetId ?? get().currentId;
+    if (id === null) return;
+    if (removingIds.has(id)) return; // déjà en cours (double confirmation) : no-op
+    const { photos } = get();
+    if (!photos.some((p) => p.id === id)) return; // déjà supprimée entre-temps
+    removingIds.add(id);
+    try {
+      const idx = photos.findIndex((p) => p.id === id);
+      await api.deletePhoto(id, deleteFile);
+      const rest = get().photos.filter((p) => p.id !== id);
+      const patch: Partial<Store> = { photos: rest };
+      if (get().currentId === id) {
+        patch.currentId = rest.length ? rest[Math.min(idx, rest.length - 1)].id : null;
+        if (!rest.length) patch.view = "grid";
+      }
+      set(patch);
+    } catch (e) {
+      get().notify(i18n.t("notify.deleteFailed", { error: String(e) }), "error");
+    } finally {
+      removingIds.delete(id);
+    }
   },
 
   openRelink(id) { set({ relinkTargetId: id }); },
@@ -680,7 +707,13 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   undo() {
-    const { undoStack, undoLabels, edits, currentLabel } = get();
+    const { undoStack, undoLabels, edits, currentLabel, dragBaseline } = get();
+    // Un drag en cours (poignée de masque, crop, slider) possède déjà son propre point
+    // d'historique en attente (posé par endDrag au relâchement) : annuler pendant ce drag
+    // désynchroniserait `dragBaseline` de `edits` (la suite du geste continuerait de muter
+    // l'état par-dessus l'ancien edits rétabli) et le geste ne serait jamais réconcilié avec la
+    // pile d'annulation. On ignore silencieusement Ctrl+Z tant qu'un drag est en cours.
+    if (dragBaseline) return;
     if (!undoStack.length || !edits) return;
     set({
       edits: undoStack[undoStack.length - 1],
@@ -696,7 +729,8 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   redo() {
-    const { redoStack, redoLabels, edits, currentLabel } = get();
+    const { redoStack, redoLabels, edits, currentLabel, dragBaseline } = get();
+    if (dragBaseline) return; // cf. undo() : ne pas interférer avec un drag en cours
     if (!redoStack.length || !edits) return;
     set({
       edits: redoStack[redoStack.length - 1],
