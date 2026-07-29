@@ -34,6 +34,7 @@
       "crop": "Outil recadrage",
       "maskOverlay": "Afficher le masque local",
       "info": "Infos EXIF",
+      "fullscreen": "Plein écran (masquer les panneaux)",
       "undo": "Annuler",
       "redo": "Rétablir",
       "copy": "Copier les réglages",
@@ -471,6 +472,8 @@
     "diffLabel": "Écart GPU ↔ Python…",
     "positionOf": "{{n}} sur {{total}}",
     "togglePanelsTitle": "Afficher/masquer les panneaux",
+    "fullScreenTitle": "Plein écran (masquer toolbar/panneaux/filmstrip)",
+    "exitFullScreen": "Quitter le plein écran",
     "viewerHint": "Molette : zoom · Espace + glisser : déplacer · Z : ajusté ↔ 100 %"
   },
   "crop": {

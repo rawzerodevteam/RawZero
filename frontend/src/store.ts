@@ -136,6 +136,7 @@ interface Store {
   showModels: boolean;            // dialog « Modèles IA » (téléchargement à la demande)
   showAlbums: boolean;            // panneau latéral Collections (grille)
   panelsCollapsed: boolean;       // colonne de panneaux droite masquée (développement, écrans étroits)
+  fullScreen: boolean;            // mode plein écran développement (masque toolbar/panneaux/filmstrip)
   relinkTargetId: number | null;  // id de la photo en cours de reliage (dialog « Relier »)
   activeTool: Tool;
   selectedLocalId: string | null;
@@ -213,7 +214,7 @@ interface Store {
 
   setUI(p: Partial<Pick<Store, "beforeAfter" | "showClipping" | "showInfo" | "showHelp" |
     "showImport" | "showExport" | "showModels" | "showAlbums" | "activeTool" | "selectedLocalId" | "showMaskOverlay" |
-    "brushSize" | "brushErase" | "cropAspect" | "gridSize" | "panelsCollapsed">>): void;
+    "brushSize" | "brushErase" | "cropAspect" | "gridSize" | "panelsCollapsed" | "fullScreen">>): void;
   notify(msg: string, type?: ToastType, action?: { label: string; onClick: () => void }): void;
   dismissToast(id: number): void;
   markHintSeen(key: string): void;
@@ -260,6 +261,7 @@ export const useStore = create<Store>((set, get) => ({
   showModels: false,
   showAlbums: false,
   panelsCollapsed: localStorage.getItem("rs.panelsCollapsed") === "1",
+  fullScreen: false,
   relinkTargetId: null,
   activeTool: "none",
   selectedLocalId: null,

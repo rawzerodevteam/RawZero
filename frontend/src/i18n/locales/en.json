@@ -34,6 +34,7 @@
       "crop": "Crop tool",
       "maskOverlay": "Show local mask",
       "info": "EXIF info",
+      "fullscreen": "Full screen (hide panels)",
       "undo": "Undo",
       "redo": "Redo",
       "copy": "Copy settings",
@@ -471,6 +472,8 @@
     "diffLabel": "GPU ↔ Python diff…",
     "positionOf": "{{n}} of {{total}}",
     "togglePanelsTitle": "Show/hide panels",
+    "fullScreenTitle": "Full screen (hide toolbar/panels/filmstrip)",
+    "exitFullScreen": "Exit full screen",
     "viewerHint": "Wheel: zoom · Space + drag: pan · Z: fit ↔ 100%"
   },
   "crop": {

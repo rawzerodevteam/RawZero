@@ -107,6 +107,7 @@ export function DevelopView() {
   const resetEdits = useStore((s) => s.resetEdits);
   const openRelink = useStore((s) => s.openRelink);
   const panelsCollapsed = useStore((s) => s.panelsCollapsed);
+  const fullScreen = useStore((s) => s.fullScreen);
   const panelOrder = useStore((s) => s.panelOrder);
   const reorderPanels = useStore((s) => s.reorderPanels);
   const undo = useStore((s) => s.undo);
@@ -141,44 +142,48 @@ export function DevelopView() {
   const photoTotal = photos.length;
 
   return (
-    <div className="develop">
+    <div className={"develop" + (fullScreen ? " full-screen" : "")}>
       <div className="develop-main">
-        <div className="toolbar">
-          <button className="btn small brand-btn" title={t("project.homeTitle")} aria-label={t("project.homeTitle")} onClick={() => setView("home")}><img src={logoMark} alt="" className="brand-mark small" /></button>
-          <ModeTabs />
-          <span className="name">{photo.filename}</span>
-          {dirty && <span className="dim" title={t("develop.autosaving")}>●</span>}
-          {(photo.edited || dirty) && <span className="edited-chip" title={t("develop.editedTitle")}>{t("develop.edited")}</span>}
-          <span className="name-index">{photoIndex >= 0 ? t("develop.positionOf", { n: photoIndex + 1, total: photoTotal }) : ""}</span>
-          <span className="spacer" />
-          <StarRating small value={photo.rating} onChange={setRating} />
-          <button className={"btn small" + (beforeAfter ? " active" : "")}
-            title={t("develop.beforeAfterTitle")} onClick={() => setUI({ beforeAfter: !beforeAfter })}>
-            {beforeAfter ? t("develop.before") : t("develop.after")}
-          </button>
-          <button className={"btn small clip-toggle" + (showClipping ? " active" : "")}
-            title={t("develop.clippingTitle")} aria-label={t("develop.clippingTitle")} onClick={() => setUI({ showClipping: !showClipping })}>
-            <IconClipHigh size={11} /><IconClipLow size={11} />
-          </button>
-          <button className="btn small" title={t("develop.undoTitle")} aria-label={t("develop.undoTitle")} disabled={!canUndo} onClick={undo}><IconUndo size={14} /></button>
-          <button className="btn small" title={t("develop.redoTitle")} aria-label={t("develop.redoTitle")} disabled={!canRedo} onClick={redo}><IconRedo size={14} /></button>
-          <button className="btn small" title={t("develop.copyTitle")} onClick={copyEdits}><IconCopy size={14} /> <span className="btn-label">{t("develop.copy")}</span></button>
-          <button className="btn small" title={t("develop.pasteTitle")} onClick={pasteEdits}><IconPaste size={14} /> <span className="btn-label">{t("develop.paste")}</span></button>
-          <button className="btn small" title={t("develop.resetTitle")} aria-label={t("develop.resetTitle")} onClick={resetEdits}><IconReset size={14} /></button>
-          <AdvancedMenu
-            show={showAdvanced} setShow={setShowAdvanced}
-            gpuPreview={gpuPreview} setGpuPreview={setGpuPreview}
-            onDiff={() => { setShowDiff(true); setShowAdvanced(false); }}
-          />
-          <button className="btn small" title={t("develop.exportTitle")} aria-label={t("develop.exportTitle")} onClick={() => setUI({ showExport: true })}><IconExport size={14} /></button>
-          <button className={"btn small" + (panelsCollapsed ? " active" : "")}
-            title={t("develop.togglePanelsTitle")} aria-label={t("develop.togglePanelsTitle")}
-            onClick={() => setUI({ panelsCollapsed: !panelsCollapsed })}>
-            {panelsCollapsed ? "❮" : "❯"}
-          </button>
-          <button className="btn small" title={t("settings.title")} aria-label={t("settings.title")} onClick={() => setView("settings")}><IconSettings size={14} /></button>
-        </div>
-        {photo.missing && (
+        {!fullScreen && (
+          <div className="toolbar">
+            <button className="btn small brand-btn" title={t("project.homeTitle")} aria-label={t("project.homeTitle")} onClick={() => setView("home")}><img src={logoMark} alt="" className="brand-mark small" /></button>
+            <ModeTabs />
+            <span className="name">{photo.filename}</span>
+            {dirty && <span className="dim" title={t("develop.autosaving")}>●</span>}
+            {(photo.edited || dirty) && <span className="edited-chip" title={t("develop.editedTitle")}>{t("develop.edited")}</span>}
+            <span className="name-index">{photoIndex >= 0 ? t("develop.positionOf", { n: photoIndex + 1, total: photoTotal }) : ""}</span>
+            <span className="spacer" />
+            <StarRating small value={photo.rating} onChange={setRating} />
+            <button className={"btn small" + (beforeAfter ? " active" : "")}
+              title={t("develop.beforeAfterTitle")} onClick={() => setUI({ beforeAfter: !beforeAfter })}>
+              {beforeAfter ? t("develop.before") : t("develop.after")}
+            </button>
+            <button className={"btn small clip-toggle" + (showClipping ? " active" : "")}
+              title={t("develop.clippingTitle")} aria-label={t("develop.clippingTitle")} onClick={() => setUI({ showClipping: !showClipping })}>
+              <IconClipHigh size={11} /><IconClipLow size={11} />
+            </button>
+            <button className="btn small" title={t("develop.undoTitle")} aria-label={t("develop.undoTitle")} disabled={!canUndo} onClick={undo}><IconUndo size={14} /></button>
+            <button className="btn small" title={t("develop.redoTitle")} aria-label={t("develop.redoTitle")} disabled={!canRedo} onClick={redo}><IconRedo size={14} /></button>
+            <button className="btn small" title={t("develop.copyTitle")} onClick={copyEdits}><IconCopy size={14} /> <span className="btn-label">{t("develop.copy")}</span></button>
+            <button className="btn small" title={t("develop.pasteTitle")} onClick={pasteEdits}><IconPaste size={14} /> <span className="btn-label">{t("develop.paste")}</span></button>
+            <button className="btn small" title={t("develop.resetTitle")} aria-label={t("develop.resetTitle")} onClick={resetEdits}><IconReset size={14} /></button>
+            <AdvancedMenu
+              show={showAdvanced} setShow={setShowAdvanced}
+              gpuPreview={gpuPreview} setGpuPreview={setGpuPreview}
+              onDiff={() => { setShowDiff(true); setShowAdvanced(false); }}
+            />
+            <button className="btn small" title={t("develop.exportTitle")} aria-label={t("develop.exportTitle")} onClick={() => setUI({ showExport: true })}><IconExport size={14} /></button>
+            <button className={"btn small" + (panelsCollapsed ? " active" : "")}
+              title={t("develop.togglePanelsTitle")} aria-label={t("develop.togglePanelsTitle")}
+              onClick={() => setUI({ panelsCollapsed: !panelsCollapsed })}>
+              {panelsCollapsed ? "❮" : "❯"}
+            </button>
+            <button className="btn small" title={t("develop.fullScreenTitle")} aria-label={t("develop.fullScreenTitle")}
+              onClick={() => setUI({ fullScreen: true })}>⛶</button>
+            <button className="btn small" title={t("settings.title")} aria-label={t("settings.title")} onClick={() => setView("settings")}><IconSettings size={14} /></button>
+          </div>
+        )}
+        {!fullScreen && photo.missing && (
           <div className="missing-banner">
             <span>{t("relink.developBanner")}</span>
             <button className="btn small" onClick={() => openRelink(photo.id)}>{t("relink.action")}</button>
@@ -189,18 +194,26 @@ export function DevelopView() {
           {beforeAfter && <div className="before-badge">{t("develop.beforeBadge")}</div>}
           {showInfo && <ExifOverlay />}
           <CropBar />
-          <div className="viewer-coachmark">
-            <Coachmark hintKey="develop-viewer-controls" message={t("develop.viewerHint")} />
-          </div>
+          {!fullScreen && (
+            <div className="viewer-coachmark">
+              <Coachmark hintKey="develop-viewer-controls" message={t("develop.viewerHint")} />
+            </div>
+          )}
+          {fullScreen && (
+            <button className="btn small full-screen-exit" title={t("develop.exitFullScreen")}
+              aria-label={t("develop.exitFullScreen")} onClick={() => setUI({ fullScreen: false })}>⛶</button>
+          )}
         </div>
-        <Filmstrip />
+        {!fullScreen && <Filmstrip />}
       </div>
       {showDiff && <GpuDiffDialog onClose={() => setShowDiff(false)} />}
-      <aside className={"develop-panels" + (panelsCollapsed ? " collapsed" : "")}
-        onDragOver={onPanelDragOver} onDrop={onPanelDrop}>
-        <Histogram src={src} />
-        {panelDefs.map(({ key, Component }) => <Component key={key} />)}
-      </aside>
+      {!fullScreen && (
+        <aside className={"develop-panels" + (panelsCollapsed ? " collapsed" : "")}
+          onDragOver={onPanelDragOver} onDrop={onPanelDrop}>
+          <Histogram src={src} />
+          {panelDefs.map(({ key, Component }) => <Component key={key} />)}
+        </aside>
+      )}
     </div>
   );
 }

@@ -183,6 +183,26 @@ describe("bascules du mode développement", () => {
   });
 });
 
+describe("plein écran", () => {
+  it("F ne bascule qu'en développement, Échap le referme en priorité", () => {
+    press("f");
+    expect(useStore.getState().fullScreen).toBe(false);
+
+    useStore.setState({ view: "develop" });
+    press("f");
+    expect(useStore.getState().fullScreen).toBe(true);
+    press("Escape");
+    expect(useStore.getState().fullScreen).toBe(false);
+    expect(useStore.getState().view).toBe("develop"); // Échap ne fait que sortir du plein écran
+
+    press("f");
+    useStore.setState({ activeTool: "crop" });
+    press("Escape"); // plein écran prioritaire sur l'outil actif
+    expect(useStore.getState().fullScreen).toBe(false);
+    expect(useStore.getState().activeTool).toBe("crop");
+  });
+});
+
 describe("suppression", () => {
   it("Suppr demande confirmation avant de retirer", async () => {
     (confirmDialog as ReturnType<typeof vi.fn>).mockResolvedValueOnce(false);

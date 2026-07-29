@@ -38,6 +38,7 @@ export const ACTION_DEFS: ActionDef[] = [
   { id: "crop", label: "kb.action.crop", category: "kb.cat.develop", defaultKey: "r" },
   { id: "mask-overlay", label: "kb.action.maskOverlay", category: "kb.cat.develop", defaultKey: "o" },
   { id: "info", label: "kb.action.info", category: "kb.cat.develop", defaultKey: "i" },
+  { id: "fullscreen", label: "kb.action.fullscreen", category: "kb.cat.develop", defaultKey: "f" },
   { id: "select-all", label: "kb.action.selectAll", category: "kb.cat.nav", defaultKey: "ctrl+a" },
   { id: "undo", label: "kb.action.undo", category: "kb.cat.edit", defaultKey: "ctrl+z" },
   { id: "redo", label: "kb.action.redo", category: "kb.cat.edit", defaultKey: "ctrl+shift+z" },

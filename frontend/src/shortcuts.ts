@@ -73,6 +73,9 @@ function dispatch(action: string, s: ReturnType<typeof useStore.getState>, ev: K
       if (s.view === "develop") s.setUI({ showMaskOverlay: !s.showMaskOverlay });
       return;
     case "info": s.setUI({ showInfo: !s.showInfo }); return;
+    case "fullscreen":
+      if (s.view === "develop") s.setUI({ fullScreen: !s.fullScreen });
+      return;
     case "undo": ev.preventDefault(); s.undo(); return;
     case "redo": ev.preventDefault(); s.redo(); return;
     case "select-all": ev.preventDefault(); s.selectAll(); return;
@@ -121,6 +124,8 @@ export function handleGlobalKey(ev: KeyboardEvent) {
   if (ev.key === "Escape") {
     if (s.showHelp || s.showImport || s.showExport || s.showModels) {
       s.setUI({ showHelp: false, showImport: false, showExport: false, showModels: false });
+    } else if (s.fullScreen) {
+      s.setUI({ fullScreen: false });
     } else if (s.view === "settings") {
       s.setView("grid");
     } else if (s.activeTool !== "none") {
