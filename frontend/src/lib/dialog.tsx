@@ -40,7 +40,7 @@ export function DialogHost() {
   const { t } = useTranslation();
   const [req, setReq] = useState<DialogRequest | null>(queue[0] ?? null);
   const [value, setValue] = useState("");
-  const trapRef = useFocusTrap<HTMLDivElement>(req);
+  const trapRef = useFocusTrap<HTMLDivElement>(!!req, req);
 
   useEffect(() => {
     setter = setReq;

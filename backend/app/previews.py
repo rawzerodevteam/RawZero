@@ -289,7 +289,7 @@ def full_long_edge(row: dict) -> int:
 _refresh_pending: "set[int]" = set()
 _refresh_guard = threading.Lock()
 _refresh_seq: "dict[int, int]" = {}          # dernier n° de job démarré, par photo
-_refresh_written: "dict[int, int]" = {}      # n° du dernier job ayant réellement écrit sur disque
+_refresh_active: "dict[int, int]" = {}       # nb de jobs en vol par photo (purgé à 0, borne la mémoire)
 
 
 def schedule_preview_refresh(photo_id: int) -> None:
@@ -313,11 +313,13 @@ def _refresh_previews_job(photo_id: int) -> None:
     # parallèle du suivant. Le job le plus récemment démarré a forcément lu des edits au
     # moins aussi frais (la DB est écrite avant `schedule_preview_refresh`) ; un n° de
     # séquence par photo garantit qu'un job plus ancien qui finirait après ne peut jamais
-    # écraser sur disque le résultat d'un job plus récent déjà écrit.
+    # écraser sur disque le résultat d'un job plus récent : s'il n'est plus le dernier
+    # démarré (`_refresh_seq` a avancé), il s'efface silencieusement.
     with _refresh_guard:
         _refresh_pending.discard(photo_id)
         my_seq = _refresh_seq.get(photo_id, 0) + 1
         _refresh_seq[photo_id] = my_seq
+        _refresh_active[photo_id] = _refresh_active.get(photo_id, 0) + 1
     try:
         row = db.query_one("SELECT * FROM photos WHERE id=?", (photo_id,))
         if row is None:
@@ -331,13 +333,20 @@ def _refresh_previews_job(photo_id: int) -> None:
         rendered = pipeline.render_array(base, edits, config.PREVIEW_SIZE,
                                          full_long_edge(dict(row)), seed=photo_id)
         with _refresh_guard:
-            if my_seq < _refresh_written.get(photo_id, 0):
+            if my_seq != _refresh_seq.get(photo_id):
                 return  # un job démarré après celui-ci a déjà écrit un résultat plus frais
-            _refresh_written[photo_id] = my_seq
         _save_jpeg_u8(rendered, preview_path(photo_id), 88)
         _save_jpeg_u8(_resize_long_edge(rendered, config.THUMB_SIZE), thumb_path(photo_id), 82)
     except Exception as e:
         log.warning("Refresh preview #%s échoué : %s", photo_id, e)
+    finally:
+        with _refresh_guard:
+            n = _refresh_active.get(photo_id, 1) - 1
+            if n <= 0:
+                _refresh_active.pop(photo_id, None)
+                _refresh_seq.pop(photo_id, None)
+            else:
+                _refresh_active[photo_id] = n
 
 
 def placeholder_jpeg() -> bytes:

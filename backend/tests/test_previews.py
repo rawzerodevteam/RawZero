@@ -11,8 +11,12 @@ def test_stale_refresh_job_does_not_clobber_fresher_write(monkeypatch, tmp_path)
 
     monkeypatch.setattr(previews, "_save_jpeg_u8", lambda arr, path, quality=86: written.append(path))
     monkeypatch.setattr(previews, "get_base", lambda pid, original: np.zeros((4, 4, 3), np.float32))
-    monkeypatch.setattr(previews.pipeline, "render_array",
-                        lambda base, edits, size, long_edge, seed=None: base)
+
+    def render_and_supersede(base, edits, size, long_edge, seed=None):
+        # Simule un 2e job démarrant (et avançant `_refresh_seq`) pendant que celui-ci rend.
+        previews._refresh_seq[photo_id] = previews._refresh_seq.get(photo_id, 0) + 1
+        return base
+    monkeypatch.setattr(previews.pipeline, "render_array", render_and_supersede)
     monkeypatch.setattr(previews, "full_long_edge", lambda row: 100)
 
     src = tmp_path / "orig.jpg"
@@ -20,18 +24,13 @@ def test_stale_refresh_job_does_not_clobber_fresher_write(monkeypatch, tmp_path)
     row = {"path": str(src), "width": 100, "height": 100, "edits": "{}"}
     monkeypatch.setattr(previews.db, "query_one", lambda *a, **k: row)
 
-    # Simule : un job plus récent (seq 2) a déjà écrit sur disque avant que ce job-ci
-    # (seq 1, parti avec des edits plus anciens mais fini en dernier) ne termine son rendu.
-    previews._refresh_seq[photo_id] = 0
-    previews._refresh_written[photo_id] = 2
+    previews._refresh_previews_job(photo_id)
 
-    previews._refresh_previews_job(photo_id)  # assigne seq=1 en interne
-
-    assert written == [], "un job périmé (seq 1) n'aurait pas dû écrire après un job plus récent (seq 2)"
-    assert previews._refresh_written[photo_id] == 2  # inchangé
+    assert written == [], "un job périmé n'aurait pas dû écrire après qu'un job plus récent a démarré"
+    assert photo_id not in previews._refresh_seq  # purgé : plus aucun job actif pour cette photo
 
 
-def test_fresh_refresh_job_writes_and_bumps_written_seq(monkeypatch, tmp_path):
+def test_fresh_refresh_job_writes_and_purges_seq(monkeypatch, tmp_path):
     photo_id = 999002
     written = []
 
@@ -46,13 +45,10 @@ def test_fresh_refresh_job_writes_and_bumps_written_seq(monkeypatch, tmp_path):
     row = {"path": str(src), "width": 100, "height": 100, "edits": "{}"}
     monkeypatch.setattr(previews.db, "query_one", lambda *a, **k: row)
 
-    previews._refresh_seq[photo_id] = 0
-    previews._refresh_written[photo_id] = 0
-
-    previews._refresh_previews_job(photo_id)  # assigne seq=1, aucun job plus récent connu
+    previews._refresh_previews_job(photo_id)  # aucun job concurrent : écrit normalement
 
     assert len(written) == 2  # preview + thumb
-    assert previews._refresh_written[photo_id] == 1
+    assert photo_id not in previews._refresh_seq  # plus aucun job actif : bookkeeping purgé
 
 
 def test_invalidate_purges_stale_click_mask_embedding(monkeypatch, tmp_path):

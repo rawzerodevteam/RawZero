@@ -413,6 +413,7 @@ export class GpuPipeline {
   private denoiseLoaded = false;
   private curveTex: WebGLTexture;
   private brushTex = new Map<string, { tex: WebGLTexture; key: string }>(); // masque pinceau rasterisé, par id
+  private brushRawTex = new Map<string, WebGLTexture>(); // traits non floutés (source du flou GPU), par id
   private brushCanvas?: HTMLCanvasElement;
   private aiTex = new Map<string, { tex: WebGLTexture; ref: string; loaded: boolean }>(); // bitmap masque IA, par id
   /** Appelé quand un bitmap de masque IA fini de charger → demande un nouveau rendu. */
@@ -474,12 +475,22 @@ export class GpuPipeline {
     gl.deleteTexture(this.baseTex);
     gl.deleteTexture(this.curveTex);
     if (this.denoiseTex) gl.deleteTexture(this.denoiseTex);
-    for (const { tex } of this.brushTex.values()) gl.deleteTexture(tex);
-    this.brushTex.clear();
-    for (const { tex } of this.aiTex.values()) gl.deleteTexture(tex);
-    this.aiTex.clear();
+    this.clearMaskTextures();
     if (this.quadBuf) gl.deleteBuffer(this.quadBuf);
     this.quadBuf = null;
+  }
+
+  /** Détruit les textures des masques pinceau/IA (appelé au changement de photo et à `dispose`). */
+  private clearMaskTextures(): void {
+    const gl = this.gl;
+    // brushTex.tex n'est pas toujours possédé ici : avec feather>0 c'est la texture d'une RT du pool
+    // `this.rts` (nettoyée par `dispose` via ce pool) — ne la supprimer que via brushRawTex, sinon la
+    // RT partagerait un handle supprimé et casserait la réutilisation par clé au prochain flou.
+    this.brushTex.clear();
+    for (const tex of this.brushRawTex.values()) gl.deleteTexture(tex);
+    this.brushRawTex.clear();
+    for (const { tex } of this.aiTex.values()) gl.deleteTexture(tex);
+    this.aiTex.clear();
   }
 
   private link(vsrc: string, fsrc: string): WebGLProgram {
@@ -546,10 +557,7 @@ export class GpuPipeline {
     this.geoBase = { key: "", rt: null };     // la géométrie cachée appartenait à l'ancienne photo
     this.geoAI = { key: "", rt: null };
     this.denoiseLoaded = false;               // la base débruitée appartenait à l'ancienne photo
-    for (const { tex } of this.brushTex.values()) gl.deleteTexture(tex); // idem masques pinceau
-    this.brushTex.clear();
-    for (const { tex } of this.aiTex.values()) gl.deleteTexture(tex);    // idem bitmaps masques IA
-    this.aiTex.clear();
+    this.clearMaskTextures();                 // idem masques pinceau/IA
   }
 
   /** Base débruitée par IA (même résolution/orientation que la base) — chargée en lazy par
@@ -596,7 +604,10 @@ export class GpuPipeline {
   }
 
   /** Rasterise un masque pinceau (Canvas2D) → texture, mis en cache et régénéré quand les traits changent.
-   *  Reproduit masks._brush_mask : cercles/lignes par trait (effacement = noir), puis flou gaussien (feather). */
+   *  Reproduit masks._brush_mask : cercles/lignes par trait (effacement = noir), puis flou gaussien (feather).
+   *  Le flou passe par le même flou séparable GPU que le reste du pipeline (`this.blur`) plutôt que le
+   *  `filter: blur()` de Canvas2D — évite l'approximation dépendante du navigateur (parfois par boîtes
+   *  glissantes) et rapproche le rendu de `cv2.GaussianBlur` côté serveur. */
   private brushTexture(loc: LocalAdjust, W: number, H: number): WebGLTexture {
     const params = loc.params || {};
     const strokes: any[] = Array.isArray(params.strokes) ? params.strokes : [];
@@ -609,39 +620,38 @@ export class GpuPipeline {
     const cv = (this.brushCanvas ??= document.createElement("canvas"));
     cv.width = W; cv.height = H;
     const ctx = cv.getContext("2d")!;
-    ctx.filter = "none";
     ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
     const longEdge = Math.max(W, H);
     let maxRadius = 1;
-    // traits dessinés sur une couche, puis floutés en une fois
-    const tmp = document.createElement("canvas"); tmp.width = W; tmp.height = H;
-    const tc = tmp.getContext("2d")!;
-    tc.fillStyle = "#000"; tc.fillRect(0, 0, W, H);
-    tc.lineCap = "round"; tc.lineJoin = "round";
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
     for (const st of strokes) {
       const pts: any[] = Array.isArray(st.points) ? st.points : [];
       if (!pts.length) continue;
       const radius = Math.max(Number(st.size ?? 0.05) * longEdge * 0.5, 1);
       maxRadius = Math.max(maxRadius, radius);
       const v = st.erase ? 0 : 255;
-      tc.fillStyle = tc.strokeStyle = `rgb(${v},${v},${v})`;
+      ctx.fillStyle = ctx.strokeStyle = `rgb(${v},${v},${v})`;
       const P = pts.map((p) => [Number(p[0]) * (W - 1), Number(p[1]) * (H - 1)] as [number, number]);
       if (P.length > 1) {
-        tc.lineWidth = Math.max(2 * radius, 1);
-        tc.beginPath(); tc.moveTo(P[0][0], P[0][1]);
-        for (let i = 1; i < P.length; i++) tc.lineTo(P[i][0], P[i][1]);
-        tc.stroke();
+        ctx.lineWidth = Math.max(2 * radius, 1);
+        ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]);
+        for (let i = 1; i < P.length; i++) ctx.lineTo(P[i][0], P[i][1]);
+        ctx.stroke();
       }
-      for (const [x, y] of P) { tc.beginPath(); tc.arc(x, y, radius, 0, 2 * Math.PI); tc.fill(); }
+      for (const [x, y] of P) { ctx.beginPath(); ctx.arc(x, y, radius, 0, 2 * Math.PI); ctx.fill(); }
     }
-    if (feather > 0) ctx.filter = `blur(${Math.max(maxRadius * feather * 0.6, 0.5)}px)`;
-    ctx.drawImage(tmp, 0, 0);
-    ctx.filter = "none";
 
-    const tex = cached?.tex ?? this.newTex();
-    gl.bindTexture(gl.TEXTURE_2D, tex);
+    const rawTex = this.brushRawTex.get(loc.id) ?? this.newTex();
+    this.brushRawTex.set(loc.id, rawTex);
+    gl.bindTexture(gl.TEXTURE_2D, rawTex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+
+    let tex = rawTex;
+    if (feather > 0) {
+      const sigmaPx = Math.max(maxRadius * feather * 0.6, 0.5);
+      tex = this.blur(rawTex, W, H, sigmaPx, `brushA_${loc.id}`, `brushB_${loc.id}`, 1).tex;
+    }
     this.brushTex.set(loc.id, { tex, key });
     return tex;
   }
@@ -714,9 +724,21 @@ export class GpuPipeline {
     let wrwh: [number, number] = [1, 1], sw = rw, sh = rh;
     if (straighten) {
       const [Wr, Hr] = largestRotatedRect(rw, rh, angle * Math.PI / 180);
-      wrwh = [Wr / rw, Hr / rh]; sw = Wr; sh = Hr;
+      wrwh = [Wr / rw, Hr / rh];
+      // apply_geometry (backend/app/pipeline.py) tronque le rectangle inscrit en pixels entiers
+      // (`int(wr)`/`int(hr)`) avant de recadrer par-dessus — tronquer ici aussi pour que le crop
+      // ci-dessous parte des mêmes dimensions entières que côté serveur (sinon écart de ±1px).
+      sw = Math.max(Math.trunc(Wr), 1); sh = Math.max(Math.trunc(Hr), 1);
     }
-    const gw = Math.max(Math.round(sw * c.w), 8), gh = Math.max(Math.round(sh * c.h), 8);
+    // Même convention que apply_geometry (backend/app/pipeline.py:171-175) : troncature des bornes
+    // en pixels plutôt qu'arrondi de la largeur/hauteur — un `Math.round` indépendant sur gw/gh peut
+    // différer de ±1px de `x1 - x0` tronqué, désalignant les masques locaux (coordonnées normalisées
+    // sur l'image recadrée) entre l'aperçu GPU et le rendu serveur.
+    const x0 = Math.trunc(Math.min(Math.max(c.x, 0), 0.98) * sw);
+    const y0 = Math.trunc(Math.min(Math.max(c.y, 0), 0.98) * sh);
+    const x1 = Math.trunc(Math.min(Math.max(c.x + c.w, 0.02), 1) * sw);
+    const y1 = Math.trunc(Math.min(Math.max(c.y + c.h, 0.02), 1) * sh);
+    const gw = Math.max(x1 - x0, 8), gh = Math.max(y1 - y0, 8);
     const out = this.rt(rtKey, gw, gh);
     this.pass("geom", [[0, src]], out, gw, gh, () => {
       gl.uniform1i(this.u("geom", "u_tex"), 0);

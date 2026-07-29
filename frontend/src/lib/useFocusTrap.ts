@@ -5,12 +5,12 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
 /** Piège le focus clavier (Tab/Maj+Tab) à l'intérieur du conteneur retourné, focus le premier
  *  élément focusable à l'ouverture, et restitue le focus à l'élément déclencheur au démontage
  *  (cf. audit UX §11.5 : aucune des modales de l'app ne le faisait). */
-// `active` accepte n'importe quelle valeur (pas seulement un booléen) : quand un hôte de dialogue
-// persistant enchaîne plusieurs requêtes sans démonter le composant (ex. `DialogHost`, file
-// d'attente), passer l'objet-requête lui-même (identité différente à chaque nouvelle requête,
-// même de même nature) force l'effet à se rejouer — sinon le focus initial ne serait jamais reposé
-// à l'ouverture de la requête suivante (le composant `active` resterait `true` en continu).
-export function useFocusTrap<T extends HTMLElement>(active: unknown) {
+// `resetKey` : quand un hôte de dialogue persistant enchaîne plusieurs requêtes sans démonter le
+// composant (ex. `DialogHost`, file d'attente), passer l'objet-requête (identité différente à
+// chaque nouvelle requête, même de même nature) force l'effet à se rejouer — sinon le focus
+// initial ne serait jamais reposé à l'ouverture de la requête suivante (`active` resterait `true`
+// en continu). Séparé de `active` pour garder ce dernier strictement booléen.
+export function useFocusTrap<T extends HTMLElement>(active: boolean, resetKey?: unknown) {
   const ref = useRef<T>(null);
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export function useFocusTrap<T extends HTMLElement>(active: unknown) {
       container.removeEventListener("keydown", onKeyDown);
       previouslyFocused?.focus();
     };
-  }, [active]);
+  }, [active, resetKey]);
 
   return ref;
 }
