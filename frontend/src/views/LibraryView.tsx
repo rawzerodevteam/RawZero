@@ -13,8 +13,20 @@ import { IconAlbum, IconClose, IconExport, IconFolder, IconGrid, IconImport, Ico
 import { setDragIds, parseDragIds, hasDragIds } from "../lib/dragPhotos";
 import { confirmDialog, promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
-import { COLOR_HEX, COLOR_VALUES } from "../types";
+import { COLOR_HEX, COLOR_VALUES, type Photo } from "../types";
 import logoMark from "../assets/logo-mark.png";
+
+/** Filtre client (nom de fichier, insensible à la casse) : pas de colonne indexée dédiée côté
+ * backend pour une recherche texte, et la liste est déjà entièrement en mémoire côté frontend. */
+function filterBySearch(photos: Photo[], search: string): Photo[] {
+  if (!search.trim()) return photos;
+  const q = search.trim().toLowerCase();
+  return photos.filter((p) => p.filename.toLowerCase().includes(q));
+}
+
+function visiblePhotoCount(photos: Photo[], search: string): number {
+  return filterBySearch(photos, search).length;
+}
 
 export function LibraryView() {
   const view = useStore((s) => s.view);
@@ -171,7 +183,17 @@ function Toolbar() {
           <button title={t("library.leaveAlbum")} aria-label={t("library.leaveAlbum")} onClick={() => void setAlbum(null)}><IconClose size={11} /></button>
         </span>
       )}
-      <span className="dim">{t("home.photoCount", { count: photos.length })}</span>
+      <span className="dim">{t("home.photoCount", { count: visiblePhotoCount(photos, filters.search) })}</span>
+      <span className="sep" />
+      <span className="catalog-search">
+        <input type="text" value={filters.search} placeholder={t("library.searchPlaceholder")}
+          aria-label={t("library.searchPlaceholder")}
+          onChange={(ev) => setFilters({ search: ev.target.value })} />
+        {filters.search && (
+          <button className="mini-btn" title={t("library.searchClear")} aria-label={t("library.searchClear")}
+            onClick={() => setFilters({ search: "" })}><IconClose size={10} /></button>
+        )}
+      </span>
       <span className="sep" />
       <span className="exif-filter" ref={filtersRef}>
         <button
@@ -270,6 +292,8 @@ function Toolbar() {
 function Grid() {
   const { t } = useTranslation();
   const photos = useStore((s) => s.photos);
+  const search = useStore((s) => s.filters.search);
+  const visible = filterBySearch(photos, search);
   const currentId = useStore((s) => s.currentId);
   const selection = useStore((s) => s.selection);
   const versions = useStore((s) => s.editsVersion);
@@ -357,6 +381,9 @@ function Grid() {
       />
     );
   }
+  if (!visible.length) {
+    return <EmptyState message={t("library.noSearchMatch")} />;
+  }
 
   return (
     <>
@@ -371,7 +398,7 @@ function Grid() {
       {marquee && (
         <div className="marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />
       )}
-      {photos.map((p) => (
+      {visible.map((p) => (
         <div
           key={p.id}
           data-id={p.id}

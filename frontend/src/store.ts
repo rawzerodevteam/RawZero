@@ -229,7 +229,7 @@ export const useStore = create<Store>((set, get) => ({
   currentAlbumId: null,
   photos: [],
   filters: { minRating: 0, flag: "", color: "", sort: "captured_asc",
-             camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "" },
+             camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "", search: "" },
   facets: { cameras: [], lenses: [] },
   currentId: null,
   view: "grid",
@@ -327,7 +327,7 @@ export const useStore = create<Store>((set, get) => ({
     await get().saveNow(); // flush toute édition en attente (débounce 800 ms) avant de perdre currentId
     set({
       currentProjectId: id, currentAlbumId: null, currentId: null, selection: [], view: "grid",
-      filters: { ...get().filters, camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "" },
+      filters: { ...get().filters, camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "", search: "" },
     });
     await get().loadPhotos();
   },
@@ -382,7 +382,7 @@ export const useStore = create<Store>((set, get) => ({
     await get().saveNow(); // cf. setProject : ne pas perdre une édition en attente
     set({
       currentAlbumId: id, currentId: null, selection: [], view: "grid",
-      filters: { ...get().filters, camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "" },
+      filters: { ...get().filters, camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "", search: "" },
     });
     await get().loadPhotos();
   },
@@ -435,7 +435,8 @@ export const useStore = create<Store>((set, get) => ({
 
   resetFilters() {
     set({ filters: { minRating: 0, flag: "", color: "", sort: get().filters.sort,
-                     camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "" } });
+                     camera: "", lens: "", isoMin: 0, isoMax: 0, dateFrom: "", dateTo: "",
+                     search: get().filters.search } });
     void get().loadPhotos();
   },
 

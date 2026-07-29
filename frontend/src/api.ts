@@ -20,6 +20,10 @@ export interface PhotoFilters {
   isoMax: number;
   dateFrom: string;
   dateTo: string;
+  /** Recherche par nom de fichier, appliquée côté client (pas de colonne indexée dédiée côté
+   * backend) : filtre la grille sans passer par `/api/photos`, volontairement absente du
+   * `URLSearchParams` de `listPhotos` ci-dessous. */
+  search: string;
 }
 
 export interface PhotoFacets {

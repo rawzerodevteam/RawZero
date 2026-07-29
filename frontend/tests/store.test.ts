@@ -340,6 +340,16 @@ describe("filtres", () => {
     expect(useStore.getState().filters.sort).toBe("captured_asc"); // inchangé
     expect(api.listPhotos).toHaveBeenCalledWith(expect.objectContaining({ minRating: 3 }), null, null);
   });
+
+  it("recherche par nom de fichier : survit à resetFilters (comme le tri), pas à un changement d'album", async () => {
+    useStore.getState().setFilters({ search: "img_1", minRating: 4 });
+    useStore.getState().resetFilters();
+    expect(useStore.getState().filters.minRating).toBe(0);
+    expect(useStore.getState().filters.search).toBe("img_1"); // pas effacée par « Réinitialiser les filtres »
+
+    await useStore.getState().setAlbum(5);
+    expect(useStore.getState().filters.search).toBe(""); // effacée au changement de portée du catalogue
+  });
 });
 
 describe("albums", () => {
