@@ -67,8 +67,12 @@ class AlbumPhotos(BaseModel):
 @router.post("/albums/{album_id}/photos")
 def add_photos(album_id: int, body: AlbumPhotos):
     _get_album(album_id)
-    db.executemany("INSERT OR IGNORE INTO album_photos (album_id, photo_id) VALUES (?, ?)",
-                   [(album_id, pid) for pid in body.photo_ids])
+    # Nouvelles photos ajoutées à la fin de l'ordre manuel courant (position croissante) ;
+    # `OR IGNORE` laisse la position d'une photo déjà présente inchangée.
+    start = (db.query_one("SELECT COALESCE(MAX(position), -1) AS m FROM album_photos WHERE album_id=?",
+                          (album_id,)) or {"m": -1})["m"] + 1
+    db.executemany("INSERT OR IGNORE INTO album_photos (album_id, photo_id, position) VALUES (?, ?, ?)",
+                   [(album_id, pid, start + i) for i, pid in enumerate(body.photo_ids)])
     n = (db.query_one("SELECT COUNT(*) AS n FROM album_photos WHERE album_id=?",
                       (album_id,)) or {"n": 0})["n"]
     return {"ok": True, "count": n}
@@ -82,3 +86,13 @@ def remove_photos(album_id: int, body: AlbumPhotos):
     n = (db.query_one("SELECT COUNT(*) AS n FROM album_photos WHERE album_id=?",
                       (album_id,)) or {"n": 0})["n"]
     return {"ok": True, "count": n}
+
+
+@router.patch("/albums/{album_id}/reorder")
+def reorder_photos(album_id: int, body: AlbumPhotos):
+    """Ordre manuel (glisser-déposer dans la grille) : `photo_ids` est l'ordre complet voulu.
+    Toute photo de l'album absente de la liste garde sa position actuelle (pas de suppression)."""
+    _get_album(album_id)
+    db.executemany("UPDATE album_photos SET position=? WHERE album_id=? AND photo_id=?",
+                   [(i, album_id, pid) for i, pid in enumerate(body.photo_ids)])
+    return {"ok": True}

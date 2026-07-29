@@ -68,7 +68,14 @@ def list_photos(min_rating: int = 0, flag: str = "", color: str = "",
     if date_to:
         sql += " AND captured_at <= ?"
         params.append(date_to + "T23:59:59")   # captured_at en ISO → borne inclusive du jour
-    sql += f" ORDER BY {SORTS.get(sort, SORTS['captured_asc'])}"
+    # "custom" (ordre manuel, glisser-réordonner dans un album) n'a de sens qu'avec un album :
+    # sans lui, `album_photos.position` n'est pas dans la requête (pas de JOIN) — retombe sur le
+    # tri par défaut plutôt que de lever une erreur SQL sur une colonne absente.
+    if album_id and sort == "custom":
+        order_sql = "album_photos.position ASC, photos.id ASC"
+    else:
+        order_sql = SORTS.get(sort, SORTS["captured_asc"])
+    sql += f" ORDER BY {order_sql}"
     # Pagination optionnelle et rétro-compatible : `limit=0` (défaut) renvoie tout le résultat comme
     # avant (le modèle de navigation frontend — marquee, flèches, filmstrip — suppose encore la liste
     # complète en mémoire, cf. TODO.md §B6). `limit`/`offset` existent pour que le backend soit prêt

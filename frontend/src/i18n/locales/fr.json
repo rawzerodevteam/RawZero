@@ -138,6 +138,7 @@
     "sortImportedDesc": "Import récent",
     "sortRatingDesc": "Note ↓",
     "sortFilename": "Nom de fichier",
+    "sortCustom": "Ordre manuel (glisser-déposer)",
     "exifFilterTitle": "Filtres EXIF (caméra, objectif, ISO, dates)",
     "filters": "Filtres",
     "filtersTitle": "Filtres (note, drapeau, label, tri, EXIF)",
@@ -530,7 +531,8 @@
     "copied": "Réglages copiés",
     "pasted": "Réglages collés",
     "saveFailed": "Sauvegarde impossible : {{error}}",
-    "deleteFailed": "Suppression impossible : {{error}}"
+    "deleteFailed": "Suppression impossible : {{error}}",
+    "reorderFailed": "Réordonnancement impossible : {{error}}"
   },
   "models": {
     "button": "Modèles IA",

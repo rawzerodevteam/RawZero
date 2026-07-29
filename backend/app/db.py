@@ -135,6 +135,18 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # car project_id est ajouté par migration (absent du CREATE TABLE).
     conn.execute("CREATE INDEX IF NOT EXISTS idx_photos_project_captured "
                  "ON photos(project_id, captured_at, id)")
+    # Ordre manuel dans un album (glisser-réordonner) : colonne absente du CREATE TABLE d'origine.
+    # Backfill à l'ordre d'ajout existant (rowid) pour ne rien réordonner au premier démarrage
+    # après la migration.
+    album_cols = [r[1] for r in conn.execute("PRAGMA table_info(album_photos)")]
+    if "position" not in album_cols:
+        conn.execute("ALTER TABLE album_photos ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
+        conn.execute("""
+            UPDATE album_photos SET position = (
+                SELECT COUNT(*) - 1 FROM album_photos ap2
+                WHERE ap2.album_id = album_photos.album_id AND ap2.rowid <= album_photos.rowid
+            )
+        """)
 
 
 def _read_conn() -> sqlite3.Connection:

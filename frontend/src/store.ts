@@ -167,6 +167,7 @@ interface Store {
   deleteAlbum(id: number): Promise<void>;
   addToAlbum(id: number, photoIds: number[]): Promise<void>;
   removeFromAlbum(id: number, photoIds: number[]): Promise<void>;
+  reorderAlbumPhotos(orderedIds: number[]): Promise<void>;
   loadPhotos(): Promise<void>;
   setFilters(p: Partial<PhotoFilters>): void;
   resetFilters(): void;
@@ -428,6 +429,22 @@ export const useStore = create<Store>((set, get) => ({
     await api.removeFromAlbum(id, photoIds);
     await get().loadAlbums();
     if (get().currentAlbumId === id) await get().loadPhotos();
+  },
+
+  async reorderAlbumPhotos(orderedIds) {
+    const albumId = get().currentAlbumId;
+    if (albumId === null) return;
+    // Optimiste : réordonne la liste affichée tout de suite (et bascule sur le tri "custom",
+    // seul capable de refléter l'ordre manuel — cf. photos.py) sans attendre le round-trip.
+    const byId = new Map(get().photos.map((p) => [p.id, p]));
+    const reordered = orderedIds.map((id) => byId.get(id)).filter((p): p is Photo => !!p);
+    set({ photos: reordered, filters: { ...get().filters, sort: "custom" } });
+    try {
+      await api.reorderAlbum(albumId, orderedIds);
+    } catch (err) {
+      get().notify(i18n.t("notify.reorderFailed", { error: String(err) }), "error");
+      await get().loadPhotos(); // revient à l'ordre serveur en cas d'échec
+    }
   },
 
   setFilters(p) {

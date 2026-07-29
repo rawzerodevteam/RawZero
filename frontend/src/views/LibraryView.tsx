@@ -240,6 +240,7 @@ function Toolbar() {
               <option value="imported_desc">{t("library.sortImportedDesc")}</option>
               <option value="rating_desc">{t("library.sortRatingDesc")}</option>
               <option value="name_asc">{t("library.sortFilename")}</option>
+              {currentAlbumId !== null && <option value="custom">{t("library.sortCustom")}</option>}
             </select>
             <label>{t("meta.camera")}</label>
             <select value={filters.camera} onChange={(ev) => setFilters({ camera: ev.target.value })}>
@@ -295,6 +296,7 @@ function Grid() {
   const search = useStore((s) => s.filters.search);
   const visible = filterBySearch(photos, search);
   const currentId = useStore((s) => s.currentId);
+  const currentAlbumId = useStore((s) => s.currentAlbumId);
   const selection = useStore((s) => s.selection);
   const versions = useStore((s) => s.editsVersion);
   const selectPhoto = useStore((s) => s.selectPhoto);
@@ -303,6 +305,29 @@ function Grid() {
   const setView = useStore((s) => s.setView);
   const setRating = useStore((s) => s.setRating);
   const setUI = useStore((s) => s.setUI);
+  const reorderAlbumPhotos = useStore((s) => s.reorderAlbumPhotos);
+  const [reorderTargetId, setReorderTargetId] = useState<number | null>(null);
+
+  // Glisser-réordonner dans un album : n'a de sens qu'en album (l'ordre manuel n'existe que là,
+  // cf. store.ts/photos.py "custom"), et seulement sur la liste non filtrée par la recherche
+  // (l'ordre visuel doit correspondre à la liste complète réordonnée, pas à un sous-ensemble).
+  const canReorder = currentAlbumId !== null && !search.trim();
+  const onCellDragOver = (id: number) => (ev: React.DragEvent) => {
+    if (!canReorder || !hasDragIds(ev)) return;
+    ev.preventDefault();
+    setReorderTargetId(id);
+  };
+  const onCellDrop = (targetId: number) => (ev: React.DragEvent) => {
+    setReorderTargetId(null);
+    if (!canReorder) return;
+    const dragged = parseDragIds(ev);
+    if (!dragged.length) return;
+    const remaining = photos.map((p) => p.id).filter((id) => !dragged.includes(id));
+    const at = remaining.indexOf(targetId);
+    if (at === -1) return; // la cible faisait partie du glissement : rien à faire
+    remaining.splice(at, 0, ...dragged);
+    void reorderAlbumPhotos(remaining);
+  };
   const gridSize = useStore((s) => s.gridSize);
   const markHintSeen = useStore((s) => s.markHintSeen);
   const { onClick, onContextMenu } = useThumbSelection();
@@ -403,7 +428,8 @@ function Grid() {
           key={p.id}
           data-id={p.id}
           className={"cell" + (p.id === currentId ? " current" : "") +
-            (selection.includes(p.id) ? " selected" : "") + (p.flag === "reject" ? " rejected" : "")}
+            (selection.includes(p.id) ? " selected" : "") + (p.flag === "reject" ? " rejected" : "") +
+            (reorderTargetId === p.id ? " reorder-target" : "")}
           draggable
           role="option"
           aria-selected={selection.includes(p.id)}
@@ -414,6 +440,9 @@ function Grid() {
             if (!selection.includes(p.id)) setSelection([p.id]);
             setDragIds(ev, ids);
           }}
+          onDragOver={onCellDragOver(p.id)}
+          onDragLeave={() => setReorderTargetId((id) => (id === p.id ? null : id))}
+          onDrop={onCellDrop(p.id)}
           onPointerDown={(ev) => onCellPointerDown(ev, p.id)}
           onPointerUp={(ev) => onCellPointerUp(ev, p.id)}
           onContextMenu={(ev) => onContextMenu(ev, p.id)}

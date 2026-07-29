@@ -128,6 +128,14 @@ export const api = {
     }));
   },
 
+  /** Ordre manuel (glisser-réordonner) : `photoIds` est l'ordre complet voulu pour l'album. */
+  async reorderAlbum(id: number, photoIds: number[]): Promise<void> {
+    await json(await fetch(`/api/albums/${id}/reorder`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photo_ids: photoIds }),
+    }));
+  },
+
   async getPhoto(id: number): Promise<Photo & { edits: Partial<EditState>; history?: unknown }> {
     return json(await fetch(`/api/photos/${id}`));
   },

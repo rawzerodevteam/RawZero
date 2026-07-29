@@ -199,6 +199,7 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
 .cell:hover { border-color: var(--border); }
 .cell.current { border-color: var(--accent); }
 .cell.rejected { opacity: 0.45; }
+.cell.reorder-target { box-shadow: -3px 0 0 0 var(--accent); }
 .cell-img {
   position: relative;
   /* Boîte 3:2 par le hack padding-top (ratio = hauteur/largeur = 2/3) plutôt que `aspect-ratio` :

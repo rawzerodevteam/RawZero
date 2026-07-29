@@ -272,6 +272,33 @@ def test_export_stream(client, photo_id):
     assert client.get(files[0]["url"]).status_code == 200
 
 
+def test_album_manual_reorder(client):
+    a = client.post("/api/albums", json={"name": "Ordre manuel"}).json()
+    aid = a["id"]
+    p1 = import_photo(client, "reorder-1.jpg", w=81, h=81)["id"]
+    p2 = import_photo(client, "reorder-2.jpg", w=82, h=82)["id"]
+    p3 = import_photo(client, "reorder-3.jpg", w=83, h=83)["id"]
+    client.post(f"/api/albums/{aid}/photos", json={"photo_ids": [p1, p2, p3]})
+
+    # sans tri "custom", l'ordre par défaut (captured_asc, donc id ASC ici) ne suit pas l'ordre manuel
+    default_order = [p["id"] for p in
+                     client.get("/api/photos", params={"album_id": aid}).json()["photos"]]
+    assert default_order == [p1, p2, p3]
+
+    # glisser p3 en tête : PATCH reorder avec l'ordre complet voulu
+    r = client.patch(f"/api/albums/{aid}/reorder", json={"photo_ids": [p3, p1, p2]})
+    assert r.json()["ok"]
+    custom_order = [p["id"] for p in
+                    client.get("/api/photos", params={"album_id": aid, "sort": "custom"}).json()["photos"]]
+    assert custom_order == [p3, p1, p2]
+
+    # "custom" sans album_id ne casse rien (pas de colonne album_photos.position dans la requête)
+    assert client.get("/api/photos", params={"sort": "custom"}).status_code == 200
+
+    # un album inexistant renvoie 404 (comme les autres routes /albums/{id}/...)
+    assert client.patch("/api/albums/999999/reorder", json={"photo_ids": []}).status_code == 404
+
+
 def test_browse_and_import_folder(client):
     sub = _SRC_DIR / "browsesub"
     sub.mkdir(exist_ok=True)

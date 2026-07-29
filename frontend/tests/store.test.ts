@@ -15,6 +15,7 @@ vi.mock("../src/api", () => ({
     deleteAlbum: vi.fn(async () => undefined),
     addToAlbum: vi.fn(async () => ({ count: 1 })),
     removeFromAlbum: vi.fn(async () => ({ count: 0 })),
+    reorderAlbum: vi.fn(async () => undefined),
   },
 }));
 
@@ -374,5 +375,28 @@ describe("albums", () => {
     await useStore.getState().addToAlbum(2, [10, 11]);
     expect(api.addToAlbum).toHaveBeenCalledWith(2, [10, 11]);
     expect(api.listAlbums).toHaveBeenCalled();
+  });
+
+  it("reorderAlbumPhotos réordonne optimiste, bascule le tri sur 'custom', et se rétablit si l'API échoue", async () => {
+    useStore.setState({
+      currentAlbumId: 9,
+      photos: [photo(1), photo(2), photo(3)],
+      filters: { ...useStore.getState().filters, sort: "captured_asc" },
+    });
+    await useStore.getState().reorderAlbumPhotos([3, 1, 2]);
+    expect(useStore.getState().photos.map((p) => p.id)).toEqual([3, 1, 2]);
+    expect(useStore.getState().filters.sort).toBe("custom");
+    expect(api.reorderAlbum).toHaveBeenCalledWith(9, [3, 1, 2]);
+
+    (api.reorderAlbum as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("boom"));
+    await useStore.getState().reorderAlbumPhotos([2, 1, 3]);
+    await vi.waitFor(() => expect(api.listPhotos).toHaveBeenCalled()); // repli : recharge depuis le serveur
+  });
+
+  it("reorderAlbumPhotos ne fait rien hors album (pas d'ordre manuel sans album courant)", async () => {
+    useStore.setState({ currentAlbumId: null, photos: [photo(1), photo(2)] });
+    await useStore.getState().reorderAlbumPhotos([2, 1]);
+    expect(api.reorderAlbum).not.toHaveBeenCalled();
+    expect(useStore.getState().photos.map((p) => p.id)).toEqual([1, 2]);
   });
 });

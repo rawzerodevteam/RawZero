@@ -138,6 +138,7 @@
     "sortImportedDesc": "Recently imported",
     "sortRatingDesc": "Rating ↓",
     "sortFilename": "Filename",
+    "sortCustom": "Manual order (drag & drop)",
     "exifFilterTitle": "EXIF filters (camera, lens, ISO, dates)",
     "filters": "Filters",
     "filtersTitle": "Filters (rating, flag, label, sort, EXIF)",
@@ -530,7 +531,8 @@
     "copied": "Settings copied",
     "pasted": "Settings pasted",
     "saveFailed": "Save failed: {{error}}",
-    "deleteFailed": "Delete failed: {{error}}"
+    "deleteFailed": "Delete failed: {{error}}",
+    "reorderFailed": "Reorder failed: {{error}}"
   },
   "models": {
     "button": "AI models",
