@@ -559,16 +559,21 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
 }
 .clip-dot {
   position: absolute;
-  top: 14px;
+  top: 11px;
   width: 8px;
   height: 8px;
+  padding: 3px;
+  border: none;
   border-radius: 50%;
   background: #3c3e46;
+  background-clip: content-box;
+  cursor: pointer;
 }
-.clip-dot.left { left: 19px; }
-.clip-dot.right { right: 19px; }
-.clip-dot.left.on { background: #5b8def; }
-.clip-dot.right.on { background: var(--danger); }
+.clip-dot.left { left: 16px; }
+.clip-dot.right { right: 16px; }
+.clip-dot.left.on { background-color: #5b8def; }
+.clip-dot.right.on { background-color: var(--danger); }
+.clip-dot.active { box-shadow: 0 0 0 1px var(--accent); }
 
 /* ---------- Sections de panneau ---------- */
 .panel-section { border-bottom: 1px solid var(--border); }

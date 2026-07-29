@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useStore } from "../store";
 
 /** Histogramme RGB + luminance calculé côté client depuis le rendu courant. */
 export function Histogram({ src }: { src: string | null }) {
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [clip, setClip] = useState({ lo: false, hi: false });
+  const showClipping = useStore((s) => s.showClipping);
+  const setUI = useStore((s) => s.setUI);
 
   useEffect(() => {
     if (!src || !canvasRef.current) return;
@@ -61,8 +64,14 @@ export function Histogram({ src }: { src: string | null }) {
   return (
     <div className="histogram">
       <canvas ref={canvasRef} width={280} height={110} />
-      <span className={"clip-dot left" + (clip.lo ? " on" : "")} title={t("histogram.clipLow")} />
-      <span className={"clip-dot right" + (clip.hi ? " on" : "")} title={t("histogram.clipHigh")} />
+      <button type="button"
+        className={"clip-dot left" + (clip.lo ? " on" : "") + (showClipping ? " active" : "")}
+        title={t("histogram.clipLow")} aria-label={t("histogram.clipLow")} aria-pressed={showClipping}
+        onClick={() => setUI({ showClipping: !showClipping })} />
+      <button type="button"
+        className={"clip-dot right" + (clip.hi ? " on" : "") + (showClipping ? " active" : "")}
+        title={t("histogram.clipHigh")} aria-label={t("histogram.clipHigh")} aria-pressed={showClipping}
+        onClick={() => setUI({ showClipping: !showClipping })} />
     </div>
   );
 }
