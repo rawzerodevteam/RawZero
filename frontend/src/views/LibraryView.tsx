@@ -239,7 +239,7 @@ function Toolbar() {
               <option value="captured_desc">{t("library.sortCapturedDesc")}</option>
               <option value="imported_desc">{t("library.sortImportedDesc")}</option>
               <option value="rating_desc">{t("library.sortRatingDesc")}</option>
-              <option value="filename">{t("library.sortFilename")}</option>
+              <option value="name_asc">{t("library.sortFilename")}</option>
             </select>
             <label>{t("meta.camera")}</label>
             <select value={filters.camera} onChange={(ev) => setFilters({ camera: ev.target.value })}>

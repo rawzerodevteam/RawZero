@@ -109,6 +109,18 @@ def test_list_pagination(client, photo_id):
     assert collected == all_ids
 
 
+def test_sort_name_asc(client, photo_id):
+    # "name_asc" (valeur envoyée par le frontend, cf. LibraryView.tsx) doit trier par nom de
+    # fichier — un décalage de clé ("filename" vs "name_asc") retomberait silencieusement sur
+    # le tri par défaut sans jamais lever d'erreur (SORTS.get(sort, default)).
+    import_photo(client, "aaa-first.jpg", w=71, h=71)   # dimensions distinctes (et inutilisées
+    import_photo(client, "zzz-last.jpg", w=73, h=73)    # ailleurs) : make_jpeg est déterministe,
+                                                         # mêmes dimensions → mêmes octets → dédup par hash
+    photos = client.get("/api/photos", params={"sort": "name_asc"}).json()["photos"]
+    names = [p["filename"] for p in photos]
+    assert names.index("aaa-first.jpg") < names.index("test-grad.jpg") < names.index("zzz-last.jpg")
+
+
 def test_rating_flag_color(client, photo_id):
     r = client.patch(f"/api/photos/{photo_id}", json={"rating": 4, "flag": "pick", "color": "green"})
     assert r.status_code == 200
