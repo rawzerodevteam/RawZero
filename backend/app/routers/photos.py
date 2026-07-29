@@ -30,7 +30,7 @@ LIST_COLS = ("id", "filename", "path", "ext", "is_raw", "width", "height", "capt
 def list_photos(min_rating: int = 0, flag: str = "", color: str = "",
                 sort: str = "captured_asc", project_id: int = 0, album_id: int = 0,
                 camera: str = "", lens: str = "", iso_min: int = 0, iso_max: int = 0,
-                date_from: str = "", date_to: str = ""):
+                date_from: str = "", date_to: str = "", limit: int = 0, offset: int = 0):
     # Un album est transverse aux projets : s'il est demandé, il prime sur project_id.
     if album_id:
         cols = ", ".join("photos." + c for c in LIST_COLS)
@@ -69,8 +69,20 @@ def list_photos(min_rating: int = 0, flag: str = "", color: str = "",
         sql += " AND captured_at <= ?"
         params.append(date_to + "T23:59:59")   # captured_at en ISO → borne inclusive du jour
     sql += f" ORDER BY {SORTS.get(sort, SORTS['captured_asc'])}"
+    # Pagination optionnelle et rétro-compatible : `limit=0` (défaut) renvoie tout le résultat comme
+    # avant (le modèle de navigation frontend — marquee, flèches, filmstrip — suppose encore la liste
+    # complète en mémoire, cf. TODO.md §B6). `limit`/`offset` existent pour que le backend soit prêt
+    # (gros catalogues) sans attendre le refacto frontend correspondant.
+    total = None
+    if limit > 0:
+        total = db.query_one(f"SELECT COUNT(*) AS n FROM ({sql})", tuple(params))["n"]
+        sql += " LIMIT ? OFFSET ?"
+        params = params + [max(limit, 1), max(offset, 0)]
     rows = db.query(sql, tuple(params))
-    return {"photos": [db.photo_to_dict(r) for r in rows]}
+    result: dict = {"photos": [db.photo_to_dict(r) for r in rows]}
+    if total is not None:
+        result["total"] = total
+    return result
 
 
 @router.get("/photos/facets")

@@ -80,6 +80,35 @@ def test_list_and_get(client, photo_id):
     assert p["path"] == str(_SRC_DIR / "test-grad.jpg")
 
 
+def test_list_pagination(client, photo_id):
+    # limit=0 (défaut) : comportement inchangé, pas de clé "total".
+    full = client.get("/api/photos").json()
+    assert "total" not in full
+    all_ids = [p["id"] for p in full["photos"]]
+    assert photo_id in all_ids
+
+    # limit>0 : page bornée + total sur l'ensemble filtré (pas seulement la page).
+    page = client.get("/api/photos", params={"limit": 1, "offset": 0}).json()
+    assert len(page["photos"]) == 1
+    assert page["total"] == len(all_ids)
+
+    # offset au-delà de la fin → page vide, total inchangé.
+    empty = client.get("/api/photos", params={"limit": 1, "offset": len(all_ids) + 10}).json()
+    assert empty["photos"] == []
+    assert empty["total"] == len(all_ids)
+
+    # pagination cohérente avec la liste complète (même tri, pas de doublon/omission).
+    collected: list[int] = []
+    offset = 0
+    while True:
+        chunk = client.get("/api/photos", params={"limit": 1, "offset": offset}).json()
+        if not chunk["photos"]:
+            break
+        collected.append(chunk["photos"][0]["id"])
+        offset += 1
+    assert collected == all_ids
+
+
 def test_rating_flag_color(client, photo_id):
     r = client.patch(f"/api/photos/{photo_id}", json={"rating": 4, "flag": "pick", "color": "green"})
     assert r.status_code == 200
