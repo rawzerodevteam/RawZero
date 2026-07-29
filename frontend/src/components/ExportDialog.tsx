@@ -39,6 +39,7 @@ export function ExportDialog() {
   const [quality, setQuality] = useState(90);
   const [maxSize, setMaxSize] = useState(0); // 0 = pleine résolution
   const [suffix, setSuffix] = useState("");
+  const [nameTemplate, setNameTemplate] = useState("");
   const [dir, setDir] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -85,7 +86,7 @@ export function ExportDialog() {
     // Export parallèle côté serveur (multi-cœurs) : on reçoit chaque photo terminée au fil
     // de l'eau et on l'enregistre aussitôt dans le dossier choisi.
     try {
-      await api.exportStream({ ids, format, quality, max_size: maxSize, suffix }, async (ev) => {
+      await api.exportStream({ ids, format, quality, max_size: maxSize, suffix, name_template: nameTemplate }, async (ev) => {
         if (ev.type === "file") {
           if (fsAccessSupported && target) {
             const blob = await (await fetch(ev.url)).blob();
@@ -168,9 +169,15 @@ export function ExportDialog() {
         </div>
         <div className="form-row">
           <label>{t("export.suffix")}</label>
-          <input type="text" value={suffix} placeholder={t("export.suffixPlaceholder")} disabled={busy}
+          <input type="text" value={suffix} placeholder={t("export.suffixPlaceholder")} disabled={busy || !!nameTemplate}
             onChange={(ev) => setSuffix(ev.target.value)} />
         </div>
+        <div className="form-row">
+          <label>{t("export.nameTemplate")}</label>
+          <input type="text" value={nameTemplate} placeholder={t("export.nameTemplatePlaceholder")} disabled={busy}
+            onChange={(ev) => setNameTemplate(ev.target.value)} />
+        </div>
+        {!!nameTemplate && <p className="hint">{t("export.nameTemplateHint")}</p>}
 
         {busy && (
           <div className="export-progress">

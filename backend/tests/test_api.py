@@ -225,6 +225,20 @@ def test_export(client, photo_id):
     assert fpng["name"].endswith(".png") and max(fpng["width"], fpng["height"]) == 200
 
 
+def test_export_name_template(client, photo_id):
+    """{seq}/{name}/{id} rendus dans le modèle de nommage ; {seq} suit l'ordre de la requête,
+    pas l'ordre de complétion des workers (export en flux, parallèle)."""
+    r = client.post("/api/export/stream", json={
+        "ids": [photo_id, photo_id], "format": "jpeg", "max_size": 200,
+        "name_template": "{name}-{seq}-{id}",
+    })
+    events = [json.loads(line) for line in r.text.splitlines() if line.strip()]
+    files = sorted((e for e in events if e["type"] == "file"), key=lambda e: e["name"])
+    assert files[0]["name"].startswith("test-grad-001-")
+    assert files[1]["name"].startswith("test-grad-002-")
+    assert f"-{photo_id}.jpg" in files[0]["name"]
+
+
 def test_export_bad_format(client, photo_id):
     assert client.post("/api/export", json={"ids": [photo_id], "format": "bmp"}).status_code == 422
 

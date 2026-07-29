@@ -285,7 +285,7 @@ export const api = {
     await json(await fetch(`/api/presets/${id}`, { method: "DELETE" }));
   },
 
-  async exportPhotos(req: { ids: number[]; format: string; quality: number; max_size: number; suffix: string }): Promise<{
+  async exportPhotos(req: { ids: number[]; format: string; quality: number; max_size: number; suffix: string; name_template?: string }): Promise<{
     folder: string;
     files: { id: number; name: string; url: string; width: number; height: number }[];
     errors: { id: number; error: string }[];
@@ -299,7 +299,7 @@ export const api = {
 
   /** Export parallèle avec progression : lit le flux NDJSON et appelle `onEvent` par évènement. */
   async exportStream(
-    req: { ids: number[]; format: string; quality: number; max_size: number; suffix: string },
+    req: { ids: number[]; format: string; quality: number; max_size: number; suffix: string; name_template?: string },
     onEvent: (ev: ExportEvent) => void | Promise<void>,
   ): Promise<void> {
     const res = await fetch("/api/export/stream", {

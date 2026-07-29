@@ -122,6 +122,21 @@ class ExportRequest(BaseModel):
     quality: int = 92
     max_size: int = 0          # 0 = pleine résolution
     suffix: str = ""
+    # Modèle de nommage optionnel (jetons {name}/{seq}/{date}/{id}). Vide → comportement historique
+    # (nom du fichier original + suffix). Non vide → remplace entièrement stem+suffix (voir _render_name).
+    name_template: str = ""
+
+
+def _render_name(template: str, stem: str, seq: int, captured_at: str, photo_id: int) -> str:
+    """Rend un modèle de nommage à jetons. `date` vient de `captured_at` (ISO, colonne DB) ;
+    vide si absente plutôt que la date du jour, pour ne pas donner une fausse impression de date
+    de prise de vue."""
+    date = captured_at[:10].replace("-", "") if captured_at else ""
+    tokens = {"{name}": stem, "{seq}": f"{seq:03d}", "{date}": date, "{id}": str(photo_id)}
+    out = template
+    for k, v in tokens.items():
+        out = out.replace(k, v)
+    return out or stem
 
 
 def _new_export_dir() -> tuple[Path, str]:
@@ -139,13 +154,15 @@ def export(req: ExportRequest):
         raise HTTPException(422, "Aucune photo sélectionnée")
     out_dir, stamp = _new_export_dir()
     files, errors = [], []
+    seq = 0
     for photo_id in req.ids:
         row = db.query_one("SELECT * FROM photos WHERE id=?", (photo_id,))
         if row is None:
             errors.append({"id": photo_id, "error": "introuvable"})
             continue
+        seq += 1
         try:
-            files.append(_export_one(dict(row), out_dir, req))
+            files.append(_export_one(dict(row), out_dir, req, seq))
         except Exception as e:
             log.exception("Export échoué #%s", photo_id)
             errors.append({"id": photo_id, "error": str(e)})
@@ -174,7 +191,9 @@ def export_stream(req: ExportRequest):
         if rows:
             workers = max(1, min(EXPORT_WORKERS, len(rows)))
             with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="rs-export") as pool:
-                futs = {pool.submit(_export_one, r, out_dir, req): r for r in rows}
+                # seq = position dans la liste demandée (ordre stable), pas l'ordre de complétion
+                # (les workers finissent dans le désordre) : {seq} doit rester déterministe.
+                futs = {pool.submit(_export_one, r, out_dir, req, i): r for i, r in enumerate(rows, start=1)}
                 for fut in as_completed(futs):
                     r = futs[fut]
                     try:
@@ -187,7 +206,7 @@ def export_stream(req: ExportRequest):
     return StreamingResponse(gen(), media_type="application/x-ndjson")
 
 
-def _export_one(row: dict, out_dir: Path, req: ExportRequest) -> dict:
+def _export_one(row: dict, out_dir: Path, req: ExportRequest, seq: int) -> dict:
     t0 = time.perf_counter()
     original = require_original(row)
     base = raw_loader.decode_full(original)
@@ -208,7 +227,9 @@ def _export_one(row: dict, out_dir: Path, req: ExportRequest) -> dict:
                                 max(base.shape[:2]), denoised_base=denoised,
                                 seed=int(row.get("id") or 0), bit_depth=bit_depth)
     del base, denoised
-    stem = Path(row["filename"]).stem + (req.suffix or "")
+    orig_stem = Path(row["filename"]).stem
+    stem = (_render_name(req.name_template, orig_stem, seq, row.get("captured_at") or "", row["id"])
+            if req.name_template else orig_stem + (req.suffix or ""))
     ext = FORMATS[req.format]
     # Réservation atomique du nom (l'export parallèle peut viser des noms identiques) :
     # on choisit un nom libre ET on le réserve par un fichier vide, sous verrou.
