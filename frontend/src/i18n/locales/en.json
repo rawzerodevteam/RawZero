@@ -104,7 +104,8 @@
     "gpuUnavailable": "GPU preview unavailable: {{error}}",
     "wbHistory": "White balance (eyedropper)",
     "wbDone": "White balance: {{temp}} / {{tint}}",
-    "wbFailed": "Eyedropper failed: {{error}}"
+    "wbFailed": "Eyedropper failed: {{error}}",
+    "hslPickDone": "HSL band: {{band}}"
   },
   "library": {
     "allPhotos": "All photos",
@@ -417,7 +418,9 @@
     "band": {
       "red": "Red", "orange": "Orange", "yellow": "Yellow", "green": "Green",
       "aqua": "Aqua", "blue": "Blue", "purple": "Purple", "magenta": "Magenta"
-    }
+    },
+    "pipette": "Eyedropper: click an area of the image to find its HSL band",
+    "pipetteAria": "HSL eyedropper"
   },
   "slider": {
     "resetHint": "Double-click: reset",

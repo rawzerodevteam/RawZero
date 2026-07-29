@@ -715,6 +715,7 @@ input[type="range"]:hover::-moz-range-thumb { background: var(--accent); }
   border-left: 3px solid var(--band-color, var(--border));
   padding-left: 6px;
 }
+.hsl-row.picked { background: var(--accent-soft); border-radius: 4px; transition: background 0.2s; }
 
 /* ---------- Courbe ---------- */
 .curve-editor {

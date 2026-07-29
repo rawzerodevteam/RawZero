@@ -727,3 +727,45 @@ def wb_from_point(base: np.ndarray, edits: dict, x: float, y: float,
     temp = float(np.clip(100.0 * (rm - bm), -100.0, 100.0))
     tint = float(np.clip(100.0 * (rm + bm) / 0.9, -100.0, 100.0))
     return {"temp": round(temp, 1), "tint": round(tint, 1)}
+
+
+_HSL_SAMPLE_SIZE = 640  # patch pris sur une version réduite : la couleur ne dépend pas de la
+                        # résolution, seul le rayon des opérations à voisinage en dépendrait
+
+
+def hsl_band_from_point(base: np.ndarray, edits: dict, x: float, y: float,
+                        radius: float = 0.02) -> dict:
+    """Pipette HSL : bande (`HSL_BANDS`) la plus proche de la teinte du point (x, y) cliqué,
+    sur l'image *telle qu'affichée* (pipeline complet appliqué avec les réglages courants,
+    y compris HSL actuel) — pour indiquer au client quelle bande régler, pas une valeur
+    d'édition à appliquer directement (contrairement à `wb_from_point`)."""
+    h0, w0 = base.shape[:2]
+    long_edge = max(h0, w0)
+    if long_edge > _HSL_SAMPLE_SIZE:
+        f = _HSL_SAMPLE_SIZE / long_edge
+        working = cv2.resize(base, (max(int(w0 * f), 1), max(int(h0 * f), 1)), interpolation=cv2.INTER_AREA)
+    else:
+        working = base
+    img = apply_pipeline(working, edits, scale=1.0)
+    h, w = img.shape[:2]
+    cx = int(np.clip(x, 0.0, 1.0) * (w - 1))
+    cy = int(np.clip(y, 0.0, 1.0) * (h - 1))
+    r = max(1, int(round(radius * max(w, h))))
+    patch = img[max(0, cy - r):cy + r + 1, max(0, cx - r):cx + r + 1]
+    rr, gg, bb = [float(patch[..., i].mean()) for i in range(3)]
+    mx, mn = max(rr, gg, bb), min(rr, gg, bb)
+    d = mx - mn
+    if d < 1e-4:
+        # Gris/neutre : aucune bande dominante, retombe sur la 1ʳᵉ par convention plutôt que
+        # de renvoyer une teinte arbitraire (division par ~0 dans le calcul de teinte).
+        hue, sat = 0.0, 0.0
+    else:
+        if mx == rr:
+            hue = 60.0 * (((gg - bb) / d) % 6.0)
+        elif mx == gg:
+            hue = 60.0 * (((bb - rr) / d) + 2.0)
+        else:
+            hue = 60.0 * (((rr - gg) / d) + 4.0)
+        sat = d / max(mx, 1e-6)
+    band = min(HSL_BANDS, key=lambda c: min(abs(hue - c[1]), 360.0 - abs(hue - c[1])))[0]
+    return {"band": band, "hue": round(hue, 1), "saturation": round(sat, 3)}

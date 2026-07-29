@@ -51,7 +51,7 @@ function loadHistory(raw: any, fallbackEdits: EditState): HistoryParts {
 }
 
 export type View = "home" | "grid" | "loupe" | "develop" | "settings";
-export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "wb" | "pointmask";
+export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "wb" | "hsl" | "pointmask";
 
 let saveTimer: number | undefined;
 
@@ -137,6 +137,7 @@ interface Store {
   showAlbums: boolean;            // panneau latéral Collections (grille)
   panelsCollapsed: boolean;       // colonne de panneaux droite masquée (développement, écrans étroits)
   fullScreen: boolean;            // mode plein écran développement (masque toolbar/panneaux/filmstrip)
+  hslPickedBand: string | null;   // dernière bande HSL désignée par la pipette (surlignage HSLPanel)
   relinkTargetId: number | null;  // id de la photo en cours de reliage (dialog « Relier »)
   activeTool: Tool;
   selectedLocalId: string | null;
@@ -214,7 +215,7 @@ interface Store {
 
   setUI(p: Partial<Pick<Store, "beforeAfter" | "showClipping" | "showInfo" | "showHelp" |
     "showImport" | "showExport" | "showModels" | "showAlbums" | "activeTool" | "selectedLocalId" | "showMaskOverlay" |
-    "brushSize" | "brushErase" | "cropAspect" | "gridSize" | "panelsCollapsed" | "fullScreen">>): void;
+    "brushSize" | "brushErase" | "cropAspect" | "gridSize" | "panelsCollapsed" | "fullScreen" | "hslPickedBand">>): void;
   notify(msg: string, type?: ToastType, action?: { label: string; onClick: () => void }): void;
   dismissToast(id: number): void;
   markHintSeen(key: string): void;
@@ -262,6 +263,7 @@ export const useStore = create<Store>((set, get) => ({
   showAlbums: false,
   panelsCollapsed: localStorage.getItem("rs.panelsCollapsed") === "1",
   fullScreen: false,
+  hslPickedBand: null,
   relinkTargetId: null,
   activeTool: "none",
   selectedLocalId: null,

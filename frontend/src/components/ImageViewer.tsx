@@ -206,6 +206,21 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
     }
   };
 
+  // Pipette HSL : désigne la bande la plus proche de la teinte du point cliqué (n'applique
+  // rien elle-même, contrairement à la pipette WB — juste un raccourci pour trouver la bande).
+  const pickHslBand = async (nx: number, ny: number) => {
+    const { currentId, edits, notify } = useStore.getState();
+    if (currentId === null || !edits) return;
+    setUI({ activeTool: "none" });
+    try {
+      const { band } = await api.pickHslBand(currentId, edits, nx, ny);
+      setUI({ hslPickedBand: band });
+      notify(t("viewer.hslPickDone", { band: t(`hsl.band.${band}`) }), "success");
+    } catch (err) {
+      notify(t("viewer.wbFailed", { error: String(err) }), "error");
+    }
+  };
+
   const onPointerDown = (ev: React.PointerEvent) => {
     if (ev.button !== 0) return;
     (ev.currentTarget as Element).setPointerCapture(ev.pointerId);
@@ -216,6 +231,8 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
       panStart.current = { x: pan.x, y: pan.y, px: ev.clientX, py: ev.clientY };
     } else if (activeTool === "wb") {
       void pickWhiteBalance(nx, ny);
+    } else if (activeTool === "hsl") {
+      void pickHslBand(nx, ny);
     } else if (activeTool === "pointmask") {
       void useStore.getState().createPointMask(nx, ny);
     } else if (activeTool === "linear" || activeTool === "radial") {

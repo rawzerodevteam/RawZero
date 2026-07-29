@@ -104,7 +104,8 @@
     "gpuUnavailable": "Aperçu GPU indisponible : {{error}}",
     "wbHistory": "Balance des blancs (pipette)",
     "wbDone": "Balance des blancs : {{temp}} / {{tint}}",
-    "wbFailed": "Pipette impossible : {{error}}"
+    "wbFailed": "Pipette impossible : {{error}}",
+    "hslPickDone": "Bande HSL : {{band}}"
   },
   "library": {
     "allPhotos": "Toutes les photos",
@@ -417,7 +418,9 @@
     "band": {
       "red": "Rouge", "orange": "Orange", "yellow": "Jaune", "green": "Vert",
       "aqua": "Aqua", "blue": "Bleu", "purple": "Violet", "magenta": "Magenta"
-    }
+    },
+    "pipette": "Pipette : cliquer une zone de l'image pour trouver sa bande HSL",
+    "pipetteAria": "Pipette HSL"
   },
   "slider": {
     "resetHint": "Double-clic : réinitialiser",

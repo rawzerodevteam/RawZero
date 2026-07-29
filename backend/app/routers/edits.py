@@ -87,6 +87,14 @@ def wb_pick(photo_id: int, body: WbPickBody):
     return pipeline.wb_from_point(base, body.edits, body.x, body.y)
 
 
+@router.post("/photos/{photo_id}/hsl_pick")
+def hsl_pick(photo_id: int, body: WbPickBody):
+    """Pipette HSL : renvoie la bande (`HSL_BANDS`) la plus proche de la teinte du point cliqué."""
+    row = get_photo_row(photo_id)
+    base = previews.get_base(photo_id, require_original(row))
+    return pipeline.hsl_band_from_point(base, body.edits, body.x, body.y)
+
+
 # ------------------------------------------------------------- masques IA
 
 # Borne de stockage du masque (bord long) : assez fin pour un upscale propre, fichier léger.

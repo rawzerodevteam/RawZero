@@ -230,6 +230,14 @@ export const api = {
     }));
   },
 
+  async pickHslBand(id: number, edits: EditState, x: number, y: number): Promise<{ band: string; hue: number; saturation: number }> {
+    return json(await fetch(`/api/photos/${id}/hsl_pick`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ edits, x, y }),
+    }));
+  },
+
   async autoMaskAvailable(): Promise<{ subject: boolean; sky: boolean; point: boolean; denoise: boolean }> {
     try {
       return await json(await fetch("/api/automask/available"));

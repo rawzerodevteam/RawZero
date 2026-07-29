@@ -138,6 +138,25 @@ class TestCurveAndColor:
         res = pipeline.wb_from_point(img, {}, 0.5, 0.5)
         assert abs(res["temp"]) < 1e-6 and abs(res["tint"]) < 1e-6
 
+    def test_hsl_pick_finds_nearest_band(self):
+        # patch rouge saturé au centre : la pipette doit désigner la bande "red" (centre 0°).
+        img = np.full((20, 20, 3), 0.5, np.float32)
+        img[8:12, 8:12] = [0.8, 0.1, 0.1]
+        res = pipeline.hsl_band_from_point(img, {}, 0.5, 0.5)
+        assert res["band"] == "red"
+        assert res["saturation"] > 0.5
+
+        # patch bleu saturé : bande "blue" (centre 240°).
+        img2 = np.full((20, 20, 3), 0.5, np.float32)
+        img2[8:12, 8:12] = [0.1, 0.1, 0.8]
+        res2 = pipeline.hsl_band_from_point(img2, {}, 0.5, 0.5)
+        assert res2["band"] == "blue"
+
+    def test_hsl_pick_neutral_patch_is_low_saturation(self):
+        img = np.full((20, 20, 3), 0.5, np.float32)
+        res = pipeline.hsl_band_from_point(img, {}, 0.5, 0.5)
+        assert res["saturation"] < 0.05
+
     def test_defringe_reduces_edge_fringe(self):
         # bord net avec frange pourpre (R,B hauts, V bas) sur les colonnes du bord
         img = np.zeros((20, 20, 3), np.float32)
