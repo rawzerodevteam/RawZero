@@ -128,10 +128,10 @@ export function LocalPanel() {
           <div className="slider-row">
             <span className="slider-label">{t("local.brushSize")}</span>
             <input
-              type="range" min={1} max={30} value={Math.round(brushSize * 100)}
+              type="range" min={0.2} max={30} step={0.1} value={Math.round(brushSize * 1000) / 10}
               onChange={(ev) => setUI({ brushSize: Number(ev.target.value) / 100 })}
             />
-            <span className="slider-value">{Math.round(brushSize * 100)}</span>
+            <span className="slider-value">{Math.round(brushSize * 1000) / 10}</span>
           </div>
           <div className="row-actions">
             <button

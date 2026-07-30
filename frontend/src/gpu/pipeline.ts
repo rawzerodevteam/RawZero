@@ -186,7 +186,7 @@ void main(){
     // moyenne de 4 tirages uniformes (approx. gaussienne, Irwin-Hall) ~ N(0,1)
     float n = 0.;
     for(int i=0;i<4;i++) n += grainHash(gl_FragCoord.xy + float(i)*17.3, u_grainSeed + float(i)*7.1);
-    n = (n*0.5 - 1.0) * 1.73;
+    n = (n - 2.0) * 1.73;
     c += n * (u_grain/100. * 0.05);
   }
   c = clamp(c, 0., 1.);

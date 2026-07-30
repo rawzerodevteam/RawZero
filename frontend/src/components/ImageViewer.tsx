@@ -28,7 +28,6 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
   const [cont, setCont] = useState({ w: 0, h: 0 });
   const [zoomScale, setZoomScale] = useState(1); // 1 = ajusté ; >1 = agrandi (molette)
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [tempShape, setTempShape] = useState<{ type: "linear" | "radial"; x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [, setTick] = useState(0);
   const [spaceHeld, setSpaceHeld] = useState(false); // Espace maintenu → déplacement (Krita/Photoshop)
@@ -251,12 +250,15 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
   const onPointerMove = (ev: React.PointerEvent) => {
     lastPointer.current = { x: ev.clientX, y: ev.clientY };
     const [nx, ny] = toImg(ev.clientX, ev.clientY);
-    setCursor({ x: nx, y: ny });
     if (mode.current === "shape" && tempShape) {
       setTempShape({ ...tempShape, x1: nx, y1: ny });
     } else if (mode.current === "brush") {
       const last = stroke.current[stroke.current.length - 1];
-      if (Math.hypot(nx - last[0], ny - last[1]) > 0.004) {
+      // Seuil en pixels ÉCRAN (pas en coordonnées normalisées) : sinon le pas entre deux points
+      // du trait grandit avec le zoom (jusqu'à des dizaines de px à 1600 %), et le pinceau devient
+      // saccadé/moins précis plus on est zoomé. 2 px écran donne une sensibilité constante.
+      const dxPx = (nx - last[0]) * box.w, dyPx = (ny - last[1]) * box.h;
+      if (Math.hypot(dxPx, dyPx) > 2) {
         stroke.current.push([nx, ny]);
         setTick((t) => t + 1);
       }
@@ -304,7 +306,6 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
 
   void selSig; // déclenche le re-rendu quand la géométrie du masque sélectionné change
   const selectedLocal = useStore.getState().edits?.locals.find((l) => l.id === selectedLocalId);
-  const brushCursorR = brushSize * 0.5 * Math.max(dispW, dispH);
 
   return (
     <div
@@ -313,7 +314,7 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerLeave={() => { setCursor(null); onPointerUp(); }}
+      onPointerLeave={onPointerUp}
       onDoubleClick={(ev) => activeTool === "none" && toggleZoom(ev.clientX, ev.clientY)}
     >
       {(gpu || (src && natural.w > 0)) && (
@@ -362,17 +363,6 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
             )}
           </svg>
           {activeTool === "crop" && <CropOverlay w={box.w} h={box.h} />}
-          {activeTool === "brush" && cursor && (
-            <div
-              className="brush-cursor"
-              style={{
-                left: cursor.x * box.w - brushCursorR,
-                top: cursor.y * box.h - brushCursorR,
-                width: brushCursorR * 2,
-                height: brushCursorR * 2,
-              }}
-            />
-          )}
         </div>
       )}
       {gpu && gpuState.error && <div className="viewer-empty">{t("viewer.gpuUnavailable", { error: gpuState.error })}</div>}

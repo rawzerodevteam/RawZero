@@ -1,0 +1,351 @@
+# RawZero — TODO
+
+> Liste consolidée des tâches restantes, réunies depuis les anciens documents d'audit/analyse
+> (`AMELIORATION.md`, `auditbug.md`, `audituxui.md`, `transfert_rust.md`, `Notes`), désormais
+> archivés dans `CLAUDE.md §12`. Coche au fur et à mesure ; garde ce fichier comme unique backlog
+> à jour (ne pas recréer de docs d'audit séparés).
+
+## Bugs confirmés (ex-`auditbug.md`)
+
+- [x] 🔴 `offsetParams` (copier/coller d'un masque pinceau) traite les points comme `{x,y}` au lieu
+      de `[x,y]` → `NaN`/`null`, plante le rendu et l'export. **Fix** : `frontend/src/lib/localMask.ts`,
+      décale `p[0]`/`p[1]` au lieu de `p.x`/`p.y`.
+- [x] 🔴 `pasteEditsToSelection` (coller les réglages en lot depuis la grille) ne pousse pas
+      `history` → à la réouverture de la photo, `loadHistory` restaure l'ancien état et écrase le
+      collage en lot au prochain save. **Fix** : `frontend/src/store.ts`, construit une `HistoryData`
+      (historique existant de la photo + étape « collé ») et la passe à `api.saveEdits`.
+- [x] 🟠 Le grain n'apparaît jamais dans l'aperçu GPU. **Fix** : passe de bruit (hash procédural,
+      seed par photo) ajoutée à la passe finale de `frontend/src/gpu/pipeline.ts` ; seed branché
+      depuis `currentId` dans `useGpuPreview.ts`.
+- [x] 🟠 Masque « plage de luminance » avec Min > Max : le swap `lo`/`hi` existe côté Python
+      (`masks.py`) mais pas dans le shader GLSL. **Fix** : swap ajouté dans `computeMask` (GLSL,
+      `frontend/src/gpu/pipeline.ts`), utilisé par `lblend` et `maskovl`.
+- [x] 🟠 Export sans EXIF/ICC, TIFF forcé en 8 bits (`backend/app/routers/export.py`, `cv2.imwrite`
+      brut). **Fix** : JPEG/PNG écrits via Pillow avec profil ICC sRGB + EXIF reconstruit depuis le
+      catalogue ; TIFF écrit via `tifffile` en 16 bits réels (nouvelle dépendance légère, pure
+      Python) avec le même profil ICC. `pipeline.render_array` accepte désormais `bit_depth=16`.
+- [x] 🟡 Masque IA copié sur une autre photo référence le PNG source (`params.ref` non réécrit au
+      collage) — cassé silencieusement si la photo source est supprimée. **Fix** : côté serveur
+      (`backend/app/routers/edits.py::_localize_ai_masks`, appelé par `save_edits`), tout masque IA
+      dont le `ref` pointe vers une autre photo est copié sous la photo courante et `ref` réécrit —
+      couvre tous les chemins de collage (masque seul, coller réglages, collage en lot) sans devoir
+      dupliquer la logique côté client.
+- [x] 🔴 `merge_edits` (`backend/app/pipeline.py`) ne validait pas le type des sections objet
+      (`tone`/`wb`/`presence`/`detail`/`effects`/`geometry`) : une valeur scalaire/`None` reçue à
+      la place d'un sous-dict (JSON corrompu en base, appel API mal formé) remplaçait le sous-dict
+      par défaut au lieu d'être ignorée, et `apply_pipeline` plantait (`TypeError` non attrapée) à
+      chaque rendu/export suivant de la photo. **Fix** : `merge()` retombe sur `default` dès que
+      `default` est un dict et que `value` n'en est pas un ; test de régression ajouté
+      (`test_malformed_section_falls_back_to_default`).
+- [x] 🟠 Régénération asynchrone des thumbs/previews (`backend/app/previews.py::schedule_preview_refresh`) :
+      la coalescence libère son drapeau `_refresh_pending` **au démarrage** du job (pour permettre
+      la relecture des edits les plus récents), mais avec 2 workers (`ThreadPoolExecutor`) un job
+      parti avec des edits périmés peut finir **après** un job plus récent et écraser sur disque
+      son résultat plus frais — la grille affiche alors une vignette obsolète jusqu'à la prochaine
+      sauvegarde. **Fix** : compteur de séquence par photo (`_refresh_seq`/`_refresh_written`),
+      un job ne peut écrire que si son n° de séquence est ≥ celui du dernier job ayant déjà écrit ;
+      tests de régression `backend/tests/test_previews.py`.
+- [x] 🔴 Raccourcis chiffres (notes 0-5, labels couleur 6-9) inutilisables sur clavier AZERTY (et
+      layouts similaires) : `frontend/src/keybindings.ts::normalizeEvent` ignorait Maj implicite
+      sur la ponctuation (`?`) mais pas sur les chiffres — or sur AZERTY la rangée de chiffres ne
+      produit le chiffre qu'**avec** Maj (touche physique « 1 » → `&` sans Maj, `1` avec Maj), donc
+      aucune combinaison physique ne matchait `rate-1`..`rate-5`/`color-red`..`color-blue` par
+      défaut. **Fix** : le garde « Maj ignoré » couvre désormais tout caractère simple non-lettre
+      (ponctuation **et** chiffres), les lettres gardent Maj (ex. `Ctrl+Maj+C`) ; test de
+      régression `frontend/tests/keybindings.test.ts`.
+- [x] 🟠 Fuite de ressources GPU à chaque bascule de l'aperçu GPU (`frontend/src/gpu/useGpuPreview.ts`,
+      effet `[active, canvasRef]`) : le `<canvas>` reste monté quand on désactive/réactive l'aperçu
+      GPU (bouton dans `AdvancedMenu`), donc `canvas.getContext("webgl2")` renvoie le **même**
+      contexte à chaque réactivation, et `new GpuPipeline(gl)` recrée un plein jeu de programmes/
+      textures/FBO sans jamais libérer l'ancien jeu (`GpuPipeline` n'avait aucune méthode
+      `dispose`). Désactiver/réactiver répétitivement épuise la mémoire GPU (peut aller jusqu'à la
+      perte de contexte sur GPU modestes). **Fix** : `GpuPipeline.dispose()` (supprime programmes,
+      textures dont RT/masques pinceau/IA, FBO, buffer du quad) appelé dans le nettoyage de l'effet
+      avant de réinitialiser `pipeRef.current`.
+- [x] 🟠 Molette de réglage fin sur les sliders d'édition (documentée comme faite dans CLAUDE.md
+      §8 depuis le commit initial, mais jamais réellement codée : `frontend/src/components/EditSlider.tsx`
+      n'avait aucun `onWheel`/listener `wheel`). Vérifié dans l'historique git (`git log -p` sur ce
+      fichier depuis `66aa4ae`, aucune occurrence de "wheel" à aucune revision) : pas une régression,
+      la fonctionnalité n'a jamais existé — le point de la checklist était faux depuis le début.
+      **Fix** : listener natif non-passif sur l'input `range` (même pattern que le zoom molette de
+      `ImageViewer.tsx`), un cran = un pas (`step`), coalescé en un seul point d'historique par
+      geste via `startDrag`/`updateEditsLive`/`endDrag` différé (250 ms d'inactivité) — même
+      mécanique que le drag à la souris, nettoyage au démontage pour ne jamais laisser un
+      `dragBaseline` orphelin. `tsc`/`vite build`/suite de tests (85) verts ; **non vérifié
+      visuellement en navigateur** (pas de Playwright/testing-library disponible dans cet
+      environnement) — à confirmer manuellement à l'occasion.
+- [x] 🟠 `frontend/src/lib/dialog.tsx` (`confirmDialog`/`promptDialog`, remplace `window.confirm`/
+      `prompt`) : slot unique (`current`), pas une file — une 2ᵉ requête pendant qu'un dialogue est
+      déjà affiché écrasait la 1ʳᵉ sans jamais résoudre sa promesse, bloquant l'appelant sur `await`
+      indéfiniment (ex. `PresetsPanel::saveCurrent` qui ne créait alors jamais le preset, sans
+      erreur visible ; ou Suppr appuyé deux fois vite via `shortcuts.ts`). **Fix** : vraie file
+      (`queue: DialogRequest[]`), traitement FIFO, `advance()` au lieu d'un simple reset à `null`.
+      `tsc`/`vite build`/suite de tests (85) verts.
+- [x] 🟡 Piège de focus cassé quand la file de dialogues (`dialog.tsx`, cf. fix ci-dessus) enchaîne
+      deux requêtes de nature différente sans démonter `DialogHost` (ex. un `promptDialog` de
+      renommage suivi d'un `confirmDialog` de suppression mis en file) : `useFocusTrap` était
+      appelé avec `req !== null` — ce booléen reste `true` d'une requête à l'autre, donc son effet
+      (deps `[active]`) ne se rejoue pas : le focus initial n'est jamais reposé sur le nouveau
+      contenu, et si l'`&lt;input&gt;` du prompt disparaît (bascule vers un confirm sans champ), le
+      focus retombe sur `&lt;body&gt;` et le Tab s'échappe vers la page derrière la modale (régression
+      clavier/accessibilité). **Fix** : `useFocusTrap` accepte désormais n'importe quelle valeur
+      (pas seulement un booléen) et `DialogHost` lui passe l'objet-requête lui-même — son identité
+      change à chaque nouvelle requête (même de même nature), ce qui force l'effet à se rejouer.
+      `tsc`/`vite build`/suite de tests (85) verts.
+- [x] 🟠 `src-tauri/src/lib.rs::run` (repéré par un audit précédent comme observation à confirmer) :
+      si le sidecar backend (uvicorn empaqueté) ne répond pas dans les 20 s de `wait_for_port`,
+      l'erreur n'était que **loguée** — la fenêtre webview s'ouvrait quand même sur une URL morte,
+      laissant l'utilisateur face à une page blanche/erreur réseau sans explication, avec le
+      sidecar potentiellement orphelin en arrière-plan. **Fix** : le process sidecar est tué
+      explicitement, un dialogue natif d'erreur (`tauri_plugin_dialog`) explique le problème, puis
+      l'app quitte proprement (`std::process::exit(1)`) au lieu d'ouvrir une fenêtre condamnée.
+      Vérifié par `cargo check` (compile sans erreur) — pas de build Tauri complet effectué (pas
+      testé en conditions réelles de sidecar en échec).
+- [x] 🔴 Ctrl+Z/Ctrl+Maj+Z pendant un drag en cours (poignée de masque, crop, slider) corrompait le
+      geste : `undo()`/`redo()` (`frontend/src/store.ts`) rétablissaient `edits` à un état antérieur
+      et remettaient `dragBaseline` à `null` **pendant** que le drag continuait de muter `edits` par
+      dessus cet état rétabli (via `updateEdits(fn, false)`, sauvegardé côté serveur à chaque
+      mutation) — au relâchement, `endDrag()` ne trouvait plus de `dragBaseline` et ne posait donc
+      **aucun** point d'historique pour tout le geste, tout en ayant déjà persisté l'état corrompu.
+      **Fix** : `undo()`/`redo()` ignorent silencieusement l'appel tant qu'un drag est en cours
+      (`dragBaseline !== null`) — le geste garde la responsabilité de son propre point d'historique.
+      Test de régression `frontend/tests/store.test.ts`.
+- [x] 🟡 Cache d'embedding EdgeSAM (masque IA au clic) périmé après relink : `segment._emb_cache`
+      est clé par `geo_key(photo_id, geometry)` (géométrie, pas contenu du fichier). Après
+      `PATCH /photos/{id}/relink` vers un fichier au contenu différent mais à la géométrie
+      inchangée, un clic masque IA suivant réutilisait l'embedding calculé sur l'**ancien** contenu
+      de l'image → masque positionné/formé pour la mauvaise image, sans erreur visible.
+      **Fix** : `segment.invalidate(photo_id)` (purge toutes les clés `"{photo_id}:*"`) appelé
+      depuis `previews.invalidate` (déjà déclenché par `relink`/suppression). Test de régression
+      `backend/tests/test_previews.py`.
+- [x] 🔴 Perte silencieuse d'une édition en attente (débounce 800 ms) en changeant de projet/album
+      juste après une retouche : `saveNow()` (`frontend/src/store.ts`) abandonne si `currentId`
+      est déjà `null` — or `setProject`/`setAlbum`/`deleteProject` (branche « projet courant
+      supprimé ») remettaient `currentId` à `null` **sans** flusher d'abord une sauvegarde en
+      attente (contrairement à `openDevelop`, qui le fait déjà). Retoucher un curseur puis changer
+      de projet/album avant les 800 ms perdait la modification sans aucune erreur visible (`dirty`
+      restait vrai indéfiniment). **Fix** : `await get().saveNow()` ajouté en tête de ces trois
+      chemins, comme dans `openDevelop`. Tests de régression `frontend/tests/store.test.ts`.
+- [x] 🟠 Masque pinceau : un point de coordonnée NaN/Infinity (edits corrompus en amont, bug côté
+      client, édition manuelle de la DB) faisait planter `_brush_mask` (`backend/app/masks.py`) —
+      `int(round(nan))` lève `ValueError`, `int(round(inf))` lève `OverflowError` — remontant en
+      erreur 500 non gérée dans `/render` et `/export` : la photo devenait développement/export
+      impossible en permanence, sans recours côté UI. **Fix** : helper `_finite()` coercit toute
+      coordonnée/rayon non fini vers une valeur par défaut avant conversion en entier. Test de
+      régression `backend/tests/test_pipeline.py::test_brush_handles_non_finite_points`.
+- [x] 🟠 Double Suppr rapproché (2e dialogue mis en file pendant que la 1ʳᵉ suppression est encore
+      en vol, cf. le fix de la file de dialogues ci-dessus) pouvait supprimer la **mauvaise** photo :
+      `removeCurrent` (`frontend/src/store.ts`) relisait `currentId` **à la résolution** du
+      dialogue plutôt qu'au moment de la demande, et `shortcuts.ts` ne figeait pas non plus la
+      photo visée. Si la 1ʳᵉ suppression avait déjà avancé `currentId` vers la photo suivante
+      quand l'utilisateur confirmait le 2e dialogue (texte identique, aucune indication du
+      changement), le 2e `removeCurrent` supprimait cette photo suivante jamais distinctement
+      confirmée ; sinon (1ʳᵉ suppression encore en vol) un 2e `DELETE` inutile partait pour la même
+      photo. **Fix** : `removeCurrent(deleteFile, targetId)` accepte désormais l'id figé au moment
+      de la demande (`shortcuts.ts` le capture avant `confirmDialog`), garde `removingIds` contre
+      une suppression déjà en cours pour cet id, no-op si la photo visée a déjà disparu de la
+      liste, et attrape l'erreur de `deletePhoto` (notification au lieu d'un rejet non géré).
+      Tests de régression `frontend/tests/store.test.ts`.
+- [x] 🟠 Même classe de bug que le masque pinceau (ci-dessus), étendue aux autres types de masque :
+      un paramètre NaN/Infinity dans `linear`/`radial`/`lumrange`/`colorrange` (`backend/app/masks.py`)
+      ne fait pas planter (pas d'`int()`/`round()` dans ces fonctions), mais se propage
+      **silencieusement** — `np.clip(nan, ...)` reste `nan` — jusqu'au masque puis à l'image finale
+      composée, produisant des pixels corrompus sans aucune erreur. **Fix** : les quatre fonctions
+      utilisent désormais `_finite()` (le même helper ajouté pour le pinceau) sur chaque paramètre
+      scalaire avant tout calcul. Test de régression
+      `backend/tests/test_pipeline.py::test_linear_radial_lumrange_colorrange_handle_non_finite_params`.
+- [x] 🟡 Feathering du pinceau : flou gaussien OpenCV (serveur) vs `blur()` CSS Canvas2D (GPU) —
+      léger écart visuel possible sur gros traits/feather élevé, dépendant de l'implémentation
+      navigateur de `filter:blur()` (parfois approximée par boîtes glissantes). **Fix (2026-07-29)** :
+      `brushTexture` (`frontend/src/gpu/pipeline.ts`) rasterise désormais les traits non floutés sur
+      Canvas2D, les upload en texture brute (`brushRawTex`, par id de masque), puis applique le même
+      flou gaussien séparable GPU que le reste du pipeline (`this.blur()`, downscale=1 pour rester à
+      pleine résolution) au lieu de `ctx.filter = blur()`. Toujours pas pixel-exact vs
+      `cv2.GaussianBlur` (aucune des deux implémentations ne l'est), mais cohérence inter-navigateurs
+      gagnée et même famille d'implémentation que le reste de l'aperçu GPU. `clearMaskTextures` ajusté
+      pour ne plus supprimer directement une texture appartenant au pool de RT partagé (`this.rts`)
+      quand `feather>0`, ce qui aurait cassé sa réutilisation par clé au flou suivant.
+      `tsc`/`vitest` (90) et suite backend (87) verts.
+- [x] 🟢 Arrondi géométrie straighten+crop : troncature Python (`int(...)`, `backend/app/pipeline.py`
+      `apply_geometry:171-175`) vs `Math.round` GPU (`frontend/src/gpu/pipeline.ts`) — écart de
+      l'ordre du pixel pouvant désaligner les masques locaux (coordonnées normalisées sur l'image
+      recadrée) entre aperçu GPU et rendu serveur. **Fix (2026-07-29)** : `applyGeometry` calcule
+      désormais `gw`/`gh` par troncature des bornes de recadrage (`x0`/`y0`/`x1`/`y1` en pixels,
+      même formule que `apply_geometry`) au lieu d'un `Math.round` indépendant sur la largeur/hauteur
+      fractionnaire ; le rectangle inscrit du redressement (`largestRotatedRect`) est également
+      tronqué en entier (`Math.trunc`) avant d'servir de base au recadrage, comme `int(wr)`/`int(hr)`
+      côté Python. `wrwh` (fenêtre d'échantillonnage UV) reste calculé sur les dimensions continues
+      (fidélité du redressement), seule la dimension de sortie en pixels est désormais alignée.
+      `tsc`/`vitest` (90) et suite backend (87) verts — pas de test de parité pixel dédié à la
+      géométrie (`test_parity.py` ne couvre pas encore les ops à voisinage/géométrie, cf. N12),
+      vérifié par lecture croisée des deux implémentations.
+
+## Perf & robustesse backend (ex-`AMELIORATION.md` §6)
+
+- [x] 🟡 N4 — Masques locaux : limiter le pipeline local à la **boîte englobante** du masque au lieu
+      de traiter l'image entière par masque (`pipeline.py::_apply_local`). **Fait** : boîte
+      englobante du masque (`_mask_bbox`) + halo ~3σ (HL/ombres, clarté, netteté — pour que le
+      recadrage voie les mêmes pixels voisins que la pleine image) ; `_apply_hl_shadows`/
+      `_apply_clarity` acceptent désormais `ref_long_edge` pour garder le même rayon de flou que
+      sur l'image complète. Vérifié numériquement équivalent (écart ~1e-6, bruit float32).
+- [x] 🟡 N5 — `_apply_color` : court-circuite désormais la conversion HSV quand seules
+      saturation/vibrance sont utilisées (pas de bande HSL) — identité HSV à V et teinte fixes
+      (`c' = c·r + V·(1-r)`), sans passer par `cv2.cvtColor` dans un sens ni l'autre. Bénéficie à
+      chaque retouche locale (toujours `hsl={}`) et à `_apply_dehaze`. Golden de parité régénéré
+      (écart ~1e-6, sous le seuil de test relâché ; comportement mathématiquement identique).
+- [x] 🟡 N6 — **Export 16 bits** pour TIFF (PNG reste 8 bits : pas de writer RGB 16 bits fiable
+      disponible sans dépendance lourde supplémentaire) — fait avec le point EXIF/ICC ci-dessus.
+- [x] 🟢 N7 — Éviter le `deepcopy(DEFAULT_EDITS)` à chaque rendu (`merge_edits`). **Fait** : `merge()`
+      reconstruit déjà récursivement chaque dict traversé (dict comprehension) — le deepcopy était
+      inutile (aucune mutation en place des feuilles partagées ailleurs dans le pipeline).
+- [x] 🟢 N8 — Mémoïser la LUT de courbe composée (`chan(master(x))`) au lieu de la recalculer à
+      chaque rendu. **Fait** : `_composed_curve_luts` (lru_cache) mémoïse la composition complète
+      par combinaison de courbes (maître + r/g/b).
+- [x] 🟢 N9 — Cacher sur disque la base débruitée IA à l'export (évite de ré-inférer FFDNet à
+      chaque export répété de la même photo). **Fait** : `previews.get_export_denoised_base`
+      (cache disque `{id}.dnfull.npy`, distinct du cache aperçu dev qui est à `BASE_SIZE`),
+      invalidé par `previews.invalidate` (relink/suppression) comme les autres caches.
+- [x] 🟡 N10 — Test de parité automatisé rsfast (Rust) ↔ NumPy, étage par étage. **Fait** :
+      `backend/tests/test_rsfast_parity.py`, 10 étages comparés directement (Rust vs NumPy, pas
+      via le golden qui force `rsfast` hors-ligne) ; skip proprement si le binaire n'est pas
+      compilé. Écarts mesurés ~1e-7 (epsilon float32) sur toutes les étages testées.
+- [ ] 🔴 N11 — Découper les gros fichiers avant tout chantier qui les touche : `gpu/pipeline.ts`
+      (~1096 lignes au 2026-07-29, après le fix feathering/géométrie ci-dessus), `store.ts` (~972),
+      `pipeline.py` (~729), `ImageViewer.tsx` (~613), `LibraryView.tsx` (~513). **Re-vérifié
+      2026-07-29** (passe robustesse) : conclusion inchangée — pur refactor d'organisation, aucun
+      gain perf/robustesse propre, et `pipeline.ts`/`store.ts` continuent de grossir au fil des
+      correctifs plutôt que de justifier un découpage à eux seuls (les touches d'aujourd'hui y
+      étaient localisées, pas un chantier structurant qui déclencherait la règle énoncée ici). Le
+      faire à vide sur un fichier à état GL partagé (`GpuPipeline`, closures sur `this`, cache de
+      RT par clé) est le genre de refactor à haut risque de régression silencieuse évoqué dans les
+      instructions du projet — laissé pour un chantier qui touche réellement l'un de ces fichiers.
+- [ ] N12 — Parité GPU↔Python toujours partielle sur les ops à voisinage (flous : HL/ombres, clarté,
+      netteté, dehaze, NR) — bloque un export GPU unifié serein. **Re-vérifié 2026-07-29** :
+      confirmé que `cpuPipeline.ts` (le port CPU utilisé par `parity.test.ts`) ne couvre aucune
+      opération à voisinage — `grep` sur blur/gaussian/clarity/highlight/shadow/dehaze/sharpen/
+      denoise n'y trouve aucune occurrence, cohérent avec le commentaire en tête de
+      `test_parity.py`. Point notable en relisant `_blur_fast` (`backend/app/pipeline.py:118-130`) :
+      le côté **Python** approxime lui aussi par downscale dès que `sigma` dépasse ~8px (k borné à
+      4, comme le GPU) — la parité n'est donc pas « exact vs approximé » mais « deux approximations
+      par downscale indépendantes », ce qui change la nature du chantier (mesurer l'écart entre les
+      deux, pas viser le pixel-exact contre `cv2.GaussianBlur` seul). Reste néanmoins hors périmètre
+      d'un passage robustesse ciblé : construire ce filet nécessite un port complet du flou séparable
+      GLSL en JS testable + des images de test représentatives (pas des pixels isolés comme
+      `parity.test.ts` actuel) — chantier à part entière, non entamé ici.
+- [x] ◑ B6 — Pagination de `GET /api/photos`. **Fait partiellement (2026-07-29)** : `limit`/`offset`
+      optionnels ajoutés à `list_photos` (`backend/app/routers/photos.py`), **rétro-compatibles**
+      (`limit=0` par défaut renvoie tout, comme avant, pas de clé `total` dans la réponse — le
+      frontend actuel n'est pas touché). Avec `limit>0` : `COUNT(*)` sur la requête filtrée (avant
+      `LIMIT`/`OFFSET`) renvoyé en `total`, pour qu'un futur frontend paginé n'ait pas besoin d'un
+      second aller-retour. Index déjà en place côté DB (`idx_photos_captured`,
+      `idx_photos_project_captured`). Test de régression `backend/tests/test_api.py::test_list_pagination`
+      (page bornée, offset hors limites, cohérence page-par-page vs liste complète). **Reste
+      différé** : le frontend continue de charger la liste complète (modèle de navigation — marquee,
+      flèches, filmstrip — non repensé) ; c'est le refacto coordonné qui reste hors périmètre, pas
+      la disponibilité backend.
+
+## UX/UI (ex-`audituxui.md`, plan d'action condensé)
+
+### Lot A — quick wins
+**Ré-audit 2026-07-29 : tous les points de ce lot étaient déjà implémentés dans le code, la
+checklist n'avait simplement pas été mise à jour au moment du travail. Vérifié fichier par fichier,
+rien de restant ici.**
+- [x] Focus clavier `:focus-visible` global — `frontend/src/styles.css:21-25`.
+- [x] Icônes Copier vs Coller distinctes — `IconCopy`/`IconPaste` séparées, ex. `ContextMenu.tsx`.
+- [x] `Δ`/`⚡ GPU` sortis vers le menu « Avancé » (debug), plus dans la barre principale —
+      `DevelopView.tsx` (menu regroupant les outils de QA GPU↔Python).
+- [x] Pas de duplication Import/Export : plus de « rail gauche » dans l'UI actuelle, un seul bouton
+      par contexte (`HomeView`, toolbar bibliothèque, menu contextuel, bandeau sélection).
+- [x] `title`/`aria-label` déjà posés sur puces couleur (`LibraryView.tsx`, `ContextMenu.tsx`) et
+      boutons icône (undo/redo, reset section, paramètres…).
+- [x] Ratios de recadrage unifiés dans `frontend/src/lib/cropAspects.ts` (source unique, utilisée
+      par `CropBar` et `GeometryPanel`).
+- [x] Indicateur de zoom cliquable (menu Ajusté/100 %/…) — `ImageViewer.tsx` (`zoom-indicator`/`zoom-menu`).
+- [x] État ouvert/fermé des sections de panneau persisté en `localStorage` —
+      `frontend/src/components/PanelSection.tsx` (`storageKey`, `rs.panelOpen.*`).
+
+### Lot B — chantiers structurants
+**Ré-audit 2026-07-29 : idem, déjà fait sauf mention contraire.**
+- [x] Composant `Dialog`/`Prompt`/`Confirm` maison (`frontend/src/lib/dialog.tsx`, file FIFO) —
+      plus aucun `window.prompt`/`confirm` ailleurs dans `frontend/src` (vérifié par recherche).
+- [x] Toolbar bibliothèque : bouton « Filtres » qui regroupe note/drapeau/couleur/EXIF
+      (`LibraryView.tsx`, `library.filtersTitle`), `flex-wrap` + media queries à 1100px/860px
+      dans `styles.css`.
+- [x] Boutons Undo/Redo visibles dans la toolbar développement (`DevelopView.tsx`) + bandeau
+      d'actions sur sélection multiple dans la grille (`LibraryView.tsx::SelectionBar`).
+- [x] Toasts empilables typés — `frontend/src/components/ToastStack.tsx`.
+- [x] « Coller les réglages » + note/couleur déjà dans le menu contextuel de la grille
+      (`ContextMenu.tsx` : `pasteEditsToSelection`, sous-menus rating/color/flag).
+- [x] Accessibilité clavier des étoiles (`StarRating.tsx` : `role="button"`, `tabIndex`,
+      Entrée/Espace, `aria-label`/`aria-pressed`).
+
+### Lot C — cohérence & profondeur (moyen/long terme)
+- [ ] Set d'icônes SVG unifié (aujourd'hui mélange emoji / glyphes Unicode / SVG) + système de
+      boutons rationalisé.
+- [ ] Réordonnancement des panneaux (Géométrie trop bas, Presets trop bas) + interrupteur
+      d'activation par module (façon Darktable).
+- [ ] Onboarding/coach-marks (viewer, sélection multiple) + états vides harmonisés.
+- [x] Écrêtage cliquable depuis l'histogramme : les deux puces d'écrêtage (`clip-dot`, ombres/hautes
+      lumières) de `frontend/src/components/Histogram.tsx` sont désormais de vrais boutons qui
+      basculent `showClipping` (même état que le raccourci `J`), au lieu d'être des indicateurs
+      passifs — `aria-pressed`/anneau visuel quand actif. `tsc`/`vitest` (90) verts.
+- [x] Plein écran (masquer les panneaux) : raccourci `F` (rebindable, registre `keybindings.ts`)
+      + bouton toolbar (`DevelopView.tsx`), masque toolbar/bandeau manquant/filmstrip/colonne de
+      panneaux, ne garde que le viewer (bouton flottant discret + Échap pour sortir, prioritaire
+      sur l'outil actif). État transitoire (pas persisté, contrairement à `panelsCollapsed`).
+      Test de régression `frontend/tests/shortcuts.test.ts`. `tsc`/`vite build`/tests (91) verts.
+- [x] Recherche catalogue par nom de fichier : champ dans la toolbar bibliothèque (`filters.search`,
+      client uniquement — pas de colonne indexée backend, la liste est déjà en mémoire côté
+      frontend), filtre la grille, survit à « Réinitialiser les filtres » (comme le tri) mais se
+      vide au changement de projet/album (comme les filtres EXIF). État vide dédié si 0 résultat.
+      Tests de régression `frontend/tests/store.test.ts`. `tsc`/`vite build`/tests (92) verts.
+- [x] Modèle de nommage à l'export : jetons `{name}`/`{seq}`/`{date}`/`{id}` (`ExportRequest.name_template`,
+      `backend/app/routers/export.py::_render_name`), rétro-compatible (vide → comportement
+      historique stem+suffix). `{seq}` suit l'ordre de la requête (pas l'ordre de complétion des
+      workers parallèles de `/export/stream`, déterminé par `enumerate(rows, start=1)` avant le
+      dispatch). Câblé dans `ExportDialog.tsx` (remplace le suffixe quand renseigné). Test de
+      régression `backend/tests/test_api.py::test_export_name_template`. Suites backend (89) et
+      frontend (92) + `vite build` verts.
+- [x] Pipette HSL sur l'image : `POST /photos/{id}/hsl_pick` (`pipeline.hsl_band_from_point`,
+      échantillonne le pipeline complet rendu, teinte la plus proche d'un centre de `HSL_BANDS`
+      par distance circulaire) + bouton pipette dans `HSLPanel.tsx` (même style que la pipette WB),
+      la bande désignée défile en vue et se surligne 2 s. N'applique rien elle-même (contrairement
+      à la pipette WB), juste un raccourci pour trouver la bande. Tests de régression
+      `backend/tests/test_pipeline.py`. Suites backend (91)/frontend (92) + `vite build` verts.
+- [x] Glisser-réordonner dans un album : colonne `album_photos.position` (migrée, backfill à
+      l'ordre d'insertion), `PATCH /albums/{id}/reorder`, tri `"custom"` (n'a de sens qu'avec
+      `album_id`, ignoré sinon). Zones de dépose sur les cellules de la grille actives seulement
+      en vue album et sans recherche active (n'entre pas en conflit avec le glisser-déposer
+      existant vers la sidebar des albums — cibles DOM distinctes). Optimiste côté client, recharge
+      depuis le serveur si l'appel échoue. Tests de régression backend
+      (`test_api.py::test_album_manual_reorder`) et frontend (`store.test.ts`). Suites backend (93)
+      /frontend (94) + `vite build` verts.
+- [ ] 💡 Fonctionnalité manquante à considérer : avant/après côte à côte (split).
+      **Lot C 💡 : tous les autres points ont été traités (2026-07-29) ; celui-ci reste le seul
+      encore ouvert — non tenté car il demanderait de faire cohabiter deux rendus simultanés
+      (avant + après) dans `ImageViewer`/`GpuPipeline`, alors que l'architecture actuelle ne
+      produit qu'un seul flux affiché à la fois (bascule, pas rendu double) ; chantier à part
+      entière, pas un quick win.**
+- [ ] Passe responsive complète (laptop 1280×800) + `prefers-reduced-motion` + focus-trap sur les
+      modales.
+
+## Roadmap infra/produit (voir `docs/infra-architecture.md`, tenu à jour séparément avec son diagramme)
+
+- [ ] #1 — Inpainting MI-GAN (correcteur de taches, cf. `auditbug.md` §0 : fonctionnalité jamais
+      livrée, pas une régression — chantier à confirmer si toujours désiré).
+- [ ] #3 — `licensing.can()`, cache de licence hors-ligne, plans/capabilities (paiement explicitement
+      hors scope).
+- [ ] #5 — Finalisation des liens de téléchargement des modèles IA.
+- [ ] #6 — Export en un clic (export + download direct, sans étape intermédiaire) — item historique
+      de `Notes`, toujours ouvert malgré l'ajout de la destination FS Access mémorisée.
+- [ ] #8–#11 — Site marketing (identité visuelle → site → hébergement), rien de construit.
+- [ ] #12 — Mise en place du serveur de licensing (dépend de #3).
+- [ ] Installeur macOS (.dmg) — pas d'issue GitHub dédiée pour l'instant.
+
+## Portage Rust — pas de todo actif
+
+`transfert_rust.md` (archivé, cf. `CLAUDE.md §12`) concluait à **ne pas réécrire le backend en
+Rust intégralement** : le chemin chaud est déjà GPU/C (WebGL2, OpenCV, LibRaw, ONNX), le gain net
+serait modéré face au coût de revalidation pixel-exacte du pipeline. Si un besoin de performance
+précis et mesuré apparaît un jour, revoir l'option ciblée (extension Rust via PyO3/maturin sur un
+hot spot précis) plutôt que rouvrir ce chantier en l'état.
