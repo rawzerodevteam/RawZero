@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { api, type ModelStatus } from "../api";
 import { useStore } from "../store";
 import { Modal } from "./Modal";
+import { IconCheck } from "../icons";
 
 const FEATURES = ["subject", "point", "denoise"] as const;
 
@@ -54,7 +55,7 @@ export function ModelsDialog() {
                 </div>
                 <div className="model-action">
                   {s?.available ? (
-                    <span className="model-ok">✓ {t("models.installed")}</span>
+                    <span className="model-ok"><IconCheck size={12} /> {t("models.installed")}</span>
                   ) : s?.downloading ? (
                     <span className="model-busy">{t("models.downloading", { percent: pct })}</span>
                   ) : s?.configured ? (

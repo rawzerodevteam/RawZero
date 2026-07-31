@@ -4,7 +4,7 @@ import { api } from "../api";
 import { useStore } from "../store";
 import { chooseExportDir, ensureWritable, fsAccessSupported, loadExportDir, writeFile } from "../lib/exportDir";
 import { Modal } from "./Modal";
-import { IconClose, IconFolder } from "../icons";
+import { IconCheck, IconClose, IconFolder } from "../icons";
 
 type Scope = "selection" | "current" | "all";
 
@@ -194,7 +194,7 @@ export function ExportDialog() {
         </div>
 
         {!busy && doneCount > 0 && (
-          <p className="export-done">✓ {t("export.doneCount", { count: doneCount })}{dirName ? " " + t("export.inFolder", { dir: dirName }) : ""}.</p>
+          <p className="export-done"><IconCheck size={12} /> {t("export.doneCount", { count: doneCount })}{dirName ? " " + t("export.inFolder", { dir: dirName }) : ""}.</p>
         )}
         {errors.length > 0 && (
           <p className="error">

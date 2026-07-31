@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useStore } from "../store";
+import { IconClose } from "../icons";
 
 /** Pile de notifications empilables (succès/erreur/info), avec fermeture manuelle et action
  * optionnelle (ex. « Annuler »). Remplace l'ancien toast unique qui écrasait le précédent
@@ -20,7 +21,7 @@ export function ToastStack() {
             </button>
           )}
           <button className="toast-close" title={t("common.close")} aria-label={t("common.close")}
-            onClick={() => dismissToast(tst.id)}>✕</button>
+            onClick={() => dismissToast(tst.id)}><IconClose size={11} /></button>
         </div>
       ))}
     </div>

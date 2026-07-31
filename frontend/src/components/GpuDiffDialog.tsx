@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useStore } from "../store";
 import { measureDivergence, type DiffStats } from "../gpu/diff";
 import { Modal } from "./Modal";
+import { IconClose } from "../icons";
 
 /** Outil de diagnostic : compare numériquement l'aperçu GPU au rendu Python (référence)
  *  sur la photo et les réglages courants. Sert à décider si l'export peut rester côté Python. */
@@ -37,7 +38,7 @@ export function GpuDiffDialog({ onClose }: { onClose: () => void }) {
     <Modal labelledBy={titleId} onClose={onClose} style={{ minWidth: 380 }}>
       <header>
         <h2 id={titleId}>{t("gpuDiff.title")}</h2>
-        <button className="mini-btn" onClick={onClose}>✕</button>
+        <button className="mini-btn" onClick={onClose} aria-label={t("common.close")}><IconClose size={12} /></button>
       </header>
 
         {busy && <p className="dim">{t("gpuDiff.measuring")}</p>}

@@ -45,6 +45,7 @@ export function LocalPanel() {
   // données STRUCTURELLES (type/invert/kind/id) en sont tirées — les valeurs passent par `get`.
   const allLocals = useStore.getState().edits!.locals;
   const selected = allLocals.find((l) => l.id === selectedLocalId) ?? null;
+  const brushSizePct = Math.round(brushSize * 1000) / 10;
 
   const removeSelected = () => {
     if (!selected) return;
@@ -128,10 +129,10 @@ export function LocalPanel() {
           <div className="slider-row">
             <span className="slider-label">{t("local.brushSize")}</span>
             <input
-              type="range" min={0.2} max={30} step={0.1} value={Math.round(brushSize * 1000) / 10}
+              type="range" min={0.2} max={30} step={0.1} value={brushSizePct}
               onChange={(ev) => setUI({ brushSize: Number(ev.target.value) / 100 })}
             />
-            <span className="slider-value">{Math.round(brushSize * 1000) / 10}</span>
+            <span className="slider-value">{brushSizePct}</span>
           </div>
           <div className="row-actions">
             <button

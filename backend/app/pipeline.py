@@ -17,6 +17,13 @@ import numpy as np
 
 from . import rsfast
 from .masks import build_mask
+from .pipeline_core import gauss, luma, srgb_to_linear, linear_to_srgb, _smoothstep, _wb_gains
+from .pipeline_geometry import apply_geometry
+from .pipeline_color import HSL_BANDS, _apply_color
+from .pipeline_detail import (
+    _apply_clarity, _apply_dehaze, _apply_nr, _apply_defringe, _apply_sharpen,
+    _apply_vignette, _apply_grain,
+)
 
 # ---------------------------------------------------------------- état par défaut
 
@@ -44,10 +51,6 @@ DEFAULT_EDITS: dict[str, Any] = {
 LOCAL_ADJUST_DEFAULTS = {"exposure": 0.0, "contrast": 0.0, "highlights": 0.0,
                          "shadows": 0.0, "temp": 0.0, "tint": 0.0,
                          "saturation": 0.0, "clarity": 0.0, "sharpness": 0.0}
-
-HSL_BANDS = [("red", 0.0), ("orange", 30.0), ("yellow", 60.0), ("green", 120.0),
-             ("aqua", 180.0), ("blue", 240.0), ("purple", 280.0), ("magenta", 320.0)]
-
 
 def merge_edits(edits: Optional[dict]) -> dict:
     """Fusion récursive avec les valeurs par défaut (tolère un état partiel)."""
@@ -79,110 +82,9 @@ def edits_meaningful(edits: Optional[dict]) -> bool:
     return merge_edits(edits) != DEFAULT_EDITS
 
 
-# ---------------------------------------------------------------- utilitaires
-
-_LUT_N = 4096
-_lin_lut = None
-_srgb_lut = None
-
-
-def _luts() -> tuple[np.ndarray, np.ndarray]:
-    global _lin_lut, _srgb_lut
-    if _lin_lut is None:
-        x = np.linspace(0.0, 1.0, _LUT_N, dtype=np.float32)
-        _lin_lut = np.where(x <= 0.04045, x / 12.92, ((x + 0.055) / 1.055) ** 2.4).astype(np.float32)
-        _srgb_lut = np.where(x <= 0.0031308, x * 12.92, 1.055 * x ** (1 / 2.4) - 0.055).astype(np.float32)
-    return _lin_lut, _srgb_lut
-
-
-def _apply_lut(img: np.ndarray, lut: np.ndarray) -> np.ndarray:
-    idx = np.clip(img * (_LUT_N - 1), 0, _LUT_N - 1).astype(np.int32)
-    return lut[idx]
-
-
-def srgb_to_linear(img: np.ndarray) -> np.ndarray:
-    return _apply_lut(np.clip(img, 0.0, 1.0), _luts()[0])
-
-
-def linear_to_srgb(img: np.ndarray) -> np.ndarray:
-    return _apply_lut(np.clip(img, 0.0, 1.0), _luts()[1])
-
-
-def luma(img: np.ndarray) -> np.ndarray:
-    return img[..., 0] * 0.2126 + img[..., 1] * 0.7152 + img[..., 2] * 0.0722
-
-
-def gauss(img: np.ndarray, sigma: float) -> np.ndarray:
-    sigma = max(float(sigma), 0.3)
-    # Grand sigma : un flou gaussien à pleine résolution construit un noyau énorme
-    # (ksize ≈ 8σ) → coût prohibitif (~4 s à σ≈116 sur 22 Mpx). Le résultat étant
-    # basse fréquence, on floute une version réduite d'un facteur k puis on ré-agrandit :
-    # 50–85× plus rapide, écart ≤ 0.06/255 vs le flou plein (k borné à 4, conservateur).
-    # Les petits σ (netteté, défrange) gardent k=1 → flou OpenCV strictement identique.
-    k = max(1, min(4, int(sigma / 8)))
-    if k > 1:
-        h, w = img.shape[:2]
-        small = cv2.resize(img, (max(w // k, 1), max(h // k, 1)), interpolation=cv2.INTER_AREA)
-        small = cv2.GaussianBlur(small, (0, 0), sigmaX=sigma / k, sigmaY=sigma / k,
-                                 borderType=cv2.BORDER_REFLECT)
-        return cv2.resize(small, (w, h), interpolation=cv2.INTER_LINEAR)
-    return cv2.GaussianBlur(img, (0, 0), sigmaX=sigma, sigmaY=sigma,
-                            borderType=cv2.BORDER_REFLECT)
-
-
-def _smoothstep(e0: float, e1: float, x: np.ndarray) -> np.ndarray:
-    t = np.clip((x - e0) / (e1 - e0), 0.0, 1.0)
-    return t * t * (3.0 - 2.0 * t)
-
-
-# ---------------------------------------------------------------- géométrie
-
-def _largest_rotated_rect(w: int, h: int, angle_rad: float) -> tuple[float, float]:
-    """Plus grand rectangle de même aspect inscrit dans l'image redressée."""
-    if w <= 0 or h <= 0:
-        return 0.0, 0.0
-    sin_a, cos_a = abs(math.sin(angle_rad)), abs(math.cos(angle_rad))
-    k = min(w / (w * cos_a + h * sin_a), h / (w * sin_a + h * cos_a))
-    return w * k, h * k
-
-
-def apply_geometry(img: np.ndarray, geo: dict, skip_crop: bool = False) -> np.ndarray:
-    rot = int(geo.get("rotate", 0)) % 360
-    if rot:
-        img = np.rot90(img, k=rot // 90)
-    if geo.get("flip_h"):
-        img = img[:, ::-1]
-    if geo.get("flip_v"):
-        img = img[::-1]
-    angle = float(geo.get("straighten", 0.0))
-    if abs(angle) > 0.01:
-        h, w = img.shape[:2]
-        m = cv2.getRotationMatrix2D((w / 2.0, h / 2.0), angle, 1.0)
-        img = cv2.warpAffine(img, m, (w, h), flags=cv2.INTER_LINEAR,
-                             borderMode=cv2.BORDER_REFLECT)
-        wr, hr = _largest_rotated_rect(w, h, math.radians(angle))
-        x0, y0 = int((w - wr) / 2), int((h - hr) / 2)
-        img = img[y0:max(y0 + int(hr), y0 + 1), x0:max(x0 + int(wr), x0 + 1)]
-    crop = geo.get("crop") or {}
-    cx, cy = float(crop.get("x", 0)), float(crop.get("y", 0))
-    cw, ch = float(crop.get("w", 1)), float(crop.get("h", 1))
-    if not skip_crop and (cw < 0.999 or ch < 0.999 or cx > 0.001 or cy > 0.001):
-        h, w = img.shape[:2]
-        x0 = int(np.clip(cx, 0, 0.98) * w)
-        y0 = int(np.clip(cy, 0, 0.98) * h)
-        x1 = int(np.clip(cx + cw, 0.02, 1.0) * w)
-        y1 = int(np.clip(cy + ch, 0.02, 1.0) * h)
-        img = img[y0:max(y1, y0 + 8), x0:max(x1, x0 + 8)]
-    return np.ascontiguousarray(img)
-
-
 # ---------------------------------------------------------------- opérations
-
-def _wb_gains(temp: float, tint: float) -> tuple[float, float, float]:
-    t, g = temp / 100.0, tint / 100.0
-    return (2.0 ** (0.5 * t + 0.15 * g),
-            2.0 ** (-0.3 * g),
-            2.0 ** (-0.5 * t + 0.15 * g))
+# (primitives de fond luma/gauss/srgb↔linéaire et géométrie : cf. pipeline_core.py /
+# pipeline_geometry.py, importées ci-dessus et réexposées ici — TODO N11)
 
 
 def _apply_linear_stage(img: np.ndarray, temp: float, tint: float, exposure: float) -> np.ndarray:
@@ -328,205 +230,6 @@ def _apply_curve(img: np.ndarray, curve: dict) -> np.ndarray:
         if lut is not None:
             out[..., ci] = _eval_lut(lut, img[..., ci])
     return out
-
-
-def _band_weight(hue: np.ndarray, center: float, half_width: float = 45.0) -> np.ndarray:
-    dist = np.abs(((hue - center) + 180.0) % 360.0 - 180.0)
-    w = 0.5 * (1.0 + np.cos(np.pi * np.minimum(dist / half_width, 1.0)))
-    return w.astype(np.float32)
-
-
-def _saturation_ratio(s: np.ndarray, vibrance: float, saturation: float) -> np.ndarray:
-    """Ratio multiplicatif appliqué à S (HSV) par vibrance puis saturation — mêmes formules que
-    la branche pleine HSV ci-dessous. `s` = saturation HSV d'origine (utile à la branche
-    vibrance>0 seulement, qui pondère par 1-s)."""
-    ratio = np.ones_like(s)
-    if vibrance:
-        vib = vibrance / 100.0
-        ratio = ratio * ((1.0 + vib * (1.0 - s) * 1.2) if vib > 0 else (1.0 + vib * 0.85))
-    if saturation:
-        ratio = ratio * (1.0 + saturation / 100.0)
-    return ratio
-
-
-def _apply_color(img: np.ndarray, hsl: dict, vibrance: float, saturation: float) -> np.ndarray:
-    has_hsl = any(any(abs(v) > 1e-6 for v in band.values()) for band in hsl.values())
-    if not (has_hsl or vibrance or saturation):
-        return img
-    if not has_hsl:
-        # Pas de bande HSL (teinte/luminance par bande) à appliquer : vibrance/saturation seules
-        # ne dépendent pas de la teinte → on évite l'aller-retour complet cv2.cvtColor RGB<->HSV
-        # (coûteux en pleine résolution, appelé aussi par chaque retouche locale et par le dehaze).
-        # Identité HSV à V et teinte fixes : c' = c·r + V·(1-r), r = S'/S (clampé sur [0,1]).
-        x = np.clip(img, 0.0, 1.0)
-        v = x.max(axis=-1, keepdims=True)
-        mn = x.min(axis=-1, keepdims=True)
-        s = np.where(v > 1e-6, (v - mn) / np.maximum(v, 1e-6), 0.0)
-        ratio = _saturation_ratio(s[..., 0], vibrance, saturation)[..., None]
-        s_new = np.clip(s * ratio, 0.0, 1.0)
-        eff = np.where(s > 1e-6, s_new / np.maximum(s, 1e-6), 1.0)
-        return x * eff + v * (1.0 - eff)
-    hsv = cv2.cvtColor(np.clip(img, 0.0, 1.0), cv2.COLOR_RGB2HSV)
-    if rsfast.available():   # math 8 bandes + vibrance/sat en place (multi-cœur), cvtColor laissé à OpenCV
-        centers = np.array([c for _, c in HSL_BANDS], dtype=np.float32)
-        bh = np.array([float((hsl.get(n) or {}).get("h", 0)) for n, _ in HSL_BANDS], dtype=np.float32)
-        bs = np.array([float((hsl.get(n) or {}).get("s", 0)) for n, _ in HSL_BANDS], dtype=np.float32)
-        bl = np.array([float((hsl.get(n) or {}).get("l", 0)) for n, _ in HSL_BANDS], dtype=np.float32)
-        rsfast.hsl(hsv, centers, bh, bs, bl, float(vibrance), float(saturation))
-        return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
-    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
-    if has_hsl:
-        h_shift = np.zeros_like(h)
-        s_mult = np.ones_like(h)
-        v_mult = np.ones_like(h)
-        for name, center in HSL_BANDS:
-            band = hsl.get(name) or {}
-            bh, bs, bl = float(band.get("h", 0)), float(band.get("s", 0)), float(band.get("l", 0))
-            if not (bh or bs or bl):
-                continue
-            w = _band_weight(h, center) * np.minimum(s * 4.0, 1.0)  # pas d'effet sur les gris
-            h_shift += w * (bh / 100.0) * 30.0
-            s_mult *= 1.0 + w * (bs / 100.0)        # -100 → désaturation totale de la bande
-            v_mult *= 1.0 + w * (bl / 100.0) * 0.65
-        h = (h + h_shift) % 360.0
-        s = s * np.maximum(s_mult, 0.0)
-        v = v * np.maximum(v_mult, 0.0)
-    if vibrance:
-        vib = vibrance / 100.0
-        s = s * (1.0 + vib * (1.0 - s) * 1.2) if vib > 0 else s * (1.0 + vib * 0.85)
-    if saturation:
-        s = s * (1.0 + saturation / 100.0)
-    hsv[..., 0] = h
-    hsv[..., 1] = np.clip(s, 0.0, 1.0)
-    hsv[..., 2] = np.clip(v, 0.0, 1.0)
-    return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
-
-
-def _apply_clarity(img: np.ndarray, clarity: float, scale: float,
-                   ref_long_edge: Optional[int] = None) -> np.ndarray:
-    """`ref_long_edge` : cf. `_apply_hl_shadows` (même besoin pour une retouche locale recadrée)."""
-    if not clarity:
-        return img
-    amt = clarity / 100.0
-    l = luma(img)
-    sigma = max(8.0, (ref_long_edge or max(img.shape[:2])) * 0.012)
-    blur_l = gauss(l, sigma)
-    if rsfast.available():
-        return rsfast.clarity(img, blur_l, amt)
-    detail = l - blur_l
-    midtone_w = 1.0 - np.abs(2.0 * np.clip(l, 0, 1) - 1.0) ** 2
-    return img + (amt * 0.9 * detail * midtone_w)[..., None]
-
-
-def _apply_dehaze(img: np.ndarray, dehaze: float) -> np.ndarray:
-    if not dehaze:
-        return img
-    amt = dehaze / 100.0
-    x = np.clip(img, 0.0, 1.0)
-    if amt < 0:  # voile artistique
-        return x * (1.0 + amt * 0.35) + (-amt) * 0.35 * 0.92
-    dark = cv2.erode(x.min(axis=2), np.ones((9, 9), np.uint8))
-    # Lumière atmosphérique : percentile global (statistique très robuste) estimé sur un
-    # sous-échantillon (~16× moins de pixels) — résultat quasi identique, ~7× plus rapide.
-    a = float(np.percentile(x[::4, ::4], 99.5))
-    a = max(a, 0.5)
-    t = 1.0 - 0.85 * amt * gauss(dark, max(img.shape[:2]) * 0.01) / a
-    t = np.clip(t, 0.25, 1.0)[..., None]
-    out = (x - a) / t + a
-    # le dehaze assombrit : légère compensation d'exposition et de saturation
-    return _apply_color(np.clip(out, 0.0, 1.0) * (1.0 + 0.1 * amt), {}, vibrance=12.0 * amt, saturation=0.0)
-
-
-def _apply_nr(img: np.ndarray, nr_luma: float, nr_color: float, scale: float) -> np.ndarray:
-    if nr_color > 0:
-        ycc = cv2.cvtColor(np.clip(img, 0.0, 1.0), cv2.COLOR_RGB2YCrCb)
-        sigma = (1.0 + 7.0 * nr_color / 100.0) * max(scale, 0.25)
-        ycc[..., 1] = gauss(ycc[..., 1], sigma)
-        ycc[..., 2] = gauss(ycc[..., 2], sigma)
-        img = cv2.cvtColor(ycc, cv2.COLOR_YCrCb2RGB)
-    if nr_luma > 0:
-        amt = nr_luma / 100.0
-        smoothed = cv2.bilateralFilter(np.clip(img, 0.0, 1.0), d=0,
-                                       sigmaColor=0.03 + 0.12 * amt,
-                                       sigmaSpace=2.0 + 5.0 * amt * max(scale, 0.25))
-        img = img + (smoothed - img) * min(amt * 1.4, 1.0)
-    return img
-
-
-def _apply_defringe(img: np.ndarray, purple: float, green: float, scale: float) -> np.ndarray:
-    """Défrange : désature les franges pourpres / vertes le long des bords à fort contraste
-    (symptôme de l'aberration chromatique latérale). Désaturation locale vers la luminance,
-    pondérée par la force du bord et par la « couleur de frange » du pixel."""
-    if not (purple or green):
-        return img
-    sigma = max(1.5 * scale, 0.6)
-    blur_luma = luma(gauss(img, sigma))
-    if rsfast.available():   # math per-pixel exacte, multi-cœur ; flou (petit σ) laissé à cv2
-        return rsfast.defringe(img, blur_luma, purple, green)
-    l = luma(img)
-    edge = np.clip(np.abs(l - blur_luma) * 8.0, 0.0, 1.0)  # bords haute fréquence
-    r, g, b = img[..., 0], img[..., 1], img[..., 2]
-    pm = np.clip(np.minimum(r, b) - g, 0.0, 1.0)   # pourpre/magenta : R,B hauts, V bas
-    gm = np.clip(g - np.maximum(r, b), 0.0, 1.0)    # vert : V haut, R,B bas
-    fp = np.clip(pm * edge * (purple / 100.0) * 4.0, 0.0, 1.0)
-    fg = np.clip(gm * edge * (green / 100.0) * 4.0, 0.0, 1.0)
-    f = np.maximum(fp, fg)[..., None]
-    return img + (l[..., None] - img) * f
-
-
-def _apply_sharpen(img: np.ndarray, amount: float, radius: float, scale: float) -> np.ndarray:
-    if amount <= 0:
-        return img
-    sigma = max(radius * scale, 0.4)
-    blur_luma = luma(gauss(img, sigma))
-    if rsfast.available():
-        return rsfast.sharpen(img, blur_luma, amount)
-    detail = luma(img) - blur_luma
-    return img + (amount / 100.0) * detail[..., None]
-
-
-_vignette_r_cache: dict[tuple[int, int], np.ndarray] = {}
-
-def _apply_vignette(img: np.ndarray, vignette: float) -> np.ndarray:
-    if not vignette:
-        return img
-    if rsfast.available():   # r calculé par pixel (même formule), multi-cœur
-        return rsfast.vignette(img, vignette / 100.0)
-    h, w = img.shape[:2]
-    key = (h, w)
-    if key not in _vignette_r_cache:
-        ny, nx = np.mgrid[0:h, 0:w].astype(np.float32)
-        nx = nx / max(w - 1, 1) * 2.0 - 1.0
-        ny = ny / max(h - 1, 1) * 2.0 - 1.0
-        _vignette_r_cache[key] = np.sqrt(nx * nx + ny * ny) / math.sqrt(2.0)
-    r = _vignette_r_cache[key]
-    v = vignette / 100.0
-    gain = 2.0 ** (v * 1.3 * _smoothstep(0.3, 1.0, r))
-    return img * gain[..., None]
-
-
-_GRAIN_MAX = 1400  # bord long max de la grille de grain : borne le coût et fixe la « taille réelle »
-
-def _apply_grain(img: np.ndarray, grain: float, scale: float, seed: int) -> np.ndarray:
-    if grain <= 0:
-        return img
-    g = grain / 100.0
-    h, w = img.shape[:2]
-    long_edge = max(h, w)
-    # Grille de grain à résolution « pleine image » (≈ bord long / scale), bornée à _GRAIN_MAX.
-    # À seed égal, preview et export dérivent la MÊME grille (puis la redimensionnent) → grain
-    # d'apparence identique, indépendant de la taille de rendu (fini le motif fixe + la fréquence
-    # qui variait avec scale). La graine vient du photo_id ⇒ motif différent par photo.
-    gl = min(max(int(round(long_edge / max(scale, 1e-3))), 8), _GRAIN_MAX)
-    if long_edge == h:
-        gh, gw = gl, max(int(round(gl * w / h)), 1)
-    else:
-        gw, gh = gl, max(int(round(gl * h / w)), 1)
-    rng = np.random.default_rng((int(seed) & 0xFFFFFFFF) or 1234)
-    noise = rng.standard_normal((gh, gw)).astype(np.float32)
-    if (gh, gw) != (h, w):
-        noise = cv2.resize(noise, (w, h), interpolation=cv2.INTER_LINEAR)
-    return img + noise[..., None] * (0.05 * g)
 
 
 # ---------------------------------------------------------------- retouches locales

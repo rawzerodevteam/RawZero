@@ -1,57 +1,21 @@
 import { create } from "zustand";
-import { api, type PhotoFilters, type PhotoFacets } from "./api";
-import { ALL_PHOTOS_ID, defaultEdits, mergeEdits, type Album, type EditState, type HistoryData, type HistoryStep, type LocalAdjust, type Photo, type Project } from "./types";
+import { api } from "./api";
+import { ALL_PHOTOS_ID, defaultEdits, mergeEdits, type EditState, type Photo, type Project } from "./types";
 import { describeEditChange } from "./lib/historyLabel";
 import { cloneLocalMask } from "./lib/localMask";
+import { historyTimeline, loadHistory, originLabel } from "./lib/storeHistory";
+import { readSession, writeSession } from "./lib/session";
+import type { Store, View } from "./storeTypes";
 import i18n from "./i18n";
 
-export type ToastType = "info" | "success" | "error";
-export interface ToastItem { id: number; msg: string; type: ToastType; action?: { label: string; onClick: () => void } }
-let nextToastId = 1;
+export { historyTimeline };
+export * from "./storeTypes";
 
-// Libellé de l'étape « origine » de l'historique, dans la langue courante.
-const originLabel = () => i18n.t("history.origin");
+let nextToastId = 1;
 
 // Nom du projet par défaut créé côté backend (db.py) : on le ré-étiquette à l'affichage selon
 // la langue. Un projet renommé par l'utilisateur ne correspond plus et garde son nom.
 const DEFAULT_PROJECT_NAME = "Projet par défaut";
-
-/** Reconstruit la timeline d'historique (chronologique) à partir des piles undo/redo + libellés. */
-export function historyTimeline(s: Pick<Store,
-  "undoStack" | "undoLabels" | "edits" | "currentLabel" | "redoStack" | "redoLabels">): HistoryData {
-  if (!s.edits) return { steps: [], index: 0 };
-  const steps: HistoryStep[] = s.undoStack.map((edits, i) => ({ label: s.undoLabels[i] ?? i18n.t("history.change"), edits }));
-  steps.push({ label: s.currentLabel, edits: s.edits });
-  for (let k = s.redoStack.length - 1; k >= 0; k--)
-    steps.push({ label: s.redoLabels[k] ?? i18n.t("history.change"), edits: s.redoStack[k] });
-  return { steps, index: s.undoStack.length };
-}
-
-interface HistoryParts {
-  edits: EditState; currentLabel: string;
-  undoStack: EditState[]; undoLabels: string[]; redoStack: EditState[]; redoLabels: string[];
-}
-
-/** Restaure les piles d'historique depuis la forme persistée ; repli sur une étape unique. */
-function loadHistory(raw: any, fallbackEdits: EditState): HistoryParts {
-  const steps = Array.isArray(raw?.steps) ? raw.steps : null;
-  const index = raw?.index;
-  if (steps && steps.length && typeof index === "number" && index >= 0 && index < steps.length) {
-    const norm: HistoryStep[] = steps.map((s: any) => ({ label: String(s?.label ?? i18n.t("history.change")), edits: mergeEdits(s?.edits) }));
-    return {
-      edits: structuredClone(norm[index].edits),
-      currentLabel: norm[index].label,
-      undoStack: norm.slice(0, index).map((s) => s.edits),
-      undoLabels: norm.slice(0, index).map((s) => s.label),
-      redoStack: norm.slice(index + 1).map((s) => s.edits).reverse(),
-      redoLabels: norm.slice(index + 1).map((s) => s.label).reverse(),
-    };
-  }
-  return { edits: fallbackEdits, currentLabel: originLabel(), undoStack: [], undoLabels: [], redoStack: [], redoLabels: [] };
-}
-
-export type View = "home" | "grid" | "loupe" | "develop" | "settings";
-export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "wb" | "hsl" | "pointmask";
 
 let saveTimer: number | undefined;
 
@@ -76,153 +40,6 @@ let liveFn: ((e: EditState) => void) | null = null;
 let liveRender: ((e: EditState) => void) | null = null;
 /** Branché par useGpuPreview quand l'aperçu GPU est actif ; débranché sinon (passe null). */
 export function registerLiveRender(fn: ((e: EditState) => void) | null) { liveRender = fn; }
-
-// Persistance de la dernière session (projet / photo / vue) pour rouvrir l'app où on l'a laissée.
-const SESSION_KEY = "rs.session";
-interface Session { projectId: number | null; photoId: number | null; view: View; }
-
-function readSession(): Session {
-  try {
-    const s = JSON.parse(localStorage.getItem(SESSION_KEY) || "{}");
-    return {
-      projectId: typeof s.projectId === "number" ? s.projectId : null,
-      photoId: typeof s.photoId === "number" ? s.photoId : null,
-      view: s.view === "loupe" || s.view === "develop" ? s.view : "grid",
-    };
-  } catch {
-    return { projectId: null, photoId: null, view: "grid" };
-  }
-}
-
-function writeSession(s: Session) {
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch { /* quota/private mode */ }
-}
-
-interface Store {
-  projects: Project[];
-  currentProjectId: number | null;
-  albums: Album[];
-  currentAlbumId: number | null;   // si défini, la grille liste cet album (prime sur le projet)
-  photos: Photo[];
-  filters: PhotoFilters;
-  facets: PhotoFacets;
-  currentId: number | null;
-  view: View;
-  previousView: View;
-
-  selection: number[];            // multi-sélection (Ctrl/Maj+clic) pour les actions par lot
-  exportIds: number[] | null;     // si défini, l'export porte sur ces ids (sinon courante/toutes)
-  contextMenu: { x: number; y: number } | null;
-
-  edits: EditState | null;        // état de développement de la photo courante
-  dirty: boolean;
-  undoStack: EditState[];
-  redoStack: EditState[];
-  undoLabels: string[];           // libellés parallèles aux snapshots (historique)
-  redoLabels: string[];
-  currentLabel: string;           // libellé de l'étape courante (edits)
-  dragBaseline: EditState | null; // snapshot avant un drag de slider
-  clipboard: EditState | null;
-  localClipboard: LocalAdjust | null; // masque local copié (Ctrl+C/Ctrl+V) — collable sur n'importe quelle photo
-  editsVersion: Record<number, number>; // cache-busting des thumbs/previews
-
-  gridSize: number;               // taille des vignettes de la grille (px), réglable
-  beforeAfter: boolean;
-  showClipping: boolean;
-  showInfo: boolean;
-  showHelp: boolean;
-  showImport: boolean;
-  showExport: boolean;
-  showModels: boolean;            // dialog « Modèles IA » (téléchargement à la demande)
-  showAlbums: boolean;            // panneau latéral Collections (grille)
-  panelsCollapsed: boolean;       // colonne de panneaux droite masquée (développement, écrans étroits)
-  fullScreen: boolean;            // mode plein écran développement (masque toolbar/panneaux/filmstrip)
-  hslPickedBand: string | null;   // dernière bande HSL désignée par la pipette (surlignage HSLPanel)
-  relinkTargetId: number | null;  // id de la photo en cours de reliage (dialog « Relier »)
-  activeTool: Tool;
-  selectedLocalId: string | null;
-  showMaskOverlay: boolean;
-  brushSize: number;
-  brushErase: boolean;
-  cropAspect: number | null;
-  aiSubjectAvailable: boolean;    // modèle « sujet » (U²-Net) présent
-  aiSkyAvailable: boolean;        // détection de ciel heuristique (toujours dispo)
-  aiPointAvailable: boolean;      // modèle « clic » (EdgeSAM) présent
-  aiDenoiseAvailable: boolean;    // modèle de débruitage IA (FFDNet) présent
-  aiMaskBusy: boolean;            // calcul d'un masque IA en cours
-  toasts: ToastItem[];
-  seenHints: Record<string, boolean>; // coach-marks déjà vus (persisté), cf. audit UX §7.2/§4.2
-  panelOrder: string[];            // ordre personnalisé des panneaux de développement (persisté)
-
-  init(): Promise<void>;
-  loadProjects(): Promise<void>;
-  setProject(id: number): Promise<void>;
-  createProject(name: string): Promise<void>;
-  renameProject(id: number, name: string): Promise<void>;
-  deleteProject(id: number): Promise<void>;
-  loadAlbums(): Promise<void>;
-  setAlbum(id: number | null): Promise<void>;
-  createAlbum(name: string): Promise<number | null>;
-  renameAlbum(id: number, name: string): Promise<void>;
-  deleteAlbum(id: number): Promise<void>;
-  addToAlbum(id: number, photoIds: number[]): Promise<void>;
-  removeFromAlbum(id: number, photoIds: number[]): Promise<void>;
-  reorderAlbumPhotos(orderedIds: number[]): Promise<void>;
-  loadPhotos(): Promise<void>;
-  setFilters(p: Partial<PhotoFilters>): void;
-  resetFilters(): void;
-  loadFacets(): Promise<void>;
-  setView(v: View): void;
-  selectPhoto(id: number | null): void;
-  toggleSelect(id: number): void;
-  selectRange(id: number): void;
-  setSelection(ids: number[]): void;
-  selectAll(): void;
-  openContextMenu(id: number, x: number, y: number): void;
-  closeContextMenu(): void;
-  setExportIds(ids: number[] | null): void;
-  openDevelop(id: number): Promise<void>;
-  navigate(delta: number): void;
-  setRating(rating: number): void;
-  setFlag(flag: "none" | "pick" | "reject"): void;
-  setColor(color: string): void;
-  patchSelection(patch: Partial<Pick<Photo, "rating" | "flag" | "color">>): void;
-  removeCurrent(deleteFile: boolean, targetId?: number): Promise<void>;
-  removeSelection(deleteFile: boolean): Promise<void>;
-  openRelink(id: number): void;
-  closeRelink(): void;
-  relinkPhoto(path: string): Promise<void>;
-
-  createAutoMask(kind: string): Promise<void>;
-  createPointMask(x: number, y: number): Promise<void>;
-  updateEdits(fn: (e: EditState) => void, commit?: boolean, label?: string): void;
-  updateEditsLive(fn: (e: EditState) => void): void;
-  startDrag(): void;
-  endDrag(): void;
-  undo(): void;
-  redo(): void;
-  jumpHistory(index: number): void;
-  resetEdits(): void;
-  applyPartial(settings: Partial<EditState>): void;
-  copyEdits(): void;
-  pasteEdits(): void;
-  pasteEditsToSelection(ids: number[]): Promise<void>;
-  copyLocalMask(): void;
-  cutLocalMask(): void;
-  pasteLocalMask(): void;
-  setCropAspect(ratio: number | null): void;
-  saveNow(): Promise<void>;
-  bumpVersion(id: number): void;
-
-  setUI(p: Partial<Pick<Store, "beforeAfter" | "showClipping" | "showInfo" | "showHelp" |
-    "showImport" | "showExport" | "showModels" | "showAlbums" | "activeTool" | "selectedLocalId" | "showMaskOverlay" |
-    "brushSize" | "brushErase" | "cropAspect" | "gridSize" | "panelsCollapsed" | "fullScreen" | "hslPickedBand">>): void;
-  notify(msg: string, type?: ToastType, action?: { label: string; onClick: () => void }): void;
-  dismissToast(id: number): void;
-  markHintSeen(key: string): void;
-  reorderPanels(order: string[]): void;
-  refreshAiAvailability(): Promise<void>;
-}
 
 export const useStore = create<Store>((set, get) => ({
   projects: [],

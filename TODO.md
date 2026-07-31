@@ -209,29 +209,52 @@
       `backend/tests/test_rsfast_parity.py`, 10 étages comparés directement (Rust vs NumPy, pas
       via le golden qui force `rsfast` hors-ligne) ; skip proprement si le binaire n'est pas
       compilé. Écarts mesurés ~1e-7 (epsilon float32) sur toutes les étages testées.
-- [ ] 🔴 N11 — Découper les gros fichiers avant tout chantier qui les touche : `gpu/pipeline.ts`
-      (~1096 lignes au 2026-07-29, après le fix feathering/géométrie ci-dessus), `store.ts` (~972),
-      `pipeline.py` (~729), `ImageViewer.tsx` (~613), `LibraryView.tsx` (~513). **Re-vérifié
-      2026-07-29** (passe robustesse) : conclusion inchangée — pur refactor d'organisation, aucun
-      gain perf/robustesse propre, et `pipeline.ts`/`store.ts` continuent de grossir au fil des
-      correctifs plutôt que de justifier un découpage à eux seuls (les touches d'aujourd'hui y
-      étaient localisées, pas un chantier structurant qui déclencherait la règle énoncée ici). Le
-      faire à vide sur un fichier à état GL partagé (`GpuPipeline`, closures sur `this`, cache de
-      RT par clé) est le genre de refactor à haut risque de régression silencieuse évoqué dans les
-      instructions du projet — laissé pour un chantier qui touche réellement l'un de ces fichiers.
-- [ ] N12 — Parité GPU↔Python toujours partielle sur les ops à voisinage (flous : HL/ombres, clarté,
-      netteté, dehaze, NR) — bloque un export GPU unifié serein. **Re-vérifié 2026-07-29** :
-      confirmé que `cpuPipeline.ts` (le port CPU utilisé par `parity.test.ts`) ne couvre aucune
-      opération à voisinage — `grep` sur blur/gaussian/clarity/highlight/shadow/dehaze/sharpen/
-      denoise n'y trouve aucune occurrence, cohérent avec le commentaire en tête de
-      `test_parity.py`. Point notable en relisant `_blur_fast` (`backend/app/pipeline.py:118-130`) :
-      le côté **Python** approxime lui aussi par downscale dès que `sigma` dépasse ~8px (k borné à
-      4, comme le GPU) — la parité n'est donc pas « exact vs approximé » mais « deux approximations
-      par downscale indépendantes », ce qui change la nature du chantier (mesurer l'écart entre les
-      deux, pas viser le pixel-exact contre `cv2.GaussianBlur` seul). Reste néanmoins hors périmètre
-      d'un passage robustesse ciblé : construire ce filet nécessite un port complet du flou séparable
-      GLSL en JS testable + des images de test représentatives (pas des pixels isolés comme
-      `parity.test.ts` actuel) — chantier à part entière, non entamé ici.
+- [x] 🔴 N11 — Découper les gros fichiers. **Fait (2026-07-30)**, par extraction mécanique de blocs
+      autonomes (constantes de données pures, types, sous-composants sans fermeture sur l'état du
+      parent) — pas de réécriture d'architecture, zéro changement de comportement voulu, vérifié à
+      chaque étape (`tsc`/pytest/vitest/`vite build` verts, taille du bundle JS identique au octet
+      près avant/après : 428.59 kB). Découpages :
+      - `gpu/pipeline.ts` (1096→725 lignes) : sources GLSL extraites vers `gpu/shaders.ts` (aucune
+        dépendance sur l'état de `GpuPipeline`).
+      - `store.ts` (994→811) : types (`interface Store`, `View`/`Tool`/`ToastType`) vers
+        `storeTypes.ts`, historique (`historyTimeline`/`loadHistory`) vers `lib/storeHistory.ts`,
+        session (`readSession`/`writeSession`) vers `lib/session.ts` — tous réexportés depuis
+        `store.ts`, aucun appelant à toucher. Le corps du store (slice unique `create()`, closures
+        partagées `liveRaf`/`removingIds`/`dragBaseline`) volontairement **pas** éclaté en slices
+        multiples : trop de closures inter-actions pour un découpage sûr sans le chantier structurant
+        que ce point de la checklist voulait justement éviter.
+      - `backend/app/pipeline.py` (771→474) : primitives de fond (`luma`/`gauss`/`srgb_to_linear`/
+        `_smoothstep`/`_wb_gains`) vers `pipeline_core.py`, géométrie vers `pipeline_geometry.py`,
+        HSL/vibrance/saturation vers `pipeline_color.py`, clarté/dehaze/NR/défrange/netteté/
+        vignettage/grain vers `pipeline_detail.py` — dépendances à sens unique (core ← color/geometry
+        ← detail ← pipeline.py orchestrateur), pas de cycle d'import. Tout réexporté depuis
+        `pipeline.py` (`pipeline.gauss`, `pipeline._apply_clarity`… utilisés tels quels par les tests
+        de parité).
+      - `ImageViewer.tsx` (623→389) : `ShapeOutline`/`MaskHandles`/`ClippingOverlay`/`CropOverlay`
+        (sous-composants déjà autonomes, props uniquement) vers `ImageViewerOverlays.tsx`.
+      - `LibraryView.tsx` (569→399) : `Collections`/`SelectionBar`/`Loupe`/`ExifOverlay` vers
+        `LibraryPanels.tsx` (`ExifOverlay` réexporté, partagé avec `DevelopView.tsx`).
+      Reste volontairement gros (pas retouché) : le corps du store et la classe `GpuPipeline`
+      elle-même (état GL partagé, cache de RT par clé) — le risque de régression silencieuse sur ces
+      parties reste réel, cf. l'avertissement initial de ce point.
+- [x] N12 — Parité GPU↔Python sur les ops à voisinage. **Fait (2026-07-30)** : port CPU JS du flou
+      GPU (`GpuPipeline.blur()` : downscale bilinéaire à facteur FIXE par site d'appel, bord CLAMP)
+      dans `frontend/src/gpu/cpuNeighborhood.ts`, réutilisant `gaussianWeights` (exportée depuis
+      `gpu/pipeline.ts`, pas réimplémentée) — couvre HL/ombres, clarté, netteté, défrange, NR chroma
+      (dehaze et NR luminance/bilatéral restent hors périmètre, cf. ci-dessous). Golden Python
+      (`backend/tests/test_parity_neighborhood.py`, champ synthétique déterministe recalculé
+      identiquement des deux côtés — aucune donnée d'image sérialisée, seuls les résultats réduits
+      par moyenne de blocs le sont, fixture ~230 Ko) comparé au port JS
+      (`frontend/tests/parityNeighborhood.test.ts`, 11 cas). **Confirmé** : `pipeline.gauss()`
+      (downscale par un facteur k dérivé du sigma, bord REFLECT) et le flou GPU (downscale fixe par
+      site d'appel, bord CLAMP) sont deux approximations indépendantes, pas deux ports du même
+      algorithme — écart mesuré 0.01–0.076 (pire cas : primitif de flou seul à σ=25, régime où
+      Python choisit k=3 mais le GPU downscale toujours ×4) — divergence de **stratégie**
+      d'approximation, pas un bug. **Reste hors périmètre** : dehaze (dark channel + érosion +
+      percentile — pas juste un flou gaussien) et NR luminance (filtre bilatéral, noyau 2D pondéré
+      par la différence de couleur — pas séparable comme le reste) ; les deux nécessiteraient un
+      port dédié bien au-delà du flou gaussien partagé couvert ici. `tsc`/pytest (94)/vitest
+      (105)/`vite build` verts.
 - [x] ◑ B6 — Pagination de `GET /api/photos`. **Fait partiellement (2026-07-29)** : `limit`/`offset`
       optionnels ajoutés à `list_photos` (`backend/app/routers/photos.py`), **rétro-compatibles**
       (`limit=0` par défaut renvoie tout, comme avant, pas de clé `total` dans la réponse — le
@@ -280,11 +303,30 @@ rien de restant ici.**
       Entrée/Espace, `aria-label`/`aria-pressed`).
 
 ### Lot C — cohérence & profondeur (moyen/long terme)
-- [ ] Set d'icônes SVG unifié (aujourd'hui mélange emoji / glyphes Unicode / SVG) + système de
-      boutons rationalisé.
+- [ ] ◑ Set d'icônes SVG unifié (aujourd'hui mélange emoji / glyphes Unicode / SVG) + système de
+      boutons rationalisé. **Avancé (2026-07-30), pas terminé** : les glyphes `✕`/`✓` restants dans
+      les vraies boîtes de dialogue/toasts (`Coachmark.tsx`, `GpuDiffDialog.tsx`, `ToastStack.tsx`,
+      `ExportDialog.tsx`, `ModelsDialog.tsx`) remplacés par les composants `IconClose`/`IconCheck`
+      déjà existants dans `frontend/src/icons/index.tsx` (même convention que `RelinkDialog`/
+      `ImportPanel`/`ShortcutsOverlay`, qui utilisaient déjà ces icônes). `tsc`/`vitest` (94)/
+      `vite build` verts. **Volontairement pas touché** : les badges superposés sur miniature
+      (`★`/`⚑`/`✓`/`✎`/`⚠` dans `Filmstrip.tsx`/`LibraryView.tsx`) — positionnement/taille
+      probablement calés sur la métrique du glyphe texte (font-size, text-shadow), et les glyphes
+      de `DevOverlay.tsx` (panneau de profilage dev-only, F9, jamais vu par un utilisateur normal,
+      hors périmètre d'un audit UX) ; risque de régression visuelle sans capture d'écran possible
+      dans cet environnement (pas de Chromium/Playwright installé, `run` skill non concluant) pour
+      confirmer l'alignement. Reste ouvert : `⋯`/`❮❯`/`⛶`/`⚲`/`⚑`/`⚠`/`←`/`↑` dans les boutons de
+      toolbar (`DevelopView.tsx`, `LibraryView.tsx`, `SettingsView.tsx`, `ImportPanel.tsx`,
+      `RelinkDialog.tsx`, `ContextMenu.tsx`) — même limite de vérification visuelle, à traiter avec
+      un outil de capture d'écran disponible. Système de boutons rationalisé : non entamé.
 - [ ] Réordonnancement des panneaux (Géométrie trop bas, Presets trop bas) + interrupteur
       d'activation par module (façon Darktable).
-- [ ] Onboarding/coach-marks (viewer, sélection multiple) + états vides harmonisés.
+- [x] Onboarding/coach-marks (viewer, sélection multiple) + états vides harmonisés. **Déjà fait** :
+      `frontend/src/components/Coachmark.tsx` (indice dismissible, persisté par clé en localStorage)
+      utilisé dans `DevelopView.tsx` (`develop-viewer-controls`) et `LibraryView.tsx`
+      (`library-multiselect`) ; `frontend/src/components/EmptyState.tsx` harmonisé (pas de photo,
+      pas de résultat de recherche) dans les deux vues. La checklist n'avait simplement pas été
+      mise à jour au moment du travail (commit `5ed461b`, « fix ergo »).
 - [x] Écrêtage cliquable depuis l'histogramme : les deux puces d'écrêtage (`clip-dot`, ombres/hautes
       lumières) de `frontend/src/components/Histogram.tsx` sont désormais de vrais boutons qui
       basculent `showClipping` (même état que le raccourci `J`), au lieu d'être des indicateurs
@@ -326,8 +368,19 @@ rien de restant ici.**
       (avant + après) dans `ImageViewer`/`GpuPipeline`, alors que l'architecture actuelle ne
       produit qu'un seul flux affiché à la fois (bascule, pas rendu double) ; chantier à part
       entière, pas un quick win.**
-- [ ] Passe responsive complète (laptop 1280×800) + `prefers-reduced-motion` + focus-trap sur les
-      modales.
+- [x] Passe responsive complète (laptop 1280×800) + `prefers-reduced-motion` + focus-trap sur les
+      modales. **Ré-audit 2026-07-30** : `prefers-reduced-motion: reduce` déjà géré
+      (`frontend/src/styles.css:26` et `:1077`) ; focus-trap déjà en place sur toutes les vraies
+      modales via le composant partagé `Modal.tsx`/`useFocusTrap` (`ExportDialog`, `ImportPanel`,
+      `ModelsDialog`, `RelinkDialog`, `ShortcutsOverlay`, `GpuDiffDialog`, `DialogHost`) — les menus
+      contextuels (`ContextMenu`/`ProjectMenu`, popups transitoires fermés au clic extérieur) en
+      sont volontairement exclus, ce ne sont pas des dialogues modaux. Pour le seuil 1280×800 :
+      toolbars déjà `flex-wrap` (`styles.css:100`), colonne de panneaux développement (308px) +
+      rail (66px) laissent ~900px au viewer à 1280px de large (le repli en recouvrement ne se
+      déclenche qu'en dessous de 1100px, volontairement sous la cible) ; grilles bibliothèque/accueil
+      en `grid`/`auto-fill` donc déjà fluides sans media query dédiée. **Vérifié par lecture du CSS
+      uniquement** (pas d'outil de capture de navigateur disponible dans cet environnement) — à
+      confirmer visuellement à l'occasion sur un vrai poste 1280×800.
 
 ## Roadmap infra/produit (voir `docs/infra-architecture.md`, tenu à jour séparément avec son diagramme)
 

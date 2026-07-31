@@ -1,4 +1,5 @@
 import { useStore } from "../store";
+import { IconClose } from "../icons";
 
 /** Bandeau discret non-bloquant, affiché une seule fois par indice (cf. audit UX §7.2/§4.2) :
  *  contrairement à `Modal`, ne capture pas le focus ni ne bloque l'interaction avec le reste
@@ -10,7 +11,7 @@ export function Coachmark({ hintKey, message }: { hintKey: string; message: stri
   return (
     <div className="coachmark" role="status">
       <span>{message}</span>
-      <button className="mini-btn" title="OK" aria-label="OK" onClick={() => markHintSeen(hintKey)}>✕</button>
+      <button className="mini-btn" title="OK" aria-label="OK" onClick={() => markHintSeen(hintKey)}><IconClose size={11} /></button>
     </div>
   );
 }
