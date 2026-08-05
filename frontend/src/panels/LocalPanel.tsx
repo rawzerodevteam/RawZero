@@ -72,7 +72,8 @@ export function LocalPanel() {
   };
 
   return (
-    <PanelSection title={t("local.title")} defaultOpen={false} storageKey="local">
+    <PanelSection title={t("local.title")} defaultOpen={false} storageKey="local"
+      onToggle={(open) => { if (!open) setUI({ selectedLocalId: null, activeTool: "none" }); }}>
       <div className="row-actions">
         {visibleTools.map(({ tool, icon: Icon, label, hint }) => (
           <button

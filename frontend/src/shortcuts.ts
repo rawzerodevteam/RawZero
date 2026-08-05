@@ -4,10 +4,15 @@ import { actionForEvent } from "./keybindings";
 import { confirmDialog } from "./lib/dialog";
 import { useStore } from "./store";
 
+// Types de <input> qui ne sont pas de la saisie de texte (sliders notamment) : le focus y reste
+// après un glisser, il ne doit pas bloquer les raccourcis clavier globaux (issue #40).
+const _NON_TEXT_INPUT = new Set(["range", "checkbox", "radio", "button", "color", "file", "submit", "reset"]);
 function isTyping(): boolean {
   const el = document.activeElement;
-  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" ||
-    (el as HTMLElement).isContentEditable);
+  if (!el) return false;
+  if (el.tagName === "TEXTAREA" || el.tagName === "SELECT" || (el as HTMLElement).isContentEditable) return true;
+  if (el.tagName === "INPUT") return !_NON_TEXT_INPUT.has((el as HTMLInputElement).type);
+  return false;
 }
 
 // Auto-répétition des flèches : maintenir une flèche fait défiler les photos, puis accélère

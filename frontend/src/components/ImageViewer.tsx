@@ -17,9 +17,16 @@ interface Props {
 
 interface Box { left: number; top: number; w: number; h: number }
 
+// Types de <input> qui ne sont pas de la saisie de texte (sliders des réglages de masque
+// notamment) : le focus y reste après un glisser, il ne doit pas bloquer Espace/raccourcis
+// (issue #40 : Espace ne marchait plus pour se déplacer après avoir touché un masque).
+const _NON_TEXT_INPUT = new Set(["range", "checkbox", "radio", "button", "color", "file", "submit", "reset"]);
 function isTyping(): boolean {
   const el = document.activeElement;
-  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT");
+  if (!el) return false;
+  if (el.tagName === "TEXTAREA" || el.tagName === "SELECT") return true;
+  if (el.tagName === "INPUT") return !_NON_TEXT_INPUT.has((el as HTMLInputElement).type);
+  return false;
 }
 
 export function ImageViewer({ src, interactive = false, gpu = false, onGpuError }: Props) {

@@ -3,10 +3,30 @@
 #
 # Prérequis : .\bootstrap.ps1 (outillage dev) + Rust installé (cargo dans le PATH).
 # PyInstaller est installé automatiquement dans .tools\venv au besoin.
+#
+# -Clean : purge le cache de build Rust des crates Tauri (src-tauri\target\{debug,release}\build\
+# tauri-*/app-*) avant de builder. Ces artefacts embarquent des chemins absolus vers le dossier
+# projet ; si celui-ci a été déplacé/renommé depuis le dernier build, cargo échoue avec des
+# erreurs "fichier introuvable" pointant vers l'ancien chemin (issue #21). À utiliser après un
+# déplacement du dossier projet, ou si le build échoue ainsi juste après un tel déplacement.
+param(
+  [switch]$Clean
+)
 $ErrorActionPreference = 'Stop'
 # Ce script vit dans scripts\ ; on opère depuis la racine du dépôt (dossier parent).
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
+
+if ($Clean) {
+  Write-Host "== -Clean : purge du cache de build Tauri (chemins absolus périmés) ==" -ForegroundColor Cyan
+  foreach ($profile in "debug", "release") {
+    $buildDir = Join-Path $root "src-tauri\target\$profile\build"
+    if (Test-Path $buildDir) {
+      Get-ChildItem $buildDir -Directory -Filter "tauri-*" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+      Get-ChildItem $buildDir -Directory -Filter "app-*" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+    }
+  }
+}
 
 $tools       = Join-Path $root ".tools"
 $uvExe       = Join-Path $tools "uv.exe"

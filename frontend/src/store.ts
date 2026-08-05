@@ -280,7 +280,9 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   setView(v) {
-    if (v !== "develop") set({ activeTool: "none", beforeAfter: false });
+    // issue #43 : un masque local sélectionné (surimpression rouge, poignées) ne doit pas
+    // rester actif quand on quitte le développement — il « prend le pas » sur la bibliothèque.
+    if (v !== "develop") set({ activeTool: "none", beforeAfter: false, selectedLocalId: null });
     if (v === "settings") set({ previousView: get().view });
     set({ view: v });
   },

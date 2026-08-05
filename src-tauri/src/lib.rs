@@ -18,6 +18,25 @@ fn pick_free_port() -> u16 {
         .port()
 }
 
+/// Port préféré du sidecar : la webview charge `http://127.0.0.1:{port}/`, et c'est cette
+/// origine (port compris) qui sert de clé de stockage au localStorage (thème, raccourcis
+/// clavier, état des panneaux…). Un port aléatoire à chaque lancement repartait donc de zéro
+/// à chaque redémarrage de l'app empaquetée (issue #38 : « les paramètres ne persistent pas »).
+/// On garde un port fixe pour que l'origine — et donc le stockage — reste stable d'une session
+/// à l'autre, et on ne retombe sur un port aléatoire que si celui-ci est indisponible (ex. une
+/// autre instance de RawZero tourne déjà).
+const PREFERRED_PORT: u16 = 47863;
+
+fn pick_port() -> u16 {
+    match TcpListener::bind(("127.0.0.1", PREFERRED_PORT)) {
+        Ok(listener) => {
+            drop(listener);
+            PREFERRED_PORT
+        }
+        Err(_) => pick_free_port(),
+    }
+}
+
 /// Attend que le sidecar accepte des connexions TCP (= uvicorn a démarré).
 fn wait_for_port(port: u16, timeout: Duration) -> bool {
     let addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
@@ -85,7 +104,7 @@ pub fn run() {
             let data_dir = base_dir.join("data");
             std::fs::create_dir_all(&data_dir)?;
 
-            let port = pick_free_port();
+            let port = pick_port();
             let bin = sidecar_path(app);
             log::info!("Lancement du sidecar backend : {bin:?} (port {port})");
 

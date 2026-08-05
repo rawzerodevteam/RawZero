@@ -10,6 +10,9 @@ interface Props {
   /** Identifiant stable (indépendant de la langue) pour mémoriser l'état ouvert/fermé entre
    * sessions (localStorage). Sans lui, la section retombe sur `defaultOpen` à chaque montage. */
   storageKey?: string;
+  /** Appelé quand la section s'ouvre/se ferme (ex. désélectionner le masque local à la
+   * fermeture du panneau Local — issue #43). */
+  onToggle?: (open: boolean) => void;
 }
 
 function loadOpen(key: string | undefined, fallback: boolean): boolean {
@@ -20,12 +23,13 @@ function loadOpen(key: string | undefined, fallback: boolean): boolean {
   } catch { return fallback; }
 }
 
-export function PanelSection({ title, children, defaultOpen = true, onReset, storageKey }: Props) {
+export function PanelSection({ title, children, defaultOpen = true, onReset, storageKey, onToggle }: Props) {
   const { t } = useTranslation();
   const [open, setOpenState] = useState(() => loadOpen(storageKey, defaultOpen));
   const setOpen = (v: boolean) => {
     setOpenState(v);
     if (storageKey) { try { localStorage.setItem(`rs.panelOpen.${storageKey}`, v ? "1" : "0"); } catch { /* ignore */ } }
+    onToggle?.(v);
   };
   return (
     <section className="panel-section" data-panel-key={storageKey}>

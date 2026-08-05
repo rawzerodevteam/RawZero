@@ -179,6 +179,46 @@
       `tsc`/`vitest` (90) et suite backend (87) verts — pas de test de parité pixel dédié à la
       géométrie (`test_parity.py` ne couvre pas encore les ops à voisinage/géométrie, cf. N12),
       vérifié par lecture croisée des deux implémentations.
+- [x] 🟠 Issue GitHub #40 « Espace pour se déplacer ne marche pas avec certains outils, notamment
+      les masques » : `isTyping()` (`frontend/src/components/ImageViewer.tsx` et `shortcuts.ts`,
+      deux copies dupliquées) traitait **tout** `<input>` focalisé comme de la saisie de texte —
+      y compris les sliders (`type="range"`) omniprésents dans le panneau Local (taille de pinceau,
+      feather…). Le focus reste sur le slider après un glisser ; Espace était donc avalé par
+      `if (isTyping()) return;` tant qu'on n'avait pas recliqué ailleurs. **Fix** : `isTyping()`
+      n'exclut plus que les vrais champs de saisie (texte/textarea/select/contentEditable) —
+      liste blanche des types `<input>` non textuels (`range`, `checkbox`, `radio`, `button`,
+      `color`, `file`, `submit`, `reset`) qui ne comptent plus comme « en train de taper ».
+- [x] 🟠 Issue GitHub #43 « Masque prend trop le pas sur le reste, devrait être désélectionné si on
+      va ailleurs » : `selectedLocalId` (surimpression rouge + poignées dans `ImageViewer`) restait
+      actif indéfiniment une fois un masque sélectionné — même après avoir fermé l'accordéon
+      « Local » pour retoucher un autre panneau, ou quitté le mode développement pour la
+      bibliothèque. **Fix** : `PanelSection` accepte désormais un `onToggle(open)`, câblé dans
+      `LocalPanel` pour désélectionner (`selectedLocalId: null, activeTool: "none"`) à la fermeture
+      de la section ; `store.ts::setView` désélectionne également en quittant le développement.
+- [x] 🔴 Issue GitHub #38 « Les paramètres ne persistent pas au redémarrage de l'app (thème,
+      raccourcis clavier…) » : tous les réglages front (`rs.theme`, `rs.keybindings`, `rs.accent`…)
+      sont bien écrits en `localStorage`, mais dans l'app Tauri empaquetée le sidecar backend
+      démarre sur un **port TCP choisi au hasard** à chaque lancement (`pick_free_port()`,
+      `src-tauri/src/lib.rs`) et la webview charge `http://127.0.0.1:{port}/` — `localStorage`
+      étant scopé par origine (port compris), un port différent à chaque redémarrage repartait
+      d'un stockage vide à chaque fois. **Fix** : `pick_port()` tente d'abord un port fixe
+      (`PREFERRED_PORT = 47863`), et ne retombe sur `pick_free_port()` (aléatoire) que si ce port
+      est indisponible (ex. une autre instance tourne déjà) — l'origine reste stable d'une session
+      à l'autre dans le cas normal (une seule instance). `cargo check` vert.
+- [x] Issue GitHub #32 « Harden local sidecar API surface (CORS, SPA path traversal) » : déjà
+      corrigé antérieurement (`allow_origins` restreint + `guard_host` anti DNS-rebinding + garde
+      `resolve()`/`is_relative_to` sur la route SPA catch-all dans `backend/app/main.py`) — vérifié
+      et fermé le 2026-08-05, rien à coder.
+- [x] Issue GitHub #23 « Inconsistent version numbers » : `frontend/package.json` (`1.0.0`) aligné
+      sur `tauri.conf.json`/`Cargo.toml` (`0.1.0`, source de vérité — c'est lui qui pilote les tags
+      de release `v*`).
+- [x] Issue GitHub #22 « CI: actions forced onto deprecated Node 20 runtime » : `.github/workflows/
+      release.yml` mis à jour vers les dernières majors (`actions/checkout@v7`,
+      `actions/setup-node@v7` + `node-version: 24`, `actions/setup-python@v7`).
+- [x] Issue GitHub #21 « Cargo build cache breaks when project folder is moved/renamed » : flag
+      `-Clean`/`--clean` ajouté à `scripts/build-desktop.ps1`/`.sh` (purge ciblée de
+      `src-tauri/target/{debug,release}/build/{tauri-*,app-*}`, chemins absolus périmés après un
+      déplacement de dossier), documenté dans le README.
 
 ## Perf & robustesse backend (ex-`AMELIORATION.md` §6)
 

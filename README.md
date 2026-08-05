@@ -57,6 +57,11 @@ PyInstaller is installed automatically into `.tools\venv` on first run.
 ./scripts/build-desktop.sh       # Linux   -> .deb / .rpm
 ```
 
+If the project folder was moved or renamed since the last build, cargo may fail with a "file
+not found" error pointing at the *old* path (stale absolute paths cached in
+`src-tauri/target/`). Add `-Clean` (`--clean` on Linux) to purge just that cache first:
+`.\scripts\build-desktop.ps1 -Clean` / `./scripts/build-desktop.sh --clean`.
+
 All targets at once (Windows `.exe` + Linux `.deb`/`.rpm`): push a `v*` tag — GitHub Actions
 (`.github/workflows/release.yml`) builds them per-OS and attaches them to a draft Release.
 
