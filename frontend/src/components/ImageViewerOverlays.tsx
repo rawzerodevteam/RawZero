@@ -33,7 +33,7 @@ export function ShapeOutline({ shape, params, w, h }: {
  *  Rendu dans le <svg> d'overlay (pointer-events réactivés par .mask-handle en CSS). */
 export function MaskHandles({ localId, kind, params, w, h, toImg, updateEdits, startDrag, endDrag }: {
   localId: string;
-  kind: "linear" | "radial";
+  kind: "linear" | "radial" | "inpaint";
   params: Record<string, any>;
   w: number; h: number;
   toImg: (cx: number, cy: number) => [number, number];

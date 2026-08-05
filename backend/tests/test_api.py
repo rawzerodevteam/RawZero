@@ -167,6 +167,38 @@ def test_render_with_edits(client, photo_id):
     assert before.mean() < img.mean()  # l'expo +1 éclaircit par rapport à l'original
 
 
+def test_inpaint_binarizes_mask_before_inference(client, photo_id, monkeypatch):
+    # Régression : un masque feathered passé tel quel au modèle MI-GAN produit un artefact blanc
+    # délavé (constaté visuellement) — l'endpoint doit binariser le masque avant l'appel au moteur,
+    # même quand le trait de pinceau demande un bord très adouci.
+    from app.routers import edits as edits_router
+
+    captured = {}
+
+    def fake_inpaint(img, mask):
+        captured["mask"] = mask.copy()
+        return img.copy()
+
+    monkeypatch.setattr(edits_router.inpaint, "available", lambda: True)
+    monkeypatch.setattr(edits_router.inpaint, "inpaint", fake_inpaint)
+
+    body = {
+        "edits": {},
+        "strokes": [{"points": [[0.5, 0.5]], "size": 0.2, "erase": False}],
+        "feather": 0.8,
+    }
+    r = client.post(f"/api/photos/{photo_id}/inpaint", json=body)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["type"] == "inpaint"
+    assert "strokes" in data["params"]
+    assert "cx" not in data["params"]
+    assert "ref" in data["params"] and "rect" in data["params"]
+
+    mask = captured["mask"]
+    assert set(np.unique(mask).tolist()) <= {0.0, 1.0}
+
+
 def test_save_edits_and_persistence(client, photo_id):
     e = {"tone": {"exposure": 0.5, "contrast": 20.0}}
     assert client.put(f"/api/photos/{photo_id}/edits", json={"edits": e}).status_code == 200

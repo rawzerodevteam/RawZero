@@ -15,8 +15,8 @@ from typing import Any, Optional
 import cv2
 import numpy as np
 
-from . import rsfast
-from .masks import build_mask
+from . import config, rsfast
+from .masks import build_mask, _finite, _finite_clip
 from .pipeline_core import gauss, luma, srgb_to_linear, linear_to_srgb, _smoothstep, _wb_gains
 from .pipeline_geometry import apply_geometry
 from .pipeline_color import HSL_BANDS, _apply_color
@@ -291,6 +291,69 @@ def _apply_local(img: np.ndarray, local: dict, scale: float) -> np.ndarray:
     return result
 
 
+def _apply_inpaint(img: np.ndarray, local: dict) -> np.ndarray:
+    """Correcteur de taches IA : fond un patch précalculé (`params.ref`, PNG RGB produit par
+    `inpaint.inpaint()` côté endpoint `/photos/{id}/inpaint`) dans la zone destination (forme
+    radiale), pondéré par le masque feathered × opacity. Contrairement à `_apply_local` (réglages
+    tonaux modulés par un masque), c'est une composition de pixels — pas de mini-pipeline
+    exposition/contraste/etc. Le calcul du patch lui-même (inférence IA) n'a lieu qu'une fois, à
+    la création/au déplacement du masque côté client — ici on ne fait que le repositionner/
+    redimensionner à la résolution courante (preview ↔ export) et le fondre, comme `_ai_mask`
+    le fait déjà pour les masques IA sujet/clic (mais en RGB, pas juste un canal de masque).
+
+    Le PNG stocké ne couvre PAS la bbox du masque : c'est le rectangle de contexte (avec halo)
+    capturé au moment du calcul IA, `params.rect` (coordonnées image normalisées, mêmes
+    conventions que `_grid`). Il faut reprojeter chaque pixel de la bbox du masque dans l'espace
+    UV du patch via ce rectangle — exactement le mapping affine du shader GPU F_INPAINTBLEND
+    (`u_rect`) — plutôt que d'étirer bêtement le patch entier dans la bbox du masque (bug : les
+    deux rectangles ont des tailles différentes, ce qui déforme/décale le résultat)."""
+    h, w = img.shape[:2]
+    mask = build_mask(local, h, w, img)
+    if mask is None or float(mask.max()) < 1e-4:
+        return img
+    bbox = _mask_bbox(mask, 1e-4)
+    if bbox is None:
+        return img
+    params = local.get("params") or {}
+    ref = str(params.get("ref", ""))
+    if not ref:
+        return img
+    path = (config.MASKS_DIR / ref).resolve()
+    if config.MASKS_DIR.resolve() not in path.parents or not path.exists():
+        return img
+    raw = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    if raw is None:
+        return img
+    patch = cv2.cvtColor(raw, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+    ph, pw = patch.shape[:2]
+
+    rect = params.get("rect")
+    if not (isinstance(rect, (list, tuple)) and len(rect) == 4):
+        rect = [0.0, 0.0, 1.0, 1.0]
+    rx0, ry0, rx1, ry1 = (_finite(v, d) for v, d in zip(rect, (0.0, 0.0, 1.0, 1.0)))
+    ww, hh = max(w - 1, 1), max(h - 1, 1)
+    denom_x, denom_y = max(rx1 - rx0, 1e-4), max(ry1 - ry0, 1e-4)
+
+    y0, y1, x0, x1 = bbox
+    opacity = _finite_clip(params.get("opacity", 1.0), 1.0, 0.0, 1.0)
+
+    # Reprojection affine bbox masque → UV patch (identique à u_rect côté shader) ; clamp = même
+    # comportement de bord que le `clamp()` GLSL (répète le pixel de bord hors du rectangle).
+    gx, gy = np.meshgrid(np.arange(x0, x1, dtype=np.float32), np.arange(y0, y1, dtype=np.float32))
+    u = np.clip((gx / ww - rx0) / denom_x, 0.0, 1.0) * (pw - 1)
+    v = np.clip((gy / hh - ry0) / denom_y, 0.0, 1.0) * (ph - 1)
+    sampled = cv2.remap(patch, u, v, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+
+    sub_dst, sub_mask = img[y0:y1, x0:x1], mask[y0:y1, x0:x1]
+    blend = (sub_mask * opacity)[..., None]
+    blended = sub_dst * (1.0 - blend) + sampled * blend
+    if (y0, y1, x0, x1) == (0, h, 0, w):
+        return blended
+    result = img.copy()
+    result[y0:y1, x0:x1] = blended
+    return result
+
+
 # ---------------------------------------------------------------- pipeline complet
 
 def apply_pipeline(base: np.ndarray, edits: dict, scale: float = 1.0,
@@ -320,7 +383,10 @@ def apply_pipeline(base: np.ndarray, edits: dict, scale: float = 1.0,
     img = _apply_clarity(img, float(pres["clarity"]), scale)
     img = _apply_dehaze(img, float(pres["dehaze"]))
     for local in e["locals"]:
-        img = _apply_local(img, local, scale)
+        if local.get("type") == "inpaint":
+            img = _apply_inpaint(img, local)
+        else:
+            img = _apply_local(img, local, scale)
     img = _apply_nr(img, float(det["nr_luma"]), float(det["nr_color"]), scale)
     img = _apply_defringe(img, float(det.get("defringe_purple", 0.0)),
                           float(det.get("defringe_green", 0.0)), scale)

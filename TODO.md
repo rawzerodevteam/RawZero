@@ -384,8 +384,41 @@ rien de restant ici.**
 
 ## Roadmap infra/produit (voir `docs/infra-architecture.md`, tenu à jour séparément avec son diagramme)
 
-- [ ] #1 — Inpainting MI-GAN (correcteur de taches, cf. `auditbug.md` §0 : fonctionnalité jamais
-      livrée, pas une régression — chantier à confirmer si toujours désiré).
+- [x] #1 — Correcteur de taches, **en inpainting IA (MI-GAN)** — pas un tampon de clonage
+      classique (une première version en tampon de clonage a été livrée puis jugée insuffisante
+      visuellement, retirée). **Fait (2026-08-02)**, **réimplémenté (2026-08-05, issue #41 : le
+      premier commit avait supprimé la feature)** avec deux corrections trouvées à la
+      réimplémentation :
+      1. **Outil pinceau, plus un cercle fixe au clic** : le masque `inpaint` utilise désormais la
+         même forme que le masque `brush` (traits/rayon peints à la souris, `masks.py::build_mask`
+         appelle `_brush_mask`) au lieu d'un cercle radial de taille fixe posé au clic — on peint
+         la zone à effacer, forme libre, comme un vrai correcteur (`ImageViewer.tsx`, mode "brush"
+         partagé entre pinceau de retouche locale et correcteur IA ; côté GPU, `maskKind` route
+         "inpaint" vers le même chemin texture-pinceau que "brush", `pipeline.ts`/`shaders.ts`).
+      2. **Bug corrigé : artefact blanc délavé sur la zone corrigée** (« rond blanc », signalé par
+         l'utilisateur, reproduit et diagnostiqué visuellement). Cause identifiée empiriquement par
+         comparaison directe des sorties du modèle ONNX : un masque au bord adouci (feather, valeurs
+         intermédiaires 0..1) fait sortir MI-GAN en mode dégradé malgré la documentation du modèle
+         affirmant gérer un fondu en interne — un masque binaire (0/1) donne un résultat propre.
+         **Fix** : `routers/edits.py::inpaint_spot` binarise le masque (seuil 0.5) avant l'appel à
+         `inpaint.inpaint()` ; le fondu du bord reste appliqué séparément au compositing
+         (`pipeline._apply_inpaint`, masque feathered rebâti depuis les mêmes traits). Inférence
+         faite sur l'image de travail ENTIÈRE (pas un recadrage serré autour du trait comme avant —
+         MI-GAN gère déjà son propre contexte/padding interne), seule une zone paddée du résultat
+         est stockée en PNG. Test de régression `backend/tests/test_api.py::test_inpaint_binarizes_mask_before_inference`
+         (mock du moteur, vérifie que le masque reçu est binaire malgré un feather=0.8 en entrée).
+         Suites backend (100) et frontend (108) + `tsc`/`vite build` verts.
+      Détails d'origine (2026-08-02), toujours valables : masque local `inpaint`, l'IA devine le
+      contenu (pas de point source manuel), `backend/app/inpaint.py` (ONNX CPU, calqué sur
+      `segment.py`/`denoise.py`, dégrade proprement si le modèle est absent), endpoint
+      `POST /photos/{id}/inpaint` (calcule le patch une fois, le stocke en PNG, rejoué tel quel à
+      chaque rendu — même principe que les masques IA sujet/clic), aperçu GPU temps réel, câblage
+      `ModelsDialog`/`/automask/available`. Modèle : export ONNX officiel `migan.onnx`
+      (`andraniksargsyan/migan` sur Hugging Face, dépôt `Picsart-AI-Research/MI-GAN`, ICCV 2023)
+      — signature réelle introspectée (image/masque uint8, résolution dynamique, contexte géré en
+      interne par le pipeline officiel) et testée en local avant mise en ligne. **Hébergé** sur
+      `RawZeroModelsDownload` (taille/SHA-256 épinglés dans `models.py`) — la feature est
+      utilisable dès que l'utilisateur le télécharge via `ModelsDialog`.
 - [ ] #3 — `licensing.can()`, cache de licence hors-ligne, plans/capabilities (paiement explicitement
       hors scope).
 - [ ] #5 — Finalisation des liens de téléchargement des modèles IA.

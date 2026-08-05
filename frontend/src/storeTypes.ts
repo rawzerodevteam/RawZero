@@ -6,7 +6,7 @@ import type { Album, EditState, LocalAdjust, Photo, Project } from "./types";
  *  appelants (`import { Tool } from "./store"` etc. restent valides). */
 
 export type View = "home" | "grid" | "loupe" | "develop" | "settings";
-export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "wb" | "hsl" | "pointmask";
+export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "inpaint" | "wb" | "hsl" | "pointmask";
 
 export type ToastType = "info" | "success" | "error";
 export interface ToastItem { id: number; msg: string; type: ToastType; action?: { label: string; onClick: () => void } }
@@ -62,7 +62,9 @@ export interface Store {
   aiSkyAvailable: boolean;        // détection de ciel heuristique (toujours dispo)
   aiPointAvailable: boolean;      // modèle « clic » (EdgeSAM) présent
   aiDenoiseAvailable: boolean;    // modèle de débruitage IA (FFDNet) présent
+  aiInpaintAvailable: boolean;    // modèle de correction de taches IA (MI-GAN) présent
   aiMaskBusy: boolean;            // calcul d'un masque IA en cours
+  inpaintBusy: boolean;           // calcul d'un correcteur de taches IA en cours
   toasts: ToastItem[];
   seenHints: Record<string, boolean>; // coach-marks déjà vus (persisté), cf. audit UX §7.2/§4.2
   panelOrder: string[];            // ordre personnalisé des panneaux de développement (persisté)
@@ -108,6 +110,7 @@ export interface Store {
 
   createAutoMask(kind: string): Promise<void>;
   createPointMask(x: number, y: number): Promise<void>;
+  runInpaint(localId: string): Promise<void>;
   updateEdits(fn: (e: EditState) => void, commit?: boolean, label?: string): void;
   updateEditsLive(fn: (e: EditState) => void): void;
   startDrag(): void;

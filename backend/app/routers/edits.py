@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 
 from pydantic import BaseModel
 
-from .. import config, db, denoise, pipeline, previews, segment
+from .. import config, db, denoise, inpaint, pipeline, previews, segment
 from .photos import get_photo_row, require_original
 
 router = APIRouter()
@@ -31,7 +31,7 @@ def _localize_ai_masks(photo_id: int, edits: dict[str, Any]) -> None:
     est supprimée. On copie le bitmap sous cette photo et on réécrit `ref` au moment du collage
     (donc du prochain save), pour que le masque ne dépende plus que de sa propre photo."""
     for local in edits.get("locals") or []:
-        if not isinstance(local, dict) or local.get("type") != "ai":
+        if not isinstance(local, dict) or local.get("type") not in ("ai", "inpaint"):
             continue
         params = local.get("params")
         if not isinstance(params, dict):
@@ -106,7 +106,7 @@ def automask_available():
     """Indique au client quelles fonctions IA sont utilisables (modèles présents)."""
     return {"subject": segment.available(), "point": segment.point_available(),
             "sky": True,  # détection de ciel heuristique : toujours disponible (sans modèle)
-            "denoise": denoise.available()}
+            "denoise": denoise.available(), "inpaint": inpaint.available()}
 
 
 class AutoMaskBody(EditsBody):
@@ -169,6 +169,84 @@ def clickmask(photo_id: int, body: ClickMaskBody):
             prev = cv2.resize(prev, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_LINEAR)
         mask = np.maximum(mask, prev)
     return _store_mask(photo_id, mask, body.kind)
+
+
+class InpaintStroke(BaseModel):
+    points: list[list[float]]
+    size: float = 0.05
+    erase: bool = False
+
+
+class InpaintBody(EditsBody):
+    strokes: list[InpaintStroke]
+    feather: float = 0.4
+
+
+@router.post("/photos/{photo_id}/inpaint")
+def inpaint_spot(photo_id: int, body: InpaintBody):
+    """Correcteur de taches IA : calcule un patch (MI-GAN) pour la zone peinte au pinceau, le
+    stocke (PNG RGB), et renvoie le descripteur `local` (type 'inpaint') à ajouter/mettre à jour
+    dans les edits. Comme `automask`/`clickmask`, calculé sur l'image géométrie-only (pas le
+    pipeline complet WB/tons/couleur — limitation V1, cohérente avec les autres masques IA)."""
+    if not inpaint.available():
+        raise HTTPException(503, "Correcteur IA indisponible (onnxruntime ou modèle absent)")
+    row = get_photo_row(photo_id)
+    base = previews.get_base(photo_id, require_original(row))
+    e = pipeline.merge_edits(body.edits)
+    img = pipeline.apply_geometry(base.astype(np.float32, copy=True), e["geometry"])
+    small = _resize_long_edge(img, _MASK_STORE_SIZE)
+    h, w = small.shape[:2]
+
+    stroke_params = {"feather": body.feather,
+                      "strokes": [s.model_dump() for s in body.strokes]}
+    local = {"type": "inpaint", "invert": False, "params": stroke_params}
+    mask = pipeline.build_mask(local, h, w)
+    if mask is None or float(mask.max()) < 1e-4:
+        raise HTTPException(422, "Zone de correction invalide")
+    bbox = pipeline._mask_bbox(mask, 1e-4)
+    if bbox is None:
+        raise HTTPException(422, "Zone de correction invalide")
+
+    # Inférence sur l'image ENTIÈRE (contexte complet), pas un recadrage serré autour du trait :
+    # MI-GAN gère lui-même son recadrage + contexte interne (padding=128 autour du trou) puis
+    # recompose le résultat dans l'image d'entrée — un pré-recadrage trop serré ne lui laisse
+    # presque plus de pixels connus pour halluciner un contenu cohérent.
+    #
+    # Masque BINARISÉ pour l'inférence (pas le masque feathered `mask`) : bien que le graphe MI-GAN
+    # accepte nominalement des valeurs de masque intermédiaires (fondu géré en interne), on a
+    # constaté empiriquement qu'un bord adouci (feather) fait sortir un artefact blanc délavé sur
+    # la zone remplie — le modèle semble mal gérer une transition progressive connu↔trou. Un masque
+    # dur (0/1) donne un résultat propre ; le fondu du bord reste appliqué séparément, au moment du
+    # compositing (`_apply_inpaint`, masque feathered rebâti depuis les mêmes traits+feather).
+    hard_mask = (mask > 0.5).astype(np.float32)
+    try:
+        full_patch = inpaint.inpaint(small, hard_mask)
+    except inpaint.InpaintUnavailable as ex:
+        raise HTTPException(503, str(ex))
+
+    # On ne stocke qu'une zone paddée autour du trait (pas l'image entière, pour garder le PNG
+    # petit) — le padding est généreux (>= la moitié de la taille du trou, min 32px) pour laisser
+    # de la marge à `_apply_inpaint` lors d'un futur repositionnement sans révéler de bord tronqué.
+    y0, y1, x0, x1 = bbox
+    pad_y = max(int((y1 - y0) * 0.5), 32)
+    pad_x = max(int((x1 - x0) * 0.5), 32)
+    y0, x0 = max(y0 - pad_y, 0), max(x0 - pad_x, 0)
+    y1, x1 = min(y1 + pad_y, h), min(x1 + pad_x, w)
+    patch = full_patch[y0:y1, x0:x1]
+
+    mask_id = "inpaint-" + uuid.uuid4().hex[:8]
+    ref = f"{photo_id}/{mask_id}.png"
+    out_path = config.MASKS_DIR / ref
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(out_path), cv2.cvtColor((np.clip(patch, 0.0, 1.0) * 255).astype(np.uint8), cv2.COLOR_RGB2BGR))
+
+    ww, hh = max(w - 1, 1), max(h - 1, 1)
+    rect = [x0 / ww, y0 / hh, (x1 - 1) / ww, (y1 - 1) / hh]
+    return {
+        "id": mask_id, "type": "inpaint",
+        "params": {**stroke_params, "opacity": 1.0, "ref": ref, "rect": rect},
+        "invert": False, "adjust": dict(pipeline.LOCAL_ADJUST_DEFAULTS),
+    }
 
 
 def _load_mask_ref(photo_id: int, ref: str):

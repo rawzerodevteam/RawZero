@@ -329,6 +329,27 @@ void main(){
   o = vec4(mix(texture(u_orig, v_uv).rgb, adj, m), 1.0);
 }`;
 
+// Correcteur de taches IA (masque "inpaint") : PAS le mini-pipeline de réglages de F_LBLEND —
+// fond un patch RGB précalculé côté serveur (endpoint /inpaint, modèle MI-GAN) dans la zone
+// destination. Le patch ne couvre que le rectangle recadré avant inférence (u_rect, mêmes
+// coordonnées image normalisées que masks.py — pas le cadre entier, contrairement aux masques IA
+// sujet/clic) : on remappe la coordonnée image courante dans l'espace UV local du patch avant
+// d'échantillonner. Pas de correction de couleur ici (contrairement à l'ancien tampon de
+// clonage) : le modèle IA génère déjà un contenu cohérent avec son contexte.
+export const F_INPAINTBLEND = VERSION + PRELUDE + MASK_GLSL + `
+uniform sampler2D u_patch;   // patch RGB précalculé (texture aiTex, même cache que les masques IA)
+uniform vec4 u_rect;         // x0,y0,x1,y1 du recadrage serveur, coordonnées image normalisées
+uniform float u_opacity;
+void main(){
+  vec3 dst = texture(u_tex, v_uv).rgb;
+  vec2 muv = vec2(v_uv.x, 1.0 - v_uv.y);
+  vec2 rectMin = u_rect.xy, rectMax = u_rect.zw;
+  vec2 patchUv = clamp((muv - rectMin) / max(rectMax - rectMin, vec2(1e-4)), 0.0, 1.0);
+  vec3 patch = texture(u_patch, patchUv).rgb;
+  float m = computeMask(muv, dst) * clamp(u_opacity, 0.0, 1.0);
+  o = vec4(mix(dst, patch, m), 1.0);
+}`;
+
 // Overlay rouge du masque sélectionné (touche O) — reproduit _overlay_mask côté Python.
 export const F_MASKOVL = VERSION + PRELUDE + MASK_GLSL + `
 void main(){

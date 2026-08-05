@@ -17,6 +17,17 @@ import { CROP_ASPECTS } from "../lib/cropAspects";
 import { resolvePanelOrder } from "../panels/registry";
 import { ExifOverlay } from "./LibraryView";
 
+/** GPU actif par défaut si disponible (comme Lightroom/Darktable) : plus un réglage à
+ *  découvrir, juste une accélération transparente — le menu Avancé ne sert plus qu'à le
+ *  désactiver (debug/comparaison), le rendu serveur restant la vérité de référence. */
+function detectWebgl2(): boolean {
+  try {
+    return !!document.createElement("canvas").getContext("webgl2");
+  } catch {
+    return false;
+  }
+}
+
 const RENDER_DRAG_MS = 50;
 const RENDER_DRAG_SIZE = 768;
 const RENDER_IDLE_MS = 150;
@@ -36,6 +47,10 @@ function useRenderedImage(gpuActive: boolean): string | null {
   const beforeAfter = useStore((s) => s.beforeAfter);
   const showMaskOverlay = useStore((s) => s.showMaskOverlay);
   const selectedLocalId = useStore((s) => s.selectedLocalId);
+  // "inpaint" n'est pas un masque de réglage (pas de fondu de valeurs à visualiser, juste une
+  // zone remplacée) : la surimpression rouge n'a pas de sens dessus, cf. ImageViewer.tsx (chemin
+  // GPU). Chemin serveur (repli sans GPU) : même garde, sinon le JPEG renvoyé la cuit quand même.
+  const selectedType = useStore((s) => s.edits?.locals.find((l) => l.id === s.selectedLocalId)?.type);
   const isDragging = useStore((s) => s.dragBaseline !== null);
   // Pendant le réglage (et un court instant après), on ne cuit pas l'overlay du masque dans le
   // JPEG serveur : on voit l'effet du réglage. Le « linger » couvre les clics rapides.
@@ -72,7 +87,7 @@ function useRenderedImage(gpuActive: boolean): string | null {
       api.render(currentId, edits, {
         maxSize,
         before: beforeAfter,
-        showMask: showMaskOverlay && selectedLocalId && !maskSuppressed ? selectedLocalId : undefined,
+        showMask: showMaskOverlay && selectedLocalId && !maskSuppressed && selectedType !== "inpaint" ? selectedLocalId : undefined,
         cropEdit, // en mode recadrage : on affiche l'image entière, l'overlay dessine le cadre
         signal: ctrl.signal,
       })
@@ -80,7 +95,7 @@ function useRenderedImage(gpuActive: boolean): string | null {
         .catch((e) => { if ((e as Error).name !== "AbortError") console.error(e); });
     }, delay);
     return () => window.clearTimeout(timerRef.current);
-  }, [currentId, edits, beforeAfter, showMaskOverlay, selectedLocalId, isDragging, maskSuppressed, cropEdit, gpuActive]);
+  }, [currentId, edits, beforeAfter, showMaskOverlay, selectedLocalId, selectedType, isDragging, maskSuppressed, cropEdit, gpuActive]);
 
   // libération de la dernière URL au démontage
   useEffect(() => () => {
@@ -114,7 +129,7 @@ export function DevelopView() {
   const redo = useStore((s) => s.redo);
   const canUndo = useStore((s) => s.undoStack.length > 0);
   const canRedo = useStore((s) => s.redoStack.length > 0);
-  const [gpuPreview, setGpuPreview] = useState(false);
+  const [gpuPreview, setGpuPreview] = useState(() => detectWebgl2());
   const [showDiff, setShowDiff] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const photos = useStore((s) => s.photos);
@@ -190,7 +205,9 @@ export function DevelopView() {
           </div>
         )}
         <div className="develop-viewer">
-          {edits ? <ImageViewer src={src} interactive gpu={gpuPreview} /> : <div className="viewer-empty">{t("common.loading")}</div>}
+          {edits
+            ? <ImageViewer src={src} interactive gpu={gpuPreview} onGpuError={() => setGpuPreview(false)} />
+            : <div className="viewer-empty">{t("common.loading")}</div>}
           {beforeAfter && <div className="before-badge">{t("develop.beforeBadge")}</div>}
           {showInfo && <ExifOverlay />}
           <CropBar />

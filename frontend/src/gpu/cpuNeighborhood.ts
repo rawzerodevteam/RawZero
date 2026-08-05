@@ -88,7 +88,7 @@ export function blurPlane(src: Float32Array, w: number, h: number, sigmaPx: numb
   return downscale === 1 ? blurred : resizePlane(blurred, dw, dh, w, h);
 }
 
-function blurImage(src: Float32Array, w: number, h: number, sigmaPx: number, downscale: number): Float32Array {
+export function blurImage(src: Float32Array, w: number, h: number, sigmaPx: number, downscale: number): Float32Array {
   const out = new Float32Array(src.length);
   for (let ch = 0; ch < 3; ch++) {
     const plane = new Float32Array(w * h);

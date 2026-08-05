@@ -241,6 +241,16 @@ export function IconColorRange({ size = 16, className }: IconProps) {
   );
 }
 
+export function IconSpot({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
+      <circle cx="5" cy="10" r="3" />
+      <circle cx="11" cy="5" r="2.2" strokeDasharray="1.6 1.4" opacity={0.7} />
+      <path d="M6.8 8.2 9.2 6.8" opacity={0.6} />
+    </svg>
+  );
+}
+
 export function IconEdit({ size = 16, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>

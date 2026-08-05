@@ -162,6 +162,11 @@ def build_mask(local: dict, h: int, w: int, img: Optional[np.ndarray] = None) ->
         mask = _linear_mask(params, h, w)
     elif kind == "radial":
         mask = _radial_mask(params, h, w)
+    elif kind == "inpaint":
+        # Forme en traits de pinceau (mêmes points/rayon que le masque "brush") : la zone peinte
+        # définit ce qui doit être effacé/regénéré. Le patch IA précalculé et `opacity` (force du
+        # blend) ne concernent pas la forme, lus par _apply_inpaint.
+        mask = _brush_mask(params, h, w)
     elif kind == "brush":
         mask = _brush_mask(params, h, w)
     elif kind == "ai":

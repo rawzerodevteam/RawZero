@@ -93,7 +93,9 @@ export const useStore = create<Store>((set, get) => ({
   aiSkyAvailable: false,
   aiPointAvailable: false,
   aiDenoiseAvailable: false,
+  aiInpaintAvailable: false,
   aiMaskBusy: false,
+  inpaintBusy: false,
   toasts: [],
   seenHints: (() => {
     try { return JSON.parse(localStorage.getItem("rs.seenHints") || "{}"); } catch { return {}; }
@@ -126,7 +128,8 @@ export const useStore = create<Store>((set, get) => ({
   async refreshAiAvailability() {
     const a = await api.autoMaskAvailable();
     set({ aiSubjectAvailable: a.subject, aiSkyAvailable: a.sky,
-          aiPointAvailable: a.point, aiDenoiseAvailable: a.denoise });
+          aiPointAvailable: a.point, aiDenoiseAvailable: a.denoise,
+          aiInpaintAvailable: a.inpaint });
   },
 
   async loadProjects() {
@@ -491,6 +494,33 @@ export const useStore = create<Store>((set, get) => ({
       get().notify(i18n.t("notify.pointMaskFailed", { error: String(err) }), "error");
     } finally {
       set({ aiMaskBusy: false });
+    }
+  },
+
+  // Correcteur de taches IA : (re)calcule le patch d'un masque "inpaint" déjà présent dans les
+  // edits (créé/complété par `createLocal`/onPointerUp côté ImageViewer au fil des coups de
+  // pinceau) — met à jour params.ref/rect au succès, ne crée jamais le local lui-même
+  // (contrairement à `createAutoMask`/`createPointMask` qui créent ET calculent en un seul appel).
+  async runInpaint(localId) {
+    const { currentId, edits, inpaintBusy } = get();
+    if (currentId === null || !edits || inpaintBusy) return;
+    const loc = edits.locals.find((l) => l.id === localId && l.type === "inpaint");
+    if (!loc || !loc.params.strokes?.length) return;
+    const { strokes, feather } = loc.params;
+    set({ inpaintBusy: true });
+    try {
+      const result = await api.inpaint(currentId, edits, {
+        strokes: strokes.map((s: any) => ({ points: s.points, size: s.size, erase: !!s.erase })),
+        feather: feather ?? 0.4,
+      });
+      get().updateEdits((e) => {
+        const l = e.locals.find((x) => x.id === localId);
+        if (l) l.params = { ...l.params, ref: result.params.ref, rect: result.params.rect };
+      }, true, i18n.t("history.inpaint"));
+    } catch (err) {
+      get().notify(i18n.t("notify.inpaintFailed", { error: String(err) }), "error");
+    } finally {
+      set({ inpaintBusy: false });
     }
   },
 

@@ -258,7 +258,9 @@
       "radial": "Radial",
       "radialHint": "Drag from the center of the ellipse",
       "brush": "Brush",
-      "brushHint": "Paint directly on the image"
+      "brushHint": "Paint directly on the image",
+      "inpaint": "AI spot removal",
+      "inpaintHint": "Paint over what to erase (AI regenerates it on release)"
     },
     "type": {
       "linear": "Linear gradient",
@@ -267,7 +269,8 @@
       "ai": "Subject (AI)",
       "sky": "Sky (AI)",
       "lumrange": "Luminance range",
-      "colorrange": "Color range"
+      "colorrange": "Color range",
+      "inpaint": "Spot removal (AI)"
     },
     "pointTitle": "Then click the element to select in the image",
     "computing": "Computing…",
@@ -302,7 +305,9 @@
     "range": "Range",
     "satMin": "Min saturation",
     "sharpness": "Sharpness",
-    "resetAdjust": "Reset adjustments"
+    "resetAdjust": "Reset adjustments",
+    "opacity": "Opacity",
+    "regenerate": "Regenerate"
   },
   "presets": {
     "title": "Presets",
@@ -335,6 +340,7 @@
     "localCut": "Mask cut",
     "maskElementAdded": "Element added to mask",
     "clickMask": "Click mask",
+    "inpaint": "Spot removal (AI)",
     "reset": "Reset",
     "presetApplied": "Preset applied",
     "pasted": "Settings pasted",
@@ -527,6 +533,7 @@
     "maskElementAdded": "Element added to mask",
     "clickCreated": "Mask created (click)",
     "pointMaskFailed": "Segmentation failed: {{error}}",
+    "inpaintFailed": "AI spot removal failed: {{error}}",
     "reset": "Settings reset",
     "copied": "Settings copied",
     "pasted": "Settings pasted",
@@ -544,6 +551,8 @@
     "pointDesc": "Segments the clicked object (EdgeSAM).",
     "denoise": "AI denoise",
     "denoiseDesc": "Neural-network noise reduction (FFDNet).",
+    "inpaint": "AI spot removal",
+    "inpaintDesc": "Neural-network inpainting (MI-GAN).",
     "installed": "Installed",
     "notConfigured": "Source not configured",
     "downloading": "Downloading… {{percent}}%",

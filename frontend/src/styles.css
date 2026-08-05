@@ -300,13 +300,13 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
 .viewer:active { cursor: grabbing; }
 .viewer.tool-crop { cursor: default; }
 .viewer.tool-linear, .viewer.tool-radial { cursor: crosshair; }
-.viewer.tool-brush { cursor: crosshair; }
+.viewer.tool-brush, .viewer.tool-inpaint { cursor: crosshair; }
 .viewer.tool-wb { cursor: crosshair; }
 .viewer.tool-pointmask { cursor: crosshair; }
 /* Espace maintenu : main pour se déplacer dans l'image, quel que soit l'outil actif */
 .viewer.space-pan, .viewer.space-pan.tool-crop, .viewer.space-pan.tool-linear,
-.viewer.space-pan.tool-radial, .viewer.space-pan.tool-brush, .viewer.space-pan.tool-wb,
-.viewer.space-pan.tool-pointmask { cursor: grab; }
+.viewer.space-pan.tool-radial, .viewer.space-pan.tool-brush, .viewer.space-pan.tool-inpaint,
+.viewer.space-pan.tool-wb, .viewer.space-pan.tool-pointmask { cursor: grab; }
 .viewer.space-pan:active { cursor: grabbing; }
 .viewer-box { position: absolute; }
 .viewer-box img { display: block; user-select: none; }

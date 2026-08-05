@@ -20,7 +20,7 @@ import type { EditState, LocalAdjust } from "../types";
 import {
   VERT, MAX_TAPS, F_LINEAR, F_LUMA, F_BLUR, F_TONE, F_CLARITY, F_DEFRINGE, F_FINAL,
   F_DCVAL, F_REDUCE_MAX, F_DEHAZE, F_YCC, F_CHROMA, F_BILATERAL, F_LBLEND, F_MASKOVL,
-  F_BLEND, F_GEOM,
+  F_BLEND, F_GEOM, F_INPAINTBLEND,
 } from "./shaders";
 
 const ZERO_HSL = new Float32Array(24);
@@ -82,7 +82,7 @@ export class GpuPipeline {
       linear: F_LINEAR, luma: F_LUMA, blur: F_BLUR, tone: F_TONE, clarity: F_CLARITY, final: F_FINAL,
       dcval: F_DCVAL, reducemax: F_REDUCE_MAX, dehaze: F_DEHAZE, ycc: F_YCC, chroma: F_CHROMA,
       bilateral: F_BILATERAL, lblend: F_LBLEND, geom: F_GEOM, maskovl: F_MASKOVL, blend: F_BLEND,
-      defringe: F_DEFRINGE,
+      defringe: F_DEFRINGE, inpaintblend: F_INPAINTBLEND,
     };
     for (const [name, frag] of Object.entries(sources)) {
       const p = this.link(VERT, frag);
@@ -398,6 +398,27 @@ export class GpuPipeline {
     const gl = this.gl;
     let parity = 0;
     for (const loc of e.locals) {
+      if (loc.type === "inpaint") {   // correcteur de taches IA : pas de mini-pipeline de réglages
+        const p = loc.params || {};
+        const ref = String(p.ref ?? "");
+        if (ref) {
+          const rect: number[] = Array.isArray(p.rect) ? p.rect : [0, 0, 1, 1];
+          const patch = this.aiTexture(loc);              // patch RGB précalculé (même cache que les masques IA)
+          const brush = this.brushTexture(loc, W, H);      // forme peinte (mêmes traits que le masque "brush")
+          const out = this.rt(parity++ % 2 ? "lOutB" : "lOutA", W, H);
+          this.pass("inpaintblend", [[0, cur.tex], [1, patch], [2, brush]], out, W, H, () => {
+            gl.uniform1i(this.u("inpaintblend", "u_tex"), 0);
+            gl.uniform1i(this.u("inpaintblend", "u_patch"), 1);
+            gl.uniform1i(this.u("inpaintblend", "u_brush"), 2);
+            gl.uniform1i(this.u("inpaintblend", "u_kind"), maskKind("inpaint"));
+            gl.uniform1i(this.u("inpaintblend", "u_invert"), loc.invert ? 1 : 0);
+            gl.uniform4f(this.u("inpaintblend", "u_rect"), rect[0], rect[1], rect[2], rect[3]);
+            gl.uniform1f(this.u("inpaintblend", "u_opacity"), num(p.opacity, 1));
+          });
+          cur = out;
+        }
+        continue;
+      }
       const a = loc.adjust;
       if (!Object.values(a).some((v) => Math.abs(Number(v)) > 1e-6)) continue;
       let mid = cur;
@@ -482,7 +503,7 @@ export class GpuPipeline {
     const gl = this.gl;
     const p = loc.params || {};
     const kind = maskKind(loc.type);
-    const tex = loc.type === "brush" ? this.brushTexture(loc, W, H)
+    const tex = (loc.type === "brush" || loc.type === "inpaint") ? this.brushTexture(loc, W, H)
       : loc.type === "ai" ? this.aiTexture(loc) : this.curveTex;
     this.pass("maskovl", [[0, img.tex], [3, tex]], null, W, H, () => {
       gl.uniform1i(this.u("maskovl", "u_tex"), 0);
@@ -707,7 +728,7 @@ function num(v: any, def: number): number {
 }
 
 function maskKind(type: string): number {
-  return type === "linear" ? 0 : type === "radial" ? 1 : type === "brush" ? 2
+  return type === "linear" ? 0 : type === "radial" ? 1 : (type === "brush" || type === "inpaint") ? 2
     : type === "ai" ? 3 : type === "lumrange" ? 4 : 5;
 }
 

@@ -246,11 +246,11 @@ export const api = {
     }));
   },
 
-  async autoMaskAvailable(): Promise<{ subject: boolean; sky: boolean; point: boolean; denoise: boolean }> {
+  async autoMaskAvailable(): Promise<{ subject: boolean; sky: boolean; point: boolean; denoise: boolean; inpaint: boolean }> {
     try {
       return await json(await fetch("/api/automask/available"));
     } catch {
-      return { subject: false, sky: false, point: false, denoise: false };
+      return { subject: false, sky: false, point: false, denoise: false, inpaint: false };
     }
   },
 
@@ -278,6 +278,16 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ edits, x, y, add_ref: addRef }),
+    }));
+  },
+
+  async inpaint(id: number, edits: EditState, shape: {
+    strokes: { points: [number, number][]; size: number; erase?: boolean }[]; feather: number;
+  }): Promise<LocalAdjust> {
+    return json(await fetch(`/api/photos/${id}/inpaint`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ edits, ...shape }),
     }));
   },
 

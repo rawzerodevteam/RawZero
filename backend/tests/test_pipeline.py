@@ -363,6 +363,12 @@ class TestMasks:
         assert hard[25, 8] < soft[25, 8]
         assert hard[25, 41] > soft[25, 41]
 
+    def test_inpaint_mask_same_shape_as_brush(self):
+        params = {"feather": 0.3, "strokes": [{"points": [[0.5, 0.5]], "size": 0.2}]}
+        m_inpaint = build_mask({"type": "inpaint", "params": params, "invert": False}, 100, 100)
+        m_brush = build_mask({"type": "brush", "params": params, "invert": False}, 100, 100)
+        assert np.array_equal(m_inpaint, m_brush)
+
 
 class TestLocals:
     def test_radial_exposure_only_affects_inside(self):
@@ -374,6 +380,90 @@ class TestLocals:
         out = apply_pipeline(img, e)
         assert out[50, 50].mean() > 0.45
         assert abs(out[2, 2].mean() - 0.3) < 0.03
+
+    def test_inpaint_blends_stored_patch_onto_destination(self, tmp_path, monkeypatch):
+        # Le patch stocké (calculé une fois côté endpoint /inpaint, pas ici) est un simple PNG RGB
+        # sous MASKS_DIR — _apply_inpaint n'a pas besoin du vrai modèle ONNX pour être testé, tout
+        # comme _ai_mask (masques IA sujet/clic) n'a pas besoin de segment.py dans ses tests.
+        import cv2
+        from app import config
+        store = tmp_path / "masks"
+        (store / "9").mkdir(parents=True)
+        patch = np.zeros((40, 40, 3), np.uint8)
+        patch[:] = [10, 200, 10]  # BGR vert vif (cv2.imwrite attend BGR)
+        cv2.imwrite(str(store / "9" / "inpaint-x.png"), patch)
+        monkeypatch.setattr(config, "MASKS_DIR", store)
+        monkeypatch.setattr(pipeline.config, "MASKS_DIR", store)
+
+        img = np.full((100, 100, 3), 0.3, np.float32)
+        e = edits()
+        e["locals"] = [{"id": "s", "type": "inpaint",
+                        "params": {"feather": 0.1,
+                                   "strokes": [{"points": [[0.25, 0.5]], "size": 0.2}],
+                                   "ref": "9/inpaint-x.png"}, "adjust": {}}]
+        out = apply_pipeline(img, e)
+        assert out[50, 25, 1] > 0.6   # zone destination : vert du patch
+        assert out[50, 25, 0] < 0.2
+        assert abs(out[10, 10, 0] - 0.3) < 0.03   # hors masque : inchangé
+
+    def test_inpaint_opacity_partial_blend(self, tmp_path, monkeypatch):
+        import cv2
+        from app import config
+        store = tmp_path / "masks"
+        (store / "9").mkdir(parents=True)
+        patch = np.zeros((40, 40, 3), np.uint8)
+        patch[:] = [10, 200, 10]
+        cv2.imwrite(str(store / "9" / "inpaint-x.png"), patch)
+        monkeypatch.setattr(config, "MASKS_DIR", store)
+        monkeypatch.setattr(pipeline.config, "MASKS_DIR", store)
+
+        img = np.full((100, 100, 3), 0.3, np.float32)
+        e = edits()
+        e["locals"] = [{"id": "s", "type": "inpaint",
+                        "params": {"feather": 0.0,
+                                   "strokes": [{"points": [[0.25, 0.5]], "size": 0.2}],
+                                   "ref": "9/inpaint-x.png", "opacity": 0.5}, "adjust": {}}]
+        out = apply_pipeline(img, e)
+        assert 0.3 < out[50, 25, 1] < 0.78   # blend partiel, ni le fond ni le patch purs
+
+    def test_inpaint_missing_ref_is_noop(self):
+        img = np.full((30, 30, 3), 0.3, np.float32)
+        e = edits()
+        e["locals"] = [{"id": "s", "type": "inpaint",
+                        "params": {"strokes": [{"points": [[0.5, 0.5]], "size": 0.4}]}, "adjust": {}}]
+        out = apply_pipeline(img, e)  # pas de ref → ne doit pas planter, image inchangée
+        assert np.abs(out - img).max() < 1e-5
+
+    def test_inpaint_uses_rect_to_reproject_patch(self, tmp_path, monkeypatch):
+        # Le patch stocké couvre le rectangle de CONTEXTE (avec halo), pas la bbox du masque —
+        # reproduit le scénario réel de l'endpoint /inpaint (cf. edits.py) : sans reprojection via
+        # `params.rect`, le patch entier serait étiré dans la bbox du masque et un contenu situé
+        # hors de la zone corrigée (ici : moitié gauche noire du patch) apparaîtrait à tort dans
+        # la destination.
+        import cv2
+        from app import config
+        store = tmp_path / "masks"
+        (store / "9").mkdir(parents=True)
+        # Patch 80x40 : moitié gauche noire, moitié droite verte (BGR pour cv2.imwrite).
+        patch = np.zeros((40, 80, 3), np.uint8)
+        patch[:, 40:] = [10, 200, 10]
+        cv2.imwrite(str(store / "9" / "inpaint-x.png"), patch)
+        monkeypatch.setattr(config, "MASKS_DIR", store)
+        monkeypatch.setattr(pipeline.config, "MASKS_DIR", store)
+
+        img = np.full((100, 100, 3), 0.3, np.float32)
+        e = edits()
+        # rect = rectangle de contexte capturé côté serveur, plus étroit que le patch et décalé :
+        # au centre du masque (cx=0.25), la reprojection doit tomber dans la moitié droite (verte)
+        # du patch, avec une marge confortable pour ne pas dépendre d'un arrondi de pixel.
+        e["locals"] = [{"id": "s", "type": "inpaint",
+                        "params": {"feather": 0.0,
+                                   "strokes": [{"points": [[0.25, 0.5]], "size": 0.2}],
+                                   "ref": "9/inpaint-x.png", "rect": [0.15, 0.0, 0.30, 1.0]},
+                        "adjust": {}}]
+        out = apply_pipeline(img, e)
+        assert out[50, 25, 1] > 0.6   # vert du patch (moitié droite du rect), pas du noir
+        assert out[50, 25, 0] < 0.2
 
 
 class TestRenderAndAuto:

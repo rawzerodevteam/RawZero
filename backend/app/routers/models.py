@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import config, denoise, segment
+from .. import config, denoise, inpaint, segment
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -69,6 +69,10 @@ FEATURES: dict[str, list[ModelFile]] = {
         ModelFile(denoise.model_path().name, 3458497,
                   "987073f5e4f43365456da5121b1786d750bb4d39bfed6360b7e36ff4a30069de"),
     ],
+    "inpaint": [
+        ModelFile(inpaint.model_path().name, 29546882,
+                  "593eba0b7e04730f1b61c0a3cbca68d97d8d6a7ff5c6a44a7b9d7fcd880fc5ae"),
+    ],
 }
 
 # Disponibilité réelle (onnxruntime importable + modèle chargeable) : même source que
@@ -77,6 +81,7 @@ AVAILABLE = {
     "subject": segment.available,
     "point": segment.point_available,
     "denoise": denoise.available,
+    "inpaint": inpaint.available,
 }
 
 # feature -> {downloading: bool, received: int, total: int|None, error: str|None}

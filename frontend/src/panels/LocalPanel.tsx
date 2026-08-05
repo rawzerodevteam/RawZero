@@ -18,6 +18,11 @@ const TOOLS: { tool: Tool; icon: ComponentType<IconProps>; label: string; hint: 
   { tool: "brush", icon: IconEdit, label: "local.tool.brush", hint: "local.tool.brushHint" },
 ];
 
+// Icône pinceau (IconEdit) réutilisée telle quelle : c'est un pinceau, pas une sélection ponctuelle
+// (l'ancien IconSpot suggérait un outil de clic, plus vrai depuis le passage au pinceau libre).
+const INPAINT_TOOL: { tool: Tool; icon: ComponentType<IconProps>; label: string; hint: string } =
+  { tool: "inpaint", icon: IconEdit, label: "local.tool.inpaint", hint: "local.tool.inpaintHint" };
+
 export function LocalPanel() {
   const { t } = useTranslation();
   const hasEdits = useStore((s) => s.edits !== null);
@@ -36,8 +41,11 @@ export function LocalPanel() {
   const aiSubjectAvailable = useStore((s) => s.aiSubjectAvailable);
   const aiSkyAvailable = useStore((s) => s.aiSkyAvailable);
   const aiPointAvailable = useStore((s) => s.aiPointAvailable);
+  const aiInpaintAvailable = useStore((s) => s.aiInpaintAvailable);
   const aiMaskBusy = useStore((s) => s.aiMaskBusy);
+  const inpaintBusy = useStore((s) => s.inpaintBusy);
   const createAutoMask = useStore((s) => s.createAutoMask);
+  const runInpaint = useStore((s) => s.runInpaint);
   if (!hasEdits) return null;
   void localsSig; // déclenche le re-rendu sur changement de structure ; la lecture se fait via getState
 
@@ -46,6 +54,7 @@ export function LocalPanel() {
   const allLocals = useStore.getState().edits!.locals;
   const selected = allLocals.find((l) => l.id === selectedLocalId) ?? null;
   const brushSizePct = Math.round(brushSize * 1000) / 10;
+  const visibleTools = aiInpaintAvailable ? [...TOOLS, INPAINT_TOOL] : TOOLS;
 
   const removeSelected = () => {
     if (!selected) return;
@@ -65,7 +74,7 @@ export function LocalPanel() {
   return (
     <PanelSection title={t("local.title")} defaultOpen={false} storageKey="local">
       <div className="row-actions">
-        {TOOLS.map(({ tool, icon: Icon, label, hint }) => (
+        {visibleTools.map(({ tool, icon: Icon, label, hint }) => (
           <button
             key={tool}
             className={"btn" + (activeTool === tool ? " active" : "")}
@@ -76,8 +85,28 @@ export function LocalPanel() {
           </button>
         ))}
       </div>
-      {TOOLS.some((x) => x.tool === activeTool) && (
-        <p className="hint">{t(TOOLS.find((x) => x.tool === activeTool)!.hint)}</p>
+      {(activeTool === "brush" || activeTool === "inpaint") && (
+        <>
+          <div className="slider-row">
+            <span className="slider-label">{t("local.brushSize")}</span>
+            <input
+              type="range" min={0.2} max={30} step={0.1} value={brushSizePct}
+              onChange={(ev) => setUI({ brushSize: Number(ev.target.value) / 100 })}
+            />
+            <span className="slider-value">{brushSizePct}</span>
+          </div>
+          <div className="row-actions">
+            <button
+              className={"btn small" + (brushErase ? " active" : "")}
+              onClick={() => setUI({ brushErase: !brushErase })}
+            >
+              {t("local.eraser")}
+            </button>
+          </div>
+        </>
+      )}
+      {visibleTools.some((x) => x.tool === activeTool) && (
+        <p className="hint">{t(visibleTools.find((x) => x.tool === activeTool)!.hint)}</p>
       )}
       {(aiSubjectAvailable || aiSkyAvailable || aiPointAvailable) && (
         <div className="row-actions ai-actions">
@@ -124,26 +153,6 @@ export function LocalPanel() {
           {selected?.type === "ai" ? t("local.pointAddHint") : t("local.pointHint")}
         </p>
       )}
-      {activeTool === "brush" && (
-        <>
-          <div className="slider-row">
-            <span className="slider-label">{t("local.brushSize")}</span>
-            <input
-              type="range" min={0.2} max={30} step={0.1} value={brushSizePct}
-              onChange={(ev) => setUI({ brushSize: Number(ev.target.value) / 100 })}
-            />
-            <span className="slider-value">{brushSizePct}</span>
-          </div>
-          <div className="row-actions">
-            <button
-              className={"btn small" + (brushErase ? " active" : "")}
-              onClick={() => setUI({ brushErase: !brushErase })}
-            >
-              {t("local.eraser")}
-            </button>
-          </div>
-        </>
-      )}
 
       {allLocals.length > 0 && (
         <ul className="local-list">
@@ -177,26 +186,30 @@ export function LocalPanel() {
       {selected && (
         <div className="local-adjust">
           <div className="row-actions">
-            <button
-              className={"btn small" + (selected.invert ? " active" : "")}
-              onClick={() => updateEdits((e) => {
-                const loc = e.locals.find((l) => l.id === selected.id);
-                if (loc) loc.invert = !loc.invert;
-              })}
-            >
-              {t("local.invert")}
-            </button>
-            <button
-              className={"btn small" + (showMaskOverlay ? " active" : "")}
-              title={t("local.showMaskTitle")}
-              onClick={() => setUI({ showMaskOverlay: !showMaskOverlay })}
-            >
-              {t("local.maskToggle")}
-            </button>
+            {selected.type !== "inpaint" && (
+              <button
+                className={"btn small" + (selected.invert ? " active" : "")}
+                onClick={() => updateEdits((e) => {
+                  const loc = e.locals.find((l) => l.id === selected.id);
+                  if (loc) loc.invert = !loc.invert;
+                })}
+              >
+                {t("local.invert")}
+              </button>
+            )}
+            {selected.type !== "inpaint" && (
+              <button
+                className={"btn small" + (showMaskOverlay ? " active" : "")}
+                title={t("local.showMaskTitle")}
+                onClick={() => setUI({ showMaskOverlay: !showMaskOverlay })}
+              >
+                {t("local.maskToggle")}
+              </button>
+            )}
             <button className="btn small danger" onClick={removeSelected}>{t("common.delete")}</button>
           </div>
           <p className="hint">{t("local.copyPasteHint")}</p>
-          {(selected.type === "radial" || selected.type === "brush") && (
+          {(selected.type === "radial" || selected.type === "brush" || selected.type === "inpaint") && (
             <EditSlider label={t("local.feather")}
               get={(e) => ((e.locals.find((l) => l.id === selected.id)?.params.feather ?? 0.5) * 100)}
               min={0} max={100} reset={50}
@@ -236,24 +249,42 @@ export function LocalPanel() {
                 min={0} max={1} step={0.01} reset={0.15} fmt={(v) => v.toFixed(2)} />
             </>
           )}
-          <LocalSlider id={selected.id} label={t("adj.exposure")} k="exposure" min={-3} max={3} step={0.05}
-            fmt={(v) => (v > 0 ? "+" : "") + v.toFixed(2)} />
-          <LocalSlider id={selected.id} label={t("adj.contrast")} k="contrast" />
-          <LocalSlider id={selected.id} label={t("adj.highlights")} k="highlights" />
-          <LocalSlider id={selected.id} label={t("adj.shadows")} k="shadows" />
-          <LocalSlider id={selected.id} label={t("adj.temperature")} k="temp" />
-          <LocalSlider id={selected.id} label={t("adj.tint")} k="tint" />
-          <LocalSlider id={selected.id} label={t("adj.saturation")} k="saturation" />
-          <LocalSlider id={selected.id} label={t("adj.clarity")} k="clarity" />
-          <LocalSlider id={selected.id} label={t("local.sharpness")} k="sharpness" />
-          <div className="row-actions">
-            <button className="btn small" onClick={() => updateEdits((e) => {
-              const loc = e.locals.find((l) => l.id === selected.id);
-              if (loc) loc.adjust = defaultLocalAdjust();
-            })}>
-              {t("local.resetAdjust")}
-            </button>
-          </div>
+          {selected.type === "inpaint" ? (
+            <>
+              <ParamSlider id={selected.id} label={t("local.opacity")} pk="opacity"
+                min={0} max={1} step={0.01} reset={1} fmt={(v) => Math.round(v * 100) + "%"} />
+              <div className="row-actions">
+                <button
+                  className={"btn small" + (inpaintBusy ? " busy" : "")}
+                  disabled={inpaintBusy}
+                  onClick={() => void runInpaint(selected.id)}
+                >
+                  {inpaintBusy ? t("local.computing") : t("local.regenerate")}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <LocalSlider id={selected.id} label={t("adj.exposure")} k="exposure" min={-3} max={3} step={0.05}
+                fmt={(v) => (v > 0 ? "+" : "") + v.toFixed(2)} />
+              <LocalSlider id={selected.id} label={t("adj.contrast")} k="contrast" />
+              <LocalSlider id={selected.id} label={t("adj.highlights")} k="highlights" />
+              <LocalSlider id={selected.id} label={t("adj.shadows")} k="shadows" />
+              <LocalSlider id={selected.id} label={t("adj.temperature")} k="temp" />
+              <LocalSlider id={selected.id} label={t("adj.tint")} k="tint" />
+              <LocalSlider id={selected.id} label={t("adj.saturation")} k="saturation" />
+              <LocalSlider id={selected.id} label={t("adj.clarity")} k="clarity" />
+              <LocalSlider id={selected.id} label={t("local.sharpness")} k="sharpness" />
+              <div className="row-actions">
+                <button className="btn small" onClick={() => updateEdits((e) => {
+                  const loc = e.locals.find((l) => l.id === selected.id);
+                  if (loc) loc.adjust = defaultLocalAdjust();
+                })}>
+                  {t("local.resetAdjust")}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </PanelSection>

@@ -258,7 +258,9 @@
       "radial": "Radial",
       "radialHint": "Glisser depuis le centre de l'ellipse",
       "brush": "Pinceau",
-      "brushHint": "Peindre directement sur l'image"
+      "brushHint": "Peindre directement sur l'image",
+      "inpaint": "Correction IA",
+      "inpaintHint": "Peindre sur la zone à effacer (l'IA régénère le contenu au relâchement)"
     },
     "type": {
       "linear": "Dégradé linéaire",
@@ -267,7 +269,8 @@
       "ai": "Sujet (IA)",
       "sky": "Ciel (IA)",
       "lumrange": "Plage de luminance",
-      "colorrange": "Plage de couleur"
+      "colorrange": "Plage de couleur",
+      "inpaint": "Correction de tache (IA)"
     },
     "pointTitle": "Cliquez ensuite sur l'élément à sélectionner dans l'image",
     "computing": "Calcul…",
@@ -302,7 +305,9 @@
     "range": "Plage",
     "satMin": "Saturation min",
     "sharpness": "Netteté",
-    "resetAdjust": "Réinitialiser les réglages"
+    "resetAdjust": "Réinitialiser les réglages",
+    "opacity": "Opacité",
+    "regenerate": "Regénérer"
   },
   "presets": {
     "title": "Presets",
@@ -335,6 +340,7 @@
     "localCut": "Masque coupé",
     "maskElementAdded": "Élément ajouté au masque",
     "clickMask": "Masque au clic",
+    "inpaint": "Correction de tache (IA)",
     "reset": "Réinitialisation",
     "presetApplied": "Preset appliqué",
     "pasted": "Réglages collés",
@@ -527,6 +533,7 @@
     "maskElementAdded": "Élément ajouté au masque",
     "clickCreated": "Masque créé (clic)",
     "pointMaskFailed": "Segmentation impossible : {{error}}",
+    "inpaintFailed": "Correction IA impossible : {{error}}",
     "reset": "Réglages réinitialisés",
     "copied": "Réglages copiés",
     "pasted": "Réglages collés",
@@ -544,6 +551,8 @@
     "pointDesc": "Segmente l'objet cliqué (EdgeSAM).",
     "denoise": "Débruitage IA",
     "denoiseDesc": "Réduction de bruit par réseau de neurones (FFDNet).",
+    "inpaint": "Correction de taches IA",
+    "inpaintDesc": "Inpainting par réseau de neurones (MI-GAN).",
     "installed": "Installé",
     "notConfigured": "Source non configurée",
     "downloading": "Téléchargement… {{percent}} %",

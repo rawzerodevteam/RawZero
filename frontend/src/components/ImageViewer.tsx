@@ -10,8 +10,9 @@ import { ClippingOverlay, CropOverlay, MaskHandles, ShapeOutline } from "./Image
 
 interface Props {
   src: string | null;
-  interactive?: boolean; // outils de développement (masques, crop)
-  gpu?: boolean;         // affiche le canvas WebGL (aperçu GPU) au lieu du <img> serveur
+  interactive?: boolean;      // outils de développement (masques, crop)
+  gpu?: boolean;              // affiche le canvas WebGL (aperçu GPU) au lieu du <img> serveur
+  onGpuError?: () => void;    // le contexte GPU a échoué à l'exécution → repli silencieux conseillé
 }
 
 interface Box { left: number; top: number; w: number; h: number }
@@ -21,7 +22,7 @@ function isTyping(): boolean {
   return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT");
 }
 
-export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
+export function ImageViewer({ src, interactive = false, gpu = false, onGpuError }: Props) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const glCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -52,6 +53,8 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
     const p = l.params;
     return l.type === "linear" || l.type === "radial"
       ? `${l.id}:${l.type}:${p.x0}:${p.y0}:${p.x1}:${p.y1}:${p.cx}:${p.cy}:${p.rx}:${p.ry}:${p.angle}`
+      : l.type === "inpaint"
+      ? `${l.id}:${l.type}:${p.strokes?.length ?? 0}:${p.ref}`
       : `${l.id}:${l.type}`;
   });
   const updateEdits = useStore((s) => s.updateEdits);
@@ -62,11 +65,22 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
   // Pendant le drag d'un slider (et un court instant après), on masque l'overlay rouge pour
   // voir l'effet du réglage ; le « linger » couvre aussi les clics rapides.
   const maskSuppressed = useMaskSuppressed();
+  // "inpaint" n'est pas un masque de réglage (pas de fondu de valeurs à visualiser, juste une
+  // zone remplacée) : la surimpression rouge n'a pas de sens dessus.
+  const selectedType = useStore((s) => s.edits?.locals.find((l) => l.id === s.selectedLocalId)?.type);
 
   // Aperçu GPU : rend dans glCanvasRef ; outil crop actif → image entière (le cadre se dessine par-dessus)
-  const maskOverlayId = showMaskOverlay && selectedLocalId && !maskSuppressed ? selectedLocalId : null;
+  const maskOverlayId = showMaskOverlay && selectedLocalId && !maskSuppressed && selectedType !== "inpaint" ? selectedLocalId : null;
   const gpuState = useGpuPreview(glCanvasRef, gpu, activeTool === "crop", beforeAfter, showClipping, maskOverlayId);
   const nat = gpu ? gpuState.dims : natural;
+
+  // Repli automatique vers le rendu serveur si le contexte GPU échoue à l'exécution (rare, mais
+  // réel maintenant que le GPU est le chemin par défaut pour tout le monde, pas seulement les
+  // utilisateurs l'activant sciemment via le menu Avancé).
+  useEffect(() => {
+    if (gpu && gpuState.error) onGpuError?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gpu, gpuState.error]);
 
   const lastPointer = useRef({ x: 0, y: 0 });
   const mode = useRef<"none" | "pan" | "shape" | "brush">("none");
@@ -191,7 +205,9 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
 
   const createLocal = (local: LocalAdjust) => {
     updateEdits((e) => { e.locals.push(local); });
-    setUI({ selectedLocalId: local.id, activeTool: local.type === "brush" ? "brush" : "none" });
+    // pinceau/correcteur IA : l'outil reste actif pour enchaîner les coups de pinceau sur le
+    // même masque sans avoir à le réactiver après chaque trait.
+    setUI({ selectedLocalId: local.id, activeTool: local.type === "brush" || local.type === "inpaint" ? local.type : "none" });
   };
 
   // Pipette balance des blancs : échantillonne le point cliqué côté serveur et applique temp/teinte.
@@ -242,7 +258,9 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
     } else if (activeTool === "linear" || activeTool === "radial") {
       mode.current = "shape";
       setTempShape({ type: activeTool, x0: nx, y0: ny, x1: nx, y1: ny });
-    } else if (activeTool === "brush") {
+    } else if (activeTool === "brush" || activeTool === "inpaint") {
+      // Correcteur IA : même geste de peinture que le pinceau de retouche locale (arbitraire,
+      // pas de cercle fixe) — la zone peinte est envoyée telle quelle à l'IA au relâchement.
       mode.current = "brush";
       stroke.current = [[nx, ny]];
       setTick((t) => t + 1);
@@ -287,23 +305,30 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
       }
       setTempShape(null);
     } else if (mode.current === "brush" && stroke.current.length) {
+      const isInpaint = activeTool === "inpaint";
       const newStroke = { points: stroke.current, size: brushSize, erase: brushErase };
       const selected = useStore.getState().edits?.locals.find((l) => l.id === selectedLocalId);
-      if (selected && selected.type === "brush") {
+      const kind = isInpaint ? "inpaint" : "brush";
+      let targetId = selected && selected.type === kind ? selected.id : "";
+      if (targetId) {
         updateEdits((e) => {
-          const loc = e.locals.find((l) => l.id === selectedLocalId);
+          const loc = e.locals.find((l) => l.id === targetId);
           if (loc) (loc.params.strokes = loc.params.strokes ?? []).push(newStroke);
         });
       } else {
+        targetId = "loc-" + Date.now().toString(36);
         createLocal({
-          id: "loc-" + Date.now().toString(36),
-          type: "brush",
-          params: { feather: 0.4, strokes: [newStroke] },
+          id: targetId,
+          type: kind,
+          params: isInpaint ? { feather: 0.4, opacity: 1, strokes: [newStroke] } : { feather: 0.4, strokes: [newStroke] },
           invert: false,
           adjust: defaultLocalAdjust(),
         });
       }
       stroke.current = [];
+      // Correcteur IA : chaque trait relâché redéclenche le calcul (le patch précédent, s'il
+      // existe, ne couvre plus la zone peinte étendue).
+      if (isInpaint) void useStore.getState().runInpaint(targetId);
     }
     mode.current = "none";
   };
@@ -329,10 +354,11 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
           {!gpu && showClipping && src && <ClippingOverlay src={src} />}
           <svg className="viewer-overlay" viewBox={`0 0 ${box.w} ${box.h}`} preserveAspectRatio="none">
             <ShapeOutline shape={tempShape} w={box.w} h={box.h} />
-            {!tempShape && selectedLocal && (selectedLocal.type === "linear" || selectedLocal.type === "radial") && (
+            {!tempShape && selectedLocal &&
+              (selectedLocal.type === "linear" || selectedLocal.type === "radial") && (
               <ShapeOutline
                 shape={{
-                  type: selectedLocal.type,
+                  type: selectedLocal.type === "linear" ? "linear" : "radial",
                   x0: selectedLocal.params.x0 ?? selectedLocal.params.cx ?? 0.5,
                   y0: selectedLocal.params.y0 ?? selectedLocal.params.cy ?? 0.5,
                   x1: selectedLocal.params.x1 ?? 0,
@@ -343,7 +369,8 @@ export function ImageViewer({ src, interactive = false, gpu = false }: Props) {
                 h={box.h}
               />
             )}
-            {/* Poignées d'édition du masque sélectionné (déplacer / redimensionner) */}
+            {/* Poignées d'édition du masque sélectionné (déplacer / redimensionner) — pas pour
+                "brush"/"inpaint" (forme libre au pinceau, pas de géométrie paramétrique). */}
             {!tempShape && activeTool === "none" && selectedLocal &&
               (selectedLocal.type === "linear" || selectedLocal.type === "radial") && (
               <MaskHandles

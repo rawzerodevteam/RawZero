@@ -14,10 +14,16 @@ function offsetParams(type: LocalAdjust["type"], params: Record<string, any>): R
   if (type === "radial") {
     return { ...params, cx: clamp01((params.cx ?? 0.5) + OFFSET), cy: clamp01((params.cy ?? 0.5) + OFFSET) };
   }
-  if (type === "brush") {
+  if (type === "brush" || type === "inpaint") {
     const strokes = (params.strokes ?? []).map((s: any) => ({
       ...s, points: (s.points ?? []).map((p: any) => [clamp01(p[0] + OFFSET), clamp01(p[1] + OFFSET)]),
     }));
+    if (type === "inpaint") {
+      // décale les traits ; le patch précalculé (ref) ne vaut plus pour ce nouvel emplacement —
+      // supprimé, la copie apparaît vide jusqu'à régénération (bouton « Regénérer », panneau Local).
+      const { ref: _ref, rect: _rect, ...rest } = params;
+      return { ...rest, strokes };
+    }
     return { ...params, strokes };
   }
   return { ...params };
