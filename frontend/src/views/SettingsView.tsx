@@ -11,7 +11,7 @@ import {
   resetAccent, setAccent, setCustomBg, setTheme,
 } from "../theme";
 import { useStore } from "../store";
-import { IconClose, IconReset } from "../icons";
+import { IconArrowLeft, IconClose, IconReset } from "../icons";
 
 /** Onglet « Paramètres » : apparence (langue, couleur d'accent) + raccourcis clavier. */
 export function SettingsView() {
@@ -39,7 +39,7 @@ export function SettingsView() {
   return (
     <div className="settings">
       <header className="settings-header">
-        <button className="btn" onClick={() => setView(previousView)}>← {t("settings.back")}</button>
+        <button className="btn" onClick={() => setView(previousView)}><IconArrowLeft size={14} /> {t("settings.back")}</button>
         <strong className="brand">{t("settings.title")}</strong>
         <span className="spacer" />
         <button className="btn" onClick={() => {

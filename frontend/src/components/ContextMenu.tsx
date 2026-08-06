@@ -4,7 +4,7 @@ import { confirmDialog, promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
 import { COLOR_HEX, COLOR_VALUES } from "../types";
 import { StarRating } from "./StarRating";
-import { IconAlbum, IconChevron, IconClose, IconEdit, IconExport, IconPalette, IconPaste, IconPlus, IconTrash } from "../icons";
+import { IconAlbum, IconChevron, IconClose, IconEdit, IconExport, IconFlag, IconPalette, IconPaste, IconPlus, IconTrash } from "../icons";
 
 type Sub = "album" | "rating" | "color" | null;
 
@@ -91,7 +91,7 @@ export function ContextMenu() {
           </div>
         )}
         <div className="ctx-sep" />
-        <button onClick={act(() => patchSelection({ flag: "pick" }))}>⚑ {t("ctx.pick")}</button>
+        <button onClick={act(() => patchSelection({ flag: "pick" }))}><IconFlag size={14} /> {t("ctx.pick")}</button>
         <button onClick={act(() => patchSelection({ flag: "reject" }))}><IconClose size={12} /> {t("ctx.reject")}</button>
         <button onClick={act(() => patchSelection({ flag: "none" }))}>○ {t("ctx.neutral")}</button>
         <div className="ctx-sep" />

@@ -7,7 +7,7 @@ import { ImageViewer } from "../components/ImageViewer";
 import { StarRating } from "../components/StarRating";
 import { EmptyState } from "../components/EmptyState";
 import { Coachmark } from "../components/Coachmark";
-import { IconClipHigh, IconClipLow, IconCopy, IconDiff, IconExport, IconGpu, IconPaste, IconRedo, IconReset, IconSettings, IconUndo } from "../icons";
+import { IconChevron, IconClipHigh, IconClipLow, IconCopy, IconDiff, IconExport, IconFullscreen, IconGpu, IconMore, IconPaste, IconRedo, IconReset, IconSettings, IconUndo } from "../icons";
 import logoMark from "../assets/logo-mark.png";
 import { GpuDiffDialog } from "../components/GpuDiffDialog";
 import { ModeTabs } from "../components/ModeTabs";
@@ -191,10 +191,10 @@ export function DevelopView() {
             <button className={"btn small" + (panelsCollapsed ? " active" : "")}
               title={t("develop.togglePanelsTitle")} aria-label={t("develop.togglePanelsTitle")}
               onClick={() => setUI({ panelsCollapsed: !panelsCollapsed })}>
-              {panelsCollapsed ? "❮" : "❯"}
+              <IconChevron size={10} className={panelsCollapsed ? "" : "chevron-flip"} />
             </button>
             <button className="btn small" title={t("develop.fullScreenTitle")} aria-label={t("develop.fullScreenTitle")}
-              onClick={() => setUI({ fullScreen: true })}>⛶</button>
+              onClick={() => setUI({ fullScreen: true })}><IconFullscreen size={14} /></button>
             <button className="btn small" title={t("settings.title")} aria-label={t("settings.title")} onClick={() => setView("settings")}><IconSettings size={14} /></button>
           </div>
         )}
@@ -218,7 +218,7 @@ export function DevelopView() {
           )}
           {fullScreen && (
             <button className="btn small full-screen-exit" title={t("develop.exitFullScreen")}
-              aria-label={t("develop.exitFullScreen")} onClick={() => setUI({ fullScreen: false })}>⛶</button>
+              aria-label={t("develop.exitFullScreen")} onClick={() => setUI({ fullScreen: false })}><IconFullscreen size={14} /></button>
           )}
         </div>
         {!fullScreen && <Filmstrip />}
@@ -255,7 +255,7 @@ function AdvancedMenu({ show, setShow, gpuPreview, setGpuPreview, onDiff }: {
   return (
     <div className="advanced-menu" ref={ref}>
       <button className={"btn small" + (show ? " active" : "")} title={t("develop.advancedTitle")}
-        onClick={() => setShow(!show)}>⋯</button>
+        onClick={() => setShow(!show)}><IconMore size={14} /></button>
       {show && (
         <div className="advanced-menu-pop">
           <button className={gpuPreview ? "active" : ""} onClick={() => setGpuPreview((v) => !v)}>

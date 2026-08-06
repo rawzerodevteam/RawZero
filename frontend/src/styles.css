@@ -535,8 +535,12 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
   overflow: hidden;
 }
 
+.chevron-flip {
+  transform: scaleX(-1);
+}
+
 /* Fenêtre étroite (laptop 13"/écran partagé) : la colonne de panneaux fixe (308px) + le rail
-   (66px) laissent trop peu de place au viewer. Le bouton ❯/❮ de la toolbar permet de la replier
+   (66px) laissent trop peu de place au viewer. Le bouton chevron de la toolbar permet de la replier
    manuellement ; sous ce seuil elle démarre repliée par défaut au premier rendu CSS. */
 @media (max-width: 1100px) {
   .develop-panels:not(.collapsed) {

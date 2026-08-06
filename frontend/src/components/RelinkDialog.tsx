@@ -4,7 +4,7 @@ import { api } from "../api";
 import { nativeDialogAvailable, pickFile } from "../lib/nativeDialog";
 import { useStore } from "../store";
 import { Modal } from "./Modal";
-import { IconClose, IconFolder, IconImage } from "../icons";
+import { IconArrowUp, IconClose, IconFolder, IconImage } from "../icons";
 
 /** Reliage d'une photo dont l'original a été déplacé/supprimé : même navigateur de fichiers
  * que l'import, mais sélection d'un unique fichier de remplacement. */
@@ -72,7 +72,7 @@ export function RelinkDialog() {
               <div className="row-actions">
                 <button className="btn small" disabled={busy || !path || !listing.parent}
                         onClick={() => browse(listing.parent ?? "")}>
-                  ↑ {t("import.parentDir")}
+                  <IconArrowUp size={13} /> {t("import.parentDir")}
                 </button>
                 <span className="dim">{path || t("import.parentDir")}</span>
               </div>

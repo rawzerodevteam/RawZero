@@ -5,7 +5,7 @@ import { Filmstrip } from "../components/Filmstrip";
 import { ImageViewer } from "../components/ImageViewer";
 import { EmptyState } from "../components/EmptyState";
 import { StarRating } from "../components/StarRating";
-import { IconAlbum, IconClose, IconEdit, IconExport, IconFolder, IconPlus, IconTrash } from "../icons";
+import { IconAlbum, IconClose, IconEdit, IconExport, IconFlag, IconFolder, IconPlus, IconTrash } from "../icons";
 import { parseDragIds, hasDragIds } from "../lib/dragPhotos";
 import { confirmDialog, promptDialog } from "../lib/dialog";
 import { useStore } from "../store";
@@ -111,7 +111,7 @@ export function SelectionBar() {
       <button className="btn small" onClick={() => { setExportIds(selection); setUI({ showExport: true }); }}>
         <IconExport size={13} /> {t("export.title")}
       </button>
-      <button className="btn small" onClick={() => patchSelection({ flag: "pick" })}>⚑ {t("ctx.pick")}</button>
+      <button className="btn small" onClick={() => patchSelection({ flag: "pick" })}><IconFlag size={13} /> {t("ctx.pick")}</button>
       <button className="btn small" onClick={() => patchSelection({ flag: "reject" })}><IconClose size={11} /> {t("ctx.reject")}</button>
       <span className="selection-album">
         <button className="btn small" onClick={() => setAlbumOpen((v) => !v)}><IconAlbum size={13} /> {t("ctx.addToAlbum")}</button>
@@ -153,7 +153,7 @@ export function Loupe() {
           {photo.edited && <span className="edited-chip" title={t("develop.editedTitle")}>{t("develop.edited")}</span>}
           <StarRating value={photo.rating} onChange={setRating} />
           <span className="flag-state">{t(`library.flagState.${photo.flag}`)}</span>
-          <button className="btn small" onClick={() => setFlag("pick")}>⚑ P</button>
+          <button className="btn small" onClick={() => setFlag("pick")}><IconFlag size={13} /> P</button>
           <button className="btn small" onClick={() => setFlag("reject")}>✕ X</button>
           <button className="btn small" onClick={() => void openDevelop(photo.id)}>{t("library.developBtn")}</button>
         </div>

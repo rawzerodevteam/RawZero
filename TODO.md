@@ -343,22 +343,24 @@ rien de restant ici.**
       Entrée/Espace, `aria-label`/`aria-pressed`).
 
 ### Lot C — cohérence & profondeur (moyen/long terme)
-- [ ] ◑ Set d'icônes SVG unifié (aujourd'hui mélange emoji / glyphes Unicode / SVG) + système de
-      boutons rationalisé. **Avancé (2026-07-30), pas terminé** : les glyphes `✕`/`✓` restants dans
+- [x] ◑ Set d'icônes SVG unifié (aujourd'hui mélange emoji / glyphes Unicode / SVG) + système de
+      boutons rationalisé. **Avancé (2026-07-30)** : les glyphes `✕`/`✓` restants dans
       les vraies boîtes de dialogue/toasts (`Coachmark.tsx`, `GpuDiffDialog.tsx`, `ToastStack.tsx`,
       `ExportDialog.tsx`, `ModelsDialog.tsx`) remplacés par les composants `IconClose`/`IconCheck`
       déjà existants dans `frontend/src/icons/index.tsx` (même convention que `RelinkDialog`/
-      `ImportPanel`/`ShortcutsOverlay`, qui utilisaient déjà ces icônes). `tsc`/`vitest` (94)/
-      `vite build` verts. **Volontairement pas touché** : les badges superposés sur miniature
+      `ImportPanel`/`ShortcutsOverlay`, qui utilisaient déjà ces icônes). **Complété (2026-08-06)** :
+      les glyphes de boutons de toolbar restants (`⋯`/`❮❯`/`⛶`/`⚲`/`⚑`/`←`/`↑`) remplacés par de
+      nouveaux composants SVG (`IconMore`, `IconChevron` + classe CSS `.chevron-flip` pour le
+      replier de panneaux, `IconFullscreen`, `IconFilter`, `IconFlag`, `IconArrowLeft`,
+      `IconArrowUp`) dans `DevelopView.tsx`, `LibraryView.tsx`, `LibraryPanels.tsx`,
+      `SettingsView.tsx`, `ImportPanel.tsx`, `RelinkDialog.tsx`, `ContextMenu.tsx`. `tsc`/`vitest`
+      (108)/`vite build` verts — pas de vérification visuelle en navigateur (pas de Chromium/
+      Playwright disponible dans cet environnement), à confirmer manuellement à l'occasion.
+      **Volontairement pas touché** : les badges superposés sur miniature
       (`★`/`⚑`/`✓`/`✎`/`⚠` dans `Filmstrip.tsx`/`LibraryView.tsx`) — positionnement/taille
       probablement calés sur la métrique du glyphe texte (font-size, text-shadow), et les glyphes
       de `DevOverlay.tsx` (panneau de profilage dev-only, F9, jamais vu par un utilisateur normal,
-      hors périmètre d'un audit UX) ; risque de régression visuelle sans capture d'écran possible
-      dans cet environnement (pas de Chromium/Playwright installé, `run` skill non concluant) pour
-      confirmer l'alignement. Reste ouvert : `⋯`/`❮❯`/`⛶`/`⚲`/`⚑`/`⚠`/`←`/`↑` dans les boutons de
-      toolbar (`DevelopView.tsx`, `LibraryView.tsx`, `SettingsView.tsx`, `ImportPanel.tsx`,
-      `RelinkDialog.tsx`, `ContextMenu.tsx`) — même limite de vérification visuelle, à traiter avec
-      un outil de capture d'écran disponible. Système de boutons rationalisé : non entamé.
+      hors périmètre d'un audit UX). Système de boutons rationalisé : non entamé.
 - [ ] Réordonnancement des panneaux (Géométrie trop bas, Presets trop bas) + interrupteur
       d'activation par module (façon Darktable).
 - [x] Onboarding/coach-marks (viewer, sélection multiple) + états vides harmonisés. **Déjà fait** :

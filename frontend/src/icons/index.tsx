@@ -310,6 +310,69 @@ export function IconImage({ size = 16, className }: IconProps) {
   );
 }
 
+export function IconFlag({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
+      <path d="M4 2v12" />
+      <path d="M4 2.8h7.5L9.7 6l1.8 3.2H4" />
+    </svg>
+  );
+}
+
+export function IconAlertTriangle({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
+      <path d="M8 2.5 14 13H2z" />
+      <path d="M8 6.3v3M8 10.9h.01" />
+    </svg>
+  );
+}
+
+export function IconArrowLeft({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
+      <path d="M13 8H3M6.3 4.3 3 8l3.3 3.7" />
+    </svg>
+  );
+}
+
+export function IconArrowUp({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
+      <path d="M8 13V3M4.3 6.3 8 3l3.7 3.3" />
+    </svg>
+  );
+}
+
+export function IconMore({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base} fill="currentColor" stroke="none">
+      <circle cx="3.2" cy="8" r="1.3" />
+      <circle cx="8" cy="8" r="1.3" />
+      <circle cx="12.8" cy="8" r="1.3" />
+    </svg>
+  );
+}
+
+export function IconFilter({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
+      <path d="M2.5 3h11L9.2 8.3v4.4L6.8 11V8.3z" />
+    </svg>
+  );
+}
+
+export function IconFullscreen({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
+      <path d="M2.5 6V3.5a1 1 0 0 1 1-1H6" />
+      <path d="M10 2.5h2.5a1 1 0 0 1 1 1V6" />
+      <path d="M13.5 10v2.5a1 1 0 0 1-1 1H10" />
+      <path d="M6 13.5H3.5a1 1 0 0 1-1-1V10" />
+    </svg>
+  );
+}
+
 export function IconPalette({ size = 16, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>

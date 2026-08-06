@@ -5,7 +5,7 @@ import { nativeDialogAvailable, pickFiles, pickFolder } from "../lib/nativeDialo
 import { useStore } from "../store";
 import type { ImportResult } from "../types";
 import { Modal } from "./Modal";
-import { IconClose, IconFolder, IconImage } from "../icons";
+import { IconArrowUp, IconClose, IconFolder, IconImage } from "../icons";
 
 export function ImportPanel() {
   const { t } = useTranslation();
@@ -89,7 +89,7 @@ export function ImportPanel() {
               <div className="row-actions">
                 <button className="btn small" disabled={!path || !listing.parent}
                         onClick={() => browse(listing.parent ?? "")}>
-                  ↑ {t("import.parentDir")}
+                  <IconArrowUp size={13} /> {t("import.parentDir")}
                 </button>
                 <span className="dim">{path || t("import.parentDir")}</span>
                 <button

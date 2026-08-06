@@ -7,7 +7,7 @@ import { StarRating } from "../components/StarRating";
 import { useThumbSelection } from "../components/useThumbSelection";
 import { EmptyState } from "../components/EmptyState";
 import { Coachmark } from "../components/Coachmark";
-import { IconAlbum, IconClose, IconEdit, IconExport, IconGrid, IconImport, IconPlus, IconSettings, IconCheck } from "../icons";
+import { IconAlbum, IconClose, IconEdit, IconExport, IconFilter, IconGrid, IconImport, IconPlus, IconSettings, IconCheck } from "../icons";
 import { setDragIds, parseDragIds, hasDragIds } from "../lib/dragPhotos";
 import { useStore } from "../store";
 import { COLOR_HEX, COLOR_VALUES, type Photo } from "../types";
@@ -121,7 +121,7 @@ function Toolbar() {
           title={t("library.filtersTitle")}
           onClick={() => setShowFilters((v) => !v)}
         >
-          ⚲ {t("library.filters")}{filtersActive ? " •" : ""}
+          <IconFilter size={13} /> {t("library.filters")}{filtersActive ? " •" : ""}
         </button>
         {showFilters && (
           <div className="exif-filter-pop filters-pop" onPointerDown={(e) => e.stopPropagation()}>
