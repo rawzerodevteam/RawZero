@@ -12,7 +12,7 @@ interface Props {
   src: string | null;
   interactive?: boolean;      // outils de développement (masques, crop)
   gpu?: boolean;              // affiche le canvas WebGL (aperçu GPU) au lieu du <img> serveur
-  onGpuError?: () => void;    // le contexte GPU a échoué à l'exécution → repli silencieux conseillé
+  onGpuError?: (message: string) => void;   // le contexte GPU a échoué à l'exécution → repli conseillé
 }
 
 interface Box { left: number; top: number; w: number; h: number }
@@ -85,7 +85,7 @@ export function ImageViewer({ src, interactive = false, gpu = false, onGpuError 
   // réel maintenant que le GPU est le chemin par défaut pour tout le monde, pas seulement les
   // utilisateurs l'activant sciemment via le menu Avancé).
   useEffect(() => {
-    if (gpu && gpuState.error) onGpuError?.();
+    if (gpu && gpuState.error) onGpuError?.(gpuState.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gpu, gpuState.error]);
 

@@ -121,6 +121,7 @@ export function DevelopView() {
   const pasteEdits = useStore((s) => s.pasteEdits);
   const resetEdits = useStore((s) => s.resetEdits);
   const openRelink = useStore((s) => s.openRelink);
+  const notify = useStore((s) => s.notify);
   const panelsCollapsed = useStore((s) => s.panelsCollapsed);
   const fullScreen = useStore((s) => s.fullScreen);
   const panelOrder = useStore((s) => s.panelOrder);
@@ -206,7 +207,8 @@ export function DevelopView() {
         )}
         <div className="develop-viewer">
           {edits
-            ? <ImageViewer src={src} interactive gpu={gpuPreview} onGpuError={() => setGpuPreview(false)} />
+            ? <ImageViewer src={src} interactive gpu={gpuPreview}
+                onGpuError={(msg) => { setGpuPreview(false); notify(t("develop.gpuFailed", { error: msg }), "error"); }} />
             : <div className="viewer-empty">{t("common.loading")}</div>}
           {beforeAfter && <div className="before-badge">{t("develop.beforeBadge")}</div>}
           {showInfo && <ExifOverlay />}
@@ -258,8 +260,11 @@ function AdvancedMenu({ show, setShow, gpuPreview, setGpuPreview, onDiff }: {
         onClick={() => setShow(!show)}><IconMore size={14} /></button>
       {show && (
         <div className="advanced-menu-pop">
-          <button className={gpuPreview ? "active" : ""} onClick={() => setGpuPreview((v) => !v)}>
+          <button className={gpuPreview ? "active" : ""} aria-pressed={gpuPreview} onClick={() => setGpuPreview((v) => !v)}>
             <IconGpu size={13} /> {t("develop.gpuLabel")}
+            <span className={"menu-state" + (gpuPreview ? " on" : "")}>
+              {gpuPreview ? t("develop.stateOn") : t("develop.stateOff")}
+            </span>
           </button>
           <button onClick={onDiff}><IconDiff size={13} /> {t("develop.diffLabel")}</button>
         </div>

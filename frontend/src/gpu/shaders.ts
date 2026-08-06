@@ -345,9 +345,9 @@ void main(){
   vec2 muv = vec2(v_uv.x, 1.0 - v_uv.y);
   vec2 rectMin = u_rect.xy, rectMax = u_rect.zw;
   vec2 patchUv = clamp((muv - rectMin) / max(rectMax - rectMin, vec2(1e-4)), 0.0, 1.0);
-  vec3 patch = texture(u_patch, patchUv).rgb;
+  vec3 patchColor = texture(u_patch, patchUv).rgb;
   float m = computeMask(muv, dst) * clamp(u_opacity, 0.0, 1.0);
-  o = vec4(mix(dst, patch, m), 1.0);
+  o = vec4(mix(dst, patchColor, m), 1.0);
 }`;
 
 // Overlay rouge du masque sélectionné (touche O) — reproduit _overlay_mask côté Python.
