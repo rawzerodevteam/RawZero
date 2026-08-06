@@ -459,14 +459,39 @@ rien de restant ici.**
       interne par le pipeline officiel) et testée en local avant mise en ligne. **Hébergé** sur
       `RawZeroModelsDownload` (taille/SHA-256 épinglés dans `models.py`) — la feature est
       utilisable dès que l'utilisateur le télécharge via `ModelsDialog`.
+- [x] #5 — Finalisation des liens de téléchargement des modèles IA. **Fait et fermé sur GitHub** :
+      `backend/app/routers/models.py::FEATURES` a bien les 4 features (subject/point/denoise/inpaint)
+      avec taille + SHA-256, hébergées sur le repo dédié `RawZeroModelsDownload`. Vérifié 2026-08-05.
+- [x] #6 — Export en un clic. **Fermée sur GitHub** ; le code garde une modale à chaque export (seul
+      le dossier de destination est mémorisé), donc pas littéralement "un clic sans modale" — l'écart
+      a été relevé et le choix (2026-08-05) est de **laisser fermée telle quelle**, le confort actuel
+      (dossier mémorisé + export streamé) est jugé suffisant. Ne pas rouvrir sans nouvelle demande
+      explicite.
 - [ ] #3 — `licensing.can()`, cache de licence hors-ligne, plans/capabilities (paiement explicitement
       hors scope).
-- [ ] #5 — Finalisation des liens de téléchargement des modèles IA.
-- [ ] #6 — Export en un clic (export + download direct, sans étape intermédiaire) — item historique
-      de `Notes`, toujours ouvert malgré l'ajout de la destination FS Access mémorisée.
 - [ ] #8–#11 — Site marketing (identité visuelle → site → hébergement), rien de construit.
 - [ ] #12 — Mise en place du serveur de licensing (dépend de #3).
-- [ ] Installeur macOS (.dmg) — pas d'issue GitHub dédiée pour l'instant.
+- [ ] #13 — Installeur macOS (.dmg) : ajouter une cible `dmg`/`app` dans `src-tauri/tauri.conf.json`
+      (aujourd'hui seulement `nsis`/`deb`/`rpm`), build/signature/notarization, publication CI.
+- [ ] #16 — Mettre en place des runners self-hosted (local) + définir les cas d'usage (vs runners
+      GitHub hébergés).
+- [ ] #18 — Page de connexion obligatoire (compte + emplacement de stockage) — dépend de #3/#12.
+- [ ] #27 — Import de preset visuel global / thème custom pour l'appli (aujourd'hui seulement 4
+      thèmes intégrés en dur dans `frontend/src/theme.ts` : dark/light/warm/cold).
+- [ ] #28 — Fondations infra Cloudflare (Workers, D1, R2, KV, Pages) — prérequis des chantiers
+      Phase 2 (#12, #11, #29, #31).
+- [ ] #29 — Service de version/update (remplace GitHub Releases, bloqué par le repo privé pour les
+      clients finaux).
+- [ ] #30 — Vérification d'entitlement hors-ligne côté Rust/Tauri (Ed25519) + empreinte machine +
+      keychain (le sidecar Python seul est contournable).
+- [ ] #31 — Portail compte sur le site (login, licences, appareils).
+- [ ] #35 — Outil de tri de photos externe importable dans l'app (TriZero — dépôt séparé, hors de
+      ce repo, cf. CLAUDE.md §8 pour le lien déjà câblé côté RawZero).
+- [ ] #42 — Rajouter les extensions (TriZero…) en téléchargement optionnel dès l'installateur.
+
+**Note** : #28–#31 et #18 référencent `docs/phase2-design.md` / `docs/phase2-architecture.md`,
+absents de ce repo au 2026-08-05 (pas encore committés ou détenus ailleurs) — à récupérer avant de
+démarrer ce cluster.
 
 ## Portage Rust — pas de todo actif
 

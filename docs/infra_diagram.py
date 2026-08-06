@@ -73,10 +73,8 @@ edge(n_export, n_todo6)
 
 # ---- LOCAL / Sidecar ----
 vertex("FastAPI sidecar", BOX, 450, 150, 370, 230)
-n_side = vertex("Subject/click select, AI denoise,\nGPU diff, models manager", DONE, 470, 190, 330, 50)
-n_todo1 = vertex("todo #1\nInpainting (MI-GAN)", TODO, 470, 260, 150, 50)
-n_todo5 = vertex("todo #5\nfinalize AI model links", TODO, 650, 260, 150, 50)
-edge(n_side, n_todo1)
+n_side = vertex("Subject/click select, AI denoise, inpainting (MI-GAN),\nGPU diff, models manager", DONE, 470, 190, 330, 50)
+n_todo5 = vertex("todo #5\nfinalize AI model links", TODO, 470, 260, 150, 50)
 edge(n_side, n_todo5)
 
 # ---- LOCAL / Storage ----

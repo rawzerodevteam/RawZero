@@ -26,7 +26,7 @@ python docs/infra_diagram.py
 ## Local — Desktop App
 
 - Frontend (React/WebView) : Library, Import, Develop, Settings, Export ✅ ; export en un clic (#6) à faire.
-- Sidecar FastAPI : sélection sujet/clic, débruitage IA, diff GPU, gestion des modèles ✅ ; inpainting MI-GAN (#1) et finalisation des liens de modèles (#5) restent à faire.
+- Sidecar FastAPI : sélection sujet/clic, débruitage IA, diff GPU, gestion des modèles, inpainting MI-GAN (#1) ✅ ; finalisation des liens de modèles (#5) reste à faire.
 - Stockage local : catalogue SQLite + RAW ✅ ; cache de licence hors-ligne pas encore implémenté (fait partie de #3).
 - Build & packaging : Docker dev env, installeurs Windows/Linux ✅ ; installeur macOS (.dmg) pas encore fait — pas d'issue GitHub dédiée pour l'instant.
 
