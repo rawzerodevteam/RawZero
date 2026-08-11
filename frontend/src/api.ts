@@ -246,11 +246,11 @@ export const api = {
     }));
   },
 
-  async autoMaskAvailable(): Promise<{ subject: boolean; sky: boolean; point: boolean; denoise: boolean; inpaint: boolean }> {
+  async autoMaskAvailable(): Promise<{ subject: boolean; sky: boolean; point: boolean; depth: boolean; denoise: boolean; inpaint: boolean }> {
     try {
       return await json(await fetch("/api/automask/available"));
     } catch {
-      return { subject: false, sky: false, point: false, denoise: false, inpaint: false };
+      return { subject: false, sky: false, point: false, depth: false, denoise: false, inpaint: false };
     }
   },
 

@@ -102,6 +102,31 @@ def _radial_mask(params: dict, h: int, w: int) -> np.ndarray:
     return (1.0 - _smoothstep(inner, 1.0 + 0.25 * feather, d)).astype(np.float32)
 
 
+def _light_mask(params: dict, h: int, w: int) -> np.ndarray:
+    """Source de lumière artificielle : même géométrie ellipse que le filtre radial (centre/rayons/
+    angle), mais falloff **photométrique** (1/(1+(falloff·distance)²)) à l'intérieur au lieu d'un
+    simple smoothstep — pic d'intensité franc au centre puis décroissance qui rappelle une vraie
+    source ponctuelle, avant le fondu de bord (`feather`) qui referme le masque comme pour le radial.
+    `falloff` (défaut 1.8) : plus grand = source plus concentrée (spot), plus petit = plus diffuse."""
+    cx, cy = _finite(params.get("cx", 0.5), 0.5), _finite(params.get("cy", 0.5), 0.5)
+    rx = max(_finite(params.get("rx", 0.25), 0.25), 1e-3)
+    ry = max(_finite(params.get("ry", 0.25), 0.25), 1e-3)
+    angle = _finite(params.get("angle", 0.0), 0.0) * np.pi / 180.0
+    feather = _finite_clip(params.get("feather", 0.5), 0.5, 0.0, 1.0)
+    falloff = max(_finite(params.get("falloff", 1.8), 1.8), 0.1)
+    gx, gy = _grid(h, w)
+    ar = w / max(h, 1)
+    px, py = (gx - cx) * ar, (gy - cy)
+    if abs(angle) > 1e-4:
+        ca, sa = np.cos(angle), np.sin(angle)
+        px, py = px * ca + py * sa, -px * sa + py * ca
+    d = np.sqrt((px / (rx * ar)) ** 2 + (py / ry) ** 2)
+    energy = 1.0 / (1.0 + (falloff * d) ** 2)
+    inner = max(1.0 - feather, 0.0)
+    edge = 1.0 - _smoothstep(inner, 1.0 + 0.25 * feather, d)
+    return (energy * edge).astype(np.float32)
+
+
 def _brush_mask(params: dict, h: int, w: int) -> np.ndarray:
     mask = np.zeros((h, w), np.float32)
     long_edge = max(h, w)
@@ -129,12 +154,10 @@ def _brush_mask(params: dict, h: int, w: int) -> np.ndarray:
     return np.clip(mask, 0.0, 1.0)
 
 
-def _ai_mask(params: dict, h: int, w: int) -> Optional[np.ndarray]:
-    """Masque IA : recharge le bitmap stocké (PNG mono-canal) et le redimensionne à (h, w).
-
-    `params['ref']` est un chemin relatif sous MASKS_DIR (« {photo_id}/{mask_id}.png »).
-    Un feather optionnel adoucit les bords après agrandissement (utile au full-res export)."""
-    ref = str(params.get("ref", ""))
+def _load_ref_png(ref: str, h: int, w: int) -> Optional[np.ndarray]:
+    """Recharge un bitmap mono-canal stocké sous MASKS_DIR (« {photo_id}/{mask_id}.png ») et le
+    redimensionne à (h, w). Partagé par les masques IA (`ai`) et par plage de profondeur
+    (`depthrange`) — seul le post-traitement diffère entre les deux."""
     if not ref:
         return None
     path = (config.MASKS_DIR / ref).resolve()
@@ -143,7 +166,17 @@ def _ai_mask(params: dict, h: int, w: int) -> Optional[np.ndarray]:
     raw = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     if raw is None:
         return None
-    mask = cv2.resize(raw.astype(np.float32) / 255.0, (w, h), interpolation=cv2.INTER_LINEAR)
+    return cv2.resize(raw.astype(np.float32) / 255.0, (w, h), interpolation=cv2.INTER_LINEAR)
+
+
+def _ai_mask(params: dict, h: int, w: int) -> Optional[np.ndarray]:
+    """Masque IA : recharge le bitmap stocké (PNG mono-canal) et le redimensionne à (h, w).
+
+    `params['ref']` est un chemin relatif sous MASKS_DIR (« {photo_id}/{mask_id}.png »).
+    Un feather optionnel adoucit les bords après agrandissement (utile au full-res export)."""
+    mask = _load_ref_png(str(params.get("ref", "")), h, w)
+    if mask is None:
+        return None
     # Dureté : contraste autour de 0.5 (identité à 0, quasi binaire à 100) — durcit les bords
     # et écarte les zones de faible confiance (cf. dureté côté GPU, shader lblend).
     hardness = float(np.clip(params.get("hardness", 0.0), 0.0, 100.0))
@@ -151,6 +184,21 @@ def _ai_mask(params: dict, h: int, w: int) -> Optional[np.ndarray]:
         k = 1.0 + (hardness / 100.0) * 12.0
         mask = np.clip((mask - 0.5) * k + 0.5, 0.0, 1.0)
     return mask.astype(np.float32)
+
+
+def _depthrange_mask(params: dict, h: int, w: int) -> Optional[np.ndarray]:
+    """Masque par plage de profondeur : recharge la carte de profondeur précalculée (PNG, 1.0 =
+    proche, 0.0 = lointain — cf. `depth.depth_map`) et applique un seuillage lissé [near, far],
+    exactement comme `_lumrange_mask` mais sur la profondeur au lieu de la luminance."""
+    mask = _load_ref_png(str(params.get("ref", "")), h, w)
+    if mask is None:
+        return None
+    near = _finite_clip(params.get("near", 0.0), 0.0, 0.0, 1.0)
+    far = _finite_clip(params.get("far", 1.0), 1.0, 0.0, 1.0)
+    if far < near:
+        near, far = far, near
+    sm = _finite_clip(params.get("smooth", 0.15), 0.15, 1e-3, 0.5)
+    return (_smoothstep(near - sm, near, mask) * (1.0 - _smoothstep(far, far + sm, mask))).astype(np.float32)
 
 
 def build_mask(local: dict, h: int, w: int, img: Optional[np.ndarray] = None) -> Optional[np.ndarray]:
@@ -162,6 +210,8 @@ def build_mask(local: dict, h: int, w: int, img: Optional[np.ndarray] = None) ->
         mask = _linear_mask(params, h, w)
     elif kind == "radial":
         mask = _radial_mask(params, h, w)
+    elif kind == "light":
+        mask = _light_mask(params, h, w)
     elif kind == "inpaint":
         # Forme en traits de pinceau (mêmes points/rayon que le masque "brush") : la zone peinte
         # définit ce qui doit être effacé/regénéré. Le patch IA précalculé et `opacity` (force du
@@ -173,6 +223,8 @@ def build_mask(local: dict, h: int, w: int, img: Optional[np.ndarray] = None) ->
         mask = _ai_mask(params, h, w)
     elif kind == "lumrange":
         mask = _lumrange_mask(params, img)
+    elif kind == "depthrange":
+        mask = _depthrange_mask(params, h, w)
     elif kind == "colorrange":
         mask = _colorrange_mask(params, img)
     else:

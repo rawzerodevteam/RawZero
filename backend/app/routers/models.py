@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import config, denoise, inpaint, segment
+from .. import config, denoise, depth, inpaint, segment
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -73,6 +73,12 @@ FEATURES: dict[str, list[ModelFile]] = {
         ModelFile(inpaint.model_path().name, 29546882,
                   "593eba0b7e04730f1b61c0a3cbca68d97d8d6a7ff5c6a44a7b9d7fcd880fc5ae"),
     ],
+    "depth": [
+        # Depth Anything V2 Small quantifié (onnx-community/depth-anything-v2-small, Apache-2.0).
+        # Vérifié en local le 2026-08-09 (charge + infère via onnxruntime CPU) avant tout push.
+        ModelFile(depth.model_path().name, 27258801,
+                  "fcf51f1b230362b28690bb9d1809bf0431f29cad20534e3f589bd7285547f20d"),
+    ],
 }
 
 # Disponibilité réelle (onnxruntime importable + modèle chargeable) : même source que
@@ -82,6 +88,7 @@ AVAILABLE = {
     "point": segment.point_available,
     "denoise": denoise.available,
     "inpaint": inpaint.available,
+    "depth": depth.available,
 }
 
 # feature -> {downloading: bool, received: int, total: int|None, error: str|None}

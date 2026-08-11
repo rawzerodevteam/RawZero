@@ -6,7 +6,7 @@ import type { Album, EditState, LocalAdjust, Photo, Project } from "./types";
  *  appelants (`import { Tool } from "./store"` etc. restent valides). */
 
 export type View = "home" | "grid" | "loupe" | "develop" | "settings";
-export type Tool = "none" | "crop" | "linear" | "radial" | "brush" | "inpaint" | "wb" | "hsl" | "pointmask";
+export type Tool = "none" | "crop" | "linear" | "radial" | "light" | "brush" | "inpaint" | "wb" | "hsl" | "pointmask";
 
 export type ToastType = "info" | "success" | "error";
 export interface ToastItem { id: number; msg: string; type: ToastType; action?: { label: string; onClick: () => void } }
@@ -41,6 +41,7 @@ export interface Store {
 
   gridSize: number;               // taille des vignettes de la grille (px), réglable
   beforeAfter: boolean;
+  compareMode: "off" | "side" | "split"; // comparaison avant/après : côte à côte, ou curseur superposé
   showClipping: boolean;
   showInfo: boolean;
   showHelp: boolean;
@@ -54,13 +55,15 @@ export interface Store {
   relinkTargetId: number | null;  // id de la photo en cours de reliage (dialog « Relier »)
   activeTool: Tool;
   selectedLocalId: string | null;
-  showMaskOverlay: boolean;
+  hoveredLocalId: string | null;  // survol d'une entrée de la liste des masques (aperçu overlay)
+  flashLocalId: string | null;    // aperçu ponctuel auto-masqué (création de masque, touche O)
   brushSize: number;
   brushErase: boolean;
   cropAspect: number | null;
   aiSubjectAvailable: boolean;    // modèle « sujet » (U²-Net) présent
   aiSkyAvailable: boolean;        // détection de ciel heuristique (toujours dispo)
   aiPointAvailable: boolean;      // modèle « clic » (EdgeSAM) présent
+  aiDepthAvailable: boolean;      // modèle de profondeur (Depth Anything V2) présent
   aiDenoiseAvailable: boolean;    // modèle de débruitage IA (FFDNet) présent
   aiInpaintAvailable: boolean;    // modèle de correction de taches IA (MI-GAN) présent
   aiMaskBusy: boolean;            // calcul d'un masque IA en cours
@@ -108,6 +111,7 @@ export interface Store {
   closeRelink(): void;
   relinkPhoto(path: string): Promise<void>;
 
+  flashMaskOverlay(id: string): void;
   createAutoMask(kind: string): Promise<void>;
   createPointMask(x: number, y: number): Promise<void>;
   runInpaint(localId: string): Promise<void>;
@@ -130,8 +134,8 @@ export interface Store {
   saveNow(): Promise<void>;
   bumpVersion(id: number): void;
 
-  setUI(p: Partial<Pick<Store, "beforeAfter" | "showClipping" | "showInfo" | "showHelp" |
-    "showImport" | "showExport" | "showModels" | "showAlbums" | "activeTool" | "selectedLocalId" | "showMaskOverlay" |
+  setUI(p: Partial<Pick<Store, "beforeAfter" | "compareMode" | "showClipping" | "showInfo" | "showHelp" |
+    "showImport" | "showExport" | "showModels" | "showAlbums" | "activeTool" | "selectedLocalId" | "hoveredLocalId" |
     "brushSize" | "brushErase" | "cropAspect" | "gridSize" | "panelsCollapsed" | "fullScreen" | "hslPickedBand">>): void;
   notify(msg: string, type?: ToastType, action?: { label: string; onClick: () => void }): void;
   dismissToast(id: number): void;

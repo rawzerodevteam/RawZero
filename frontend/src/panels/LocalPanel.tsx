@@ -4,7 +4,7 @@ import { EditSlider } from "../components/EditSlider";
 import { PanelSection } from "../components/PanelSection";
 import { useStore, type Tool } from "../store";
 import { defaultLocalAdjust, type LocalAdjustValues } from "../types";
-import { IconColorRange, IconEdit, IconLumRange, IconMaskLinear, IconMaskRadial, type IconProps } from "../icons";
+import { IconColorRange, IconDepth, IconEdit, IconLightSource, IconLumRange, IconMaskLinear, IconMaskRadial, type IconProps } from "../icons";
 
 const RANGE_DEFAULTS: Record<string, Record<string, number>> = {
   lumrange: { lo: 0.25, hi: 0.75, smooth: 0.1 },
@@ -15,6 +15,7 @@ const RANGE_DEFAULTS: Record<string, Record<string, number>> = {
 const TOOLS: { tool: Tool; icon: ComponentType<IconProps>; label: string; hint: string }[] = [
   { tool: "linear", icon: IconMaskLinear, label: "local.tool.linear", hint: "local.tool.linearHint" },
   { tool: "radial", icon: IconMaskRadial, label: "local.tool.radial", hint: "local.tool.radialHint" },
+  { tool: "light", icon: IconLightSource, label: "local.tool.light", hint: "local.tool.lightHint" },
   { tool: "brush", icon: IconEdit, label: "local.tool.brush", hint: "local.tool.brushHint" },
 ];
 
@@ -34,18 +35,20 @@ export function LocalPanel() {
   const updateEdits = useStore((s) => s.updateEdits);
   const activeTool = useStore((s) => s.activeTool);
   const selectedLocalId = useStore((s) => s.selectedLocalId);
-  const showMaskOverlay = useStore((s) => s.showMaskOverlay);
+  const hoveredLocalId = useStore((s) => s.hoveredLocalId);
   const brushSize = useStore((s) => s.brushSize);
   const brushErase = useStore((s) => s.brushErase);
   const setUI = useStore((s) => s.setUI);
   const aiSubjectAvailable = useStore((s) => s.aiSubjectAvailable);
   const aiSkyAvailable = useStore((s) => s.aiSkyAvailable);
   const aiPointAvailable = useStore((s) => s.aiPointAvailable);
+  const aiDepthAvailable = useStore((s) => s.aiDepthAvailable);
   const aiInpaintAvailable = useStore((s) => s.aiInpaintAvailable);
   const aiMaskBusy = useStore((s) => s.aiMaskBusy);
   const inpaintBusy = useStore((s) => s.inpaintBusy);
   const createAutoMask = useStore((s) => s.createAutoMask);
   const runInpaint = useStore((s) => s.runInpaint);
+  const flashMaskOverlay = useStore((s) => s.flashMaskOverlay);
   if (!hasEdits) return null;
   void localsSig; // déclenche le re-rendu sur changement de structure ; la lecture se fait via getState
 
@@ -68,7 +71,8 @@ export function LocalPanel() {
     updateEdits((e) => {
       e.locals.push({ id, type, params: { ...RANGE_DEFAULTS[type] }, invert: false, adjust: defaultLocalAdjust() });
     });
-    setUI({ selectedLocalId: id, activeTool: "none", showMaskOverlay: true });
+    setUI({ selectedLocalId: id, activeTool: "none" });
+    flashMaskOverlay(id);
   };
 
   return (
@@ -109,7 +113,7 @@ export function LocalPanel() {
       {visibleTools.some((x) => x.tool === activeTool) && (
         <p className="hint">{t(visibleTools.find((x) => x.tool === activeTool)!.hint)}</p>
       )}
-      {(aiSubjectAvailable || aiSkyAvailable || aiPointAvailable) && (
+      {(aiSubjectAvailable || aiSkyAvailable || aiPointAvailable || aiDepthAvailable) && (
         <div className="row-actions ai-actions">
           {aiPointAvailable && (
             <button
@@ -141,6 +145,16 @@ export function LocalPanel() {
               {aiMaskBusy ? t("local.computing") : t("local.skySelect")}
             </button>
           )}
+          {aiDepthAvailable && (
+            <button
+              className={"btn ai-mask" + (aiMaskBusy ? " busy" : "")}
+              disabled={aiMaskBusy}
+              title={t("local.depthTitle")}
+              onClick={() => void createAutoMask("depth")}
+            >
+              {aiMaskBusy ? t("local.computing") : <><IconDepth size={13} /> {t("local.depthSelect")}</>}
+            </button>
+          )}
         </div>
       )}
       <div className="row-actions">
@@ -160,10 +174,11 @@ export function LocalPanel() {
           {allLocals.map((l, i) => (
             <li
               key={l.id}
-              className={l.id === selectedLocalId ? "selected" : ""}
+              className={(l.id === selectedLocalId ? "selected" : "") + (l.id === hoveredLocalId ? " previewing" : "")}
               role="button"
               tabIndex={0}
               aria-pressed={l.id === selectedLocalId}
+              title={l.type === "inpaint" ? undefined : t("local.hoverPreviewHint")}
               onClick={() => setUI({
                 selectedLocalId: l.id === selectedLocalId ? null : l.id,
                 activeTool: l.type === "brush" && l.id !== selectedLocalId ? "brush" : "none",
@@ -176,6 +191,12 @@ export function LocalPanel() {
                   activeTool: l.type === "brush" && l.id !== selectedLocalId ? "brush" : "none",
                 });
               }}
+              // Aperçu overlay au survol/focus (comme Lightroom) : disparaît dès qu'on quitte la
+              // ligne, jamais collant. Pas de sens pour "inpaint" (pas un fondu de réglages).
+              onMouseEnter={() => l.type !== "inpaint" && setUI({ hoveredLocalId: l.id })}
+              onMouseLeave={() => setUI({ hoveredLocalId: null })}
+              onFocus={() => l.type !== "inpaint" && setUI({ hoveredLocalId: l.id })}
+              onBlur={() => setUI({ hoveredLocalId: null })}
             >
               <span>{i + 1}. {t(l.type === "ai" && l.params.kind === "sky" ? "local.type.sky" : `local.type.${l.type}`)}</span>
               {l.invert && <span className="tag">{t("local.invTag")}</span>}
@@ -200,9 +221,9 @@ export function LocalPanel() {
             )}
             {selected.type !== "inpaint" && (
               <button
-                className={"btn small" + (showMaskOverlay ? " active" : "")}
+                className="btn small"
                 title={t("local.showMaskTitle")}
-                onClick={() => setUI({ showMaskOverlay: !showMaskOverlay })}
+                onClick={() => flashMaskOverlay(selected.id)}
               >
                 {t("local.maskToggle")}
               </button>
@@ -210,7 +231,7 @@ export function LocalPanel() {
             <button className="btn small danger" onClick={removeSelected}>{t("common.delete")}</button>
           </div>
           <p className="hint">{t("local.copyPasteHint")}</p>
-          {(selected.type === "radial" || selected.type === "brush" || selected.type === "inpaint") && (
+          {(selected.type === "radial" || selected.type === "brush" || selected.type === "inpaint" || selected.type === "light") && (
             <EditSlider label={t("local.feather")}
               get={(e) => ((e.locals.find((l) => l.id === selected.id)?.params.feather ?? 0.5) * 100)}
               min={0} max={100} reset={50}
@@ -218,6 +239,10 @@ export function LocalPanel() {
                 const loc = e.locals.find((l) => l.id === selected.id);
                 if (loc) loc.params.feather = v / 100;
               }} />
+          )}
+          {selected.type === "light" && (
+            <ParamSlider id={selected.id} label={t("local.falloff")} pk="falloff"
+              min={0.2} max={5} step={0.1} reset={1.8} fmt={(v) => v.toFixed(1)} />
           )}
           {selected.type === "ai" && (
             <EditSlider label={t("local.hardness")}
@@ -236,6 +261,16 @@ export function LocalPanel() {
                 min={0} max={1} step={0.01} reset={0.75} fmt={(v) => v.toFixed(2)} />
               <ParamSlider id={selected.id} label={t("local.transition")} pk="smooth"
                 min={0.01} max={0.5} step={0.01} reset={0.1} fmt={(v) => v.toFixed(2)} />
+            </>
+          )}
+          {selected.type === "depthrange" && (
+            <>
+              <ParamSlider id={selected.id} label={t("local.near")} pk="near"
+                min={0} max={1} step={0.01} reset={0} fmt={(v) => v.toFixed(2)} />
+              <ParamSlider id={selected.id} label={t("local.far")} pk="far"
+                min={0} max={1} step={0.01} reset={1} fmt={(v) => v.toFixed(2)} />
+              <ParamSlider id={selected.id} label={t("local.transition")} pk="smooth"
+                min={0.01} max={0.5} step={0.01} reset={0.15} fmt={(v) => v.toFixed(2)} />
             </>
           )}
           {selected.type === "colorrange" && (

@@ -223,6 +223,25 @@ export function IconMaskRadial({ size = 16, className }: IconProps) {
   );
 }
 
+export function IconLightSource({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
+      <circle cx="8" cy="8" r="2.6" />
+      <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4" />
+    </svg>
+  );
+}
+
+export function IconDepth({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
+      <path d="M8 2.2 14 5.5 8 8.8 2 5.5z" />
+      <path d="M2 8.6 8 11.9 14 8.6" opacity={0.55} />
+      <path d="M2 11.7 8 15 14 11.7" opacity={0.3} />
+    </svg>
+  );
+}
+
 export function IconLumRange({ size = 16, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
@@ -280,6 +299,25 @@ export function IconGpu({ size = 16, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
       <path d="M9 1.5 3.5 9h3.3L6.5 14.5 12.5 7H9.2z" />
+    </svg>
+  );
+}
+
+export function IconCompareSide({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1" />
+      <path d="M8 2.5v11" />
+    </svg>
+  );
+}
+
+export function IconCompareSplit({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={className} {...base}>
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1" />
+      <path d="M8 2.5v3.4M8 10.1v3.4" />
+      <circle cx="8" cy="8" r="1.3" />
     </svg>
   );
 }

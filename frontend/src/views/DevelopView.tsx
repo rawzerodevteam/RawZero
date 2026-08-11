@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
+import { CompareViewer } from "../components/CompareViewer";
 import { Filmstrip } from "../components/Filmstrip";
 import { Histogram } from "../components/Histogram";
 import { ImageViewer } from "../components/ImageViewer";
 import { StarRating } from "../components/StarRating";
 import { EmptyState } from "../components/EmptyState";
 import { Coachmark } from "../components/Coachmark";
-import { IconChevron, IconClipHigh, IconClipLow, IconCopy, IconDiff, IconExport, IconFullscreen, IconGpu, IconMore, IconPaste, IconRedo, IconReset, IconSettings, IconUndo } from "../icons";
+import { IconChevron, IconClipHigh, IconClipLow, IconCompareSide, IconCompareSplit, IconCopy, IconDiff, IconExport, IconFullscreen, IconGpu, IconMore, IconPaste, IconRedo, IconReset, IconSettings, IconUndo } from "../icons";
 import logoMark from "../assets/logo-mark.png";
 import { GpuDiffDialog } from "../components/GpuDiffDialog";
 import { ModeTabs } from "../components/ModeTabs";
 import { useStore } from "../store";
-import { useMaskSuppressed } from "../lib/useMaskSuppressed";
 import { CROP_ASPECTS } from "../lib/cropAspects";
 import { resolvePanelOrder } from "../panels/registry";
 import { ExifOverlay } from "./LibraryView";
@@ -45,16 +45,14 @@ function useRenderedImage(gpuActive: boolean): string | null {
   const currentId = useStore((s) => s.currentId);
   const edits = useStore((s) => s.edits);
   const beforeAfter = useStore((s) => s.beforeAfter);
-  const showMaskOverlay = useStore((s) => s.showMaskOverlay);
-  const selectedLocalId = useStore((s) => s.selectedLocalId);
+  const hoveredLocalId = useStore((s) => s.hoveredLocalId);
+  const flashLocalId = useStore((s) => s.flashLocalId);
+  const previewLocalId = hoveredLocalId ?? flashLocalId;
   // "inpaint" n'est pas un masque de réglage (pas de fondu de valeurs à visualiser, juste une
   // zone remplacée) : la surimpression rouge n'a pas de sens dessus, cf. ImageViewer.tsx (chemin
   // GPU). Chemin serveur (repli sans GPU) : même garde, sinon le JPEG renvoyé la cuit quand même.
-  const selectedType = useStore((s) => s.edits?.locals.find((l) => l.id === s.selectedLocalId)?.type);
+  const previewType = useStore((s) => s.edits?.locals.find((l) => l.id === previewLocalId)?.type);
   const isDragging = useStore((s) => s.dragBaseline !== null);
-  // Pendant le réglage (et un court instant après), on ne cuit pas l'overlay du masque dans le
-  // JPEG serveur : on voit l'effet du réglage. Le « linger » couvre les clics rapides.
-  const maskSuppressed = useMaskSuppressed();
   const cropEdit = useStore((s) => s.activeTool === "crop");
   const [src, setSrc] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -87,7 +85,7 @@ function useRenderedImage(gpuActive: boolean): string | null {
       api.render(currentId, edits, {
         maxSize,
         before: beforeAfter,
-        showMask: showMaskOverlay && selectedLocalId && !maskSuppressed && selectedType !== "inpaint" ? selectedLocalId : undefined,
+        showMask: previewLocalId && previewType !== "inpaint" ? previewLocalId : undefined,
         cropEdit, // en mode recadrage : on affiche l'image entière, l'overlay dessine le cadre
         signal: ctrl.signal,
       })
@@ -95,7 +93,7 @@ function useRenderedImage(gpuActive: boolean): string | null {
         .catch((e) => { if ((e as Error).name !== "AbortError") console.error(e); });
     }, delay);
     return () => window.clearTimeout(timerRef.current);
-  }, [currentId, edits, beforeAfter, showMaskOverlay, selectedLocalId, selectedType, isDragging, maskSuppressed, cropEdit, gpuActive]);
+  }, [currentId, edits, beforeAfter, previewLocalId, previewType, isDragging, cropEdit, gpuActive]);
 
   // libération de la dernière URL au démontage
   useEffect(() => () => {
@@ -112,6 +110,7 @@ export function DevelopView() {
   const edits = useStore((s) => s.edits);
   const dirty = useStore((s) => s.dirty);
   const beforeAfter = useStore((s) => s.beforeAfter);
+  const compareMode = useStore((s) => s.compareMode);
   const showClipping = useStore((s) => s.showClipping);
   const showInfo = useStore((s) => s.showInfo);
   const setUI = useStore((s) => s.setUI);
@@ -171,8 +170,19 @@ export function DevelopView() {
             <span className="spacer" />
             <StarRating small value={photo.rating} onChange={setRating} />
             <button className={"btn small" + (beforeAfter ? " active" : "")}
-              title={t("develop.beforeAfterTitle")} onClick={() => setUI({ beforeAfter: !beforeAfter })}>
+              title={t("develop.beforeAfterTitle")}
+              onClick={() => setUI({ beforeAfter: !beforeAfter, compareMode: "off" })}>
               {beforeAfter ? t("develop.before") : t("develop.after")}
+            </button>
+            <button className={"btn small" + (compareMode === "side" ? " active" : "")}
+              title={t("develop.compareSideTitle")} aria-label={t("develop.compareSideTitle")}
+              onClick={() => setUI({ compareMode: compareMode === "side" ? "off" : "side", beforeAfter: false })}>
+              <IconCompareSide size={14} />
+            </button>
+            <button className={"btn small" + (compareMode === "split" ? " active" : "")}
+              title={t("develop.compareSplitTitle")} aria-label={t("develop.compareSplitTitle")}
+              onClick={() => setUI({ compareMode: compareMode === "split" ? "off" : "split", beforeAfter: false })}>
+              <IconCompareSplit size={14} />
             </button>
             <button className={"btn small clip-toggle" + (showClipping ? " active" : "")}
               title={t("develop.clippingTitle")} aria-label={t("develop.clippingTitle")} onClick={() => setUI({ showClipping: !showClipping })}>
@@ -207,8 +217,11 @@ export function DevelopView() {
         )}
         <div className="develop-viewer">
           {edits
-            ? <ImageViewer src={src} interactive gpu={gpuPreview}
-                onGpuError={(msg) => { setGpuPreview(false); notify(t("develop.gpuFailed", { error: msg }), "error"); }} />
+            ? (compareMode === "side" || compareMode === "split"
+                ? <CompareViewer mode={compareMode} gpu={gpuPreview} srcAfter={src}
+                    onGpuError={(msg) => { setGpuPreview(false); notify(t("develop.gpuFailed", { error: msg }), "error"); }} />
+                : <ImageViewer src={src} interactive gpu={gpuPreview}
+                    onGpuError={(msg) => { setGpuPreview(false); notify(t("develop.gpuFailed", { error: msg }), "error"); }} />)
             : <div className="viewer-empty">{t("common.loading")}</div>}
           {beforeAfter && <div className="before-badge">{t("develop.beforeBadge")}</div>}
           {showInfo && <ExifOverlay />}

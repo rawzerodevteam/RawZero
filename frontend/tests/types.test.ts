@@ -68,4 +68,22 @@ describe("mergeEdits", () => {
   it("remplace un locals non-tableau par un tableau vide", () => {
     expect(mergeEdits({ locals: "oops" }).locals).toEqual([]);
   });
+
+  it("normalise un masque \"light\" (falloff conservé)", () => {
+    const e = mergeEdits({
+      locals: [{ type: "light", params: { cx: 0.3, cy: 0.2, falloff: 2.5 } }],
+    });
+    expect(e.locals[0].type).toBe("light");
+    expect(e.locals[0].params.falloff).toBe(2.5);
+  });
+
+  it("normalise un masque \"depthrange\" (ref/near/far conservés)", () => {
+    const e = mergeEdits({
+      locals: [{ type: "depthrange", params: { ref: "7/depth-x.png", near: 0.2, far: 0.8, smooth: 0.1 } }],
+    });
+    expect(e.locals[0].type).toBe("depthrange");
+    expect(e.locals[0].params.ref).toBe("7/depth-x.png");
+    expect(e.locals[0].params.near).toBe(0.2);
+    expect(e.locals[0].params.far).toBe(0.8);
+  });
 });

@@ -270,7 +270,7 @@ void main(){
 // Valeur du masque local (partagée entre lblend et l'overlay rouge) — muv = coords image (y bas).
 export const MASK_GLSL = `
 uniform sampler2D u_brush;  // masque rasterisé (pinceau / IA)
-uniform int u_kind;         // 0 linéaire, 1 radial, 2 pinceau, 3 IA, 4 plage luminance, 5 plage couleur
+uniform int u_kind;         // 0 linéaire, 1 radial, 2 pinceau, 3 IA, 4 plage luminance, 5 plage couleur, 6 lumière, 7 plage de profondeur
 uniform int u_invert;
 uniform float u_aiK;        // dureté du masque IA (contraste autour de 0.5)
 uniform vec4 u_lin;         // x0,y0,x1,y1
@@ -278,6 +278,7 @@ uniform vec4 u_rad;         // cx,cy,rx,ry
 uniform vec3 u_rad2;        // angle(rad), feather, aspect = w/h
 uniform vec4 u_lr;          // plage luminance : lo, hi, smooth
 uniform vec4 u_cr;          // plage couleur : hue, range, smooth, sat_min
+uniform float u_lightFalloff; // source de lumière : concentration du pic (cf. masks._light_mask)
 // muv = coords image (y bas) pour les masques géométriques ; col = couleur du pixel (plages).
 float computeMask(vec2 muv, vec3 col){
   float m;
@@ -304,6 +305,22 @@ float computeMask(vec2 muv, vec3 col){
     float lo = u_lr.x, hi = u_lr.y, sm = max(u_lr.z, 1e-3);
     if(hi < lo){ float t = lo; lo = hi; hi = t; }
     m = smoothstep(lo - sm, lo, l) * (1.0 - smoothstep(hi, hi + sm, l));
+  } else if(u_kind==6){                            // source de lumière (ellipse + falloff photométrique)
+    float ar = u_rad2.z;
+    vec2 p = vec2((muv.x - u_rad.x) * ar, muv.y - u_rad.y);
+    float a = u_rad2.x;
+    if(abs(a) > 1e-4){ float ca = cos(a), sa = sin(a); p = vec2(p.x*ca + p.y*sa, -p.x*sa + p.y*ca); }
+    float rx = max(u_rad.z, 1e-3), ry = max(u_rad.w, 1e-3), feather = clamp(u_rad2.y, 0.0, 1.0);
+    vec2 q = vec2(p.x / (rx*ar), p.y / ry);
+    float dist = sqrt(q.x*q.x + q.y*q.y);
+    float energy = 1.0 / (1.0 + pow(u_lightFalloff * dist, 2.0));
+    float edge = 1.0 - smoothstep(max(1.0 - feather, 0.0), 1.0 + 0.25*feather, dist);
+    m = energy * edge;
+  } else if(u_kind==7){                            // plage de profondeur (texture + seuillage, fidèle à _depthrange_mask)
+    float d = texture(u_brush, muv).r;
+    float near = u_lr.x, far = u_lr.y, sm = max(u_lr.z, 1e-3);
+    if(far < near){ float t = near; near = far; far = t; }
+    m = smoothstep(near - sm, near, d) * (1.0 - smoothstep(far, far + sm, d));
   } else {                                         // plage de couleur
     vec3 hsv = rgb2hsv(clamp(col, 0.0, 1.0));
     float hd = abs(mod((hsv.x - u_cr.x) + 180.0, 360.0) - 180.0);

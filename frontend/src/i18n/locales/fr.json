@@ -260,7 +260,9 @@
       "brush": "Pinceau",
       "brushHint": "Peindre directement sur l'image",
       "inpaint": "Correction IA",
-      "inpaintHint": "Peindre sur la zone à effacer (l'IA régénère le contenu au relâchement)"
+      "inpaintHint": "Peindre sur la zone à effacer (l'IA régénère le contenu au relâchement)",
+      "light": "Lumière",
+      "lightHint": "Glisser pour placer une source de lumière (falloff physique + chaleur)"
     },
     "type": {
       "linear": "Dégradé linéaire",
@@ -270,7 +272,9 @@
       "sky": "Ciel (IA)",
       "lumrange": "Plage de luminance",
       "colorrange": "Plage de couleur",
-      "inpaint": "Correction de tache (IA)"
+      "inpaint": "Correction de tache (IA)",
+      "light": "Source de lumière",
+      "depthrange": "Plage de profondeur"
     },
     "pointTitle": "Cliquez ensuite sur l'élément à sélectionner dans l'image",
     "computing": "Calcul…",
@@ -281,6 +285,11 @@
     "skySelect": "Ciel",
     "subjectCreated": "Masque « sujet » créé",
     "skyCreated": "Masque « ciel » créé",
+    "depthTitle": "Estime la profondeur de la scène et crée un masque par plage",
+    "depthSelect": "Profondeur",
+    "depthCreated": "Masque « profondeur » créé",
+    "near": "Proche",
+    "far": "Lointain",
     "lumRange": "Plage luminance",
     "lumRangeTitle": "Cible une plage de luminosité (ombres, tons moyens, hautes lumières)",
     "colorRange": "Plage couleur",
@@ -295,8 +304,9 @@
     "maskCut": "Masque coupé",
     "maskPasted": "Masque collé",
     "copyPasteHint": "Ctrl+C pour copier ce masque, Ctrl+X pour le couper, Ctrl+V pour le coller ici ou sur une autre photo",
-    "showMaskTitle": "Afficher le masque (O)",
-    "maskToggle": "Masque (O)",
+    "showMaskTitle": "Aperçu ponctuel du masque (O)",
+    "maskToggle": "Aperçu (O)",
+    "hoverPreviewHint": "Survoler pour prévisualiser le masque",
     "feather": "Contour progressif",
     "hardness": "Dureté",
     "min": "Min",
@@ -307,7 +317,8 @@
     "sharpness": "Netteté",
     "resetAdjust": "Réinitialiser les réglages",
     "opacity": "Opacité",
-    "regenerate": "Regénérer"
+    "regenerate": "Regénérer",
+    "falloff": "Concentration"
   },
   "presets": {
     "title": "Presets",
@@ -336,6 +347,7 @@
     "change": "Modification",
     "subjectMask": "Masque sujet (IA)",
     "skyMask": "Masque ciel (IA)",
+    "depthMask": "Masque profondeur (IA)",
     "localDuplicated": "Masque dupliqué",
     "localCut": "Masque coupé",
     "maskElementAdded": "Élément ajouté au masque",
@@ -470,6 +482,8 @@
     "beforeAfterTitle": "Avant / après (\\)",
     "before": "Avant",
     "after": "Après",
+    "compareSideTitle": "Comparer côte à côte",
+    "compareSplitTitle": "Comparer avec un curseur",
     "clippingTitle": "Alertes d'écrêtage (J)",
     "copy": "Copier",
     "copyTitle": "Copier les réglages (Ctrl+Maj+C)",
@@ -556,6 +570,8 @@
     "denoiseDesc": "Réduction de bruit par réseau de neurones (FFDNet).",
     "inpaint": "Correction de taches IA",
     "inpaintDesc": "Inpainting par réseau de neurones (MI-GAN).",
+    "depth": "Masque de profondeur",
+    "depthDesc": "Estime la profondeur de la scène (Depth Anything V2).",
     "installed": "Installé",
     "notConfigured": "Source non configurée",
     "downloading": "Téléchargement… {{percent}} %",

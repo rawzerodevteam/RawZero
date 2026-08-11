@@ -400,3 +400,29 @@ describe("albums", () => {
     expect(useStore.getState().photos.map((p) => p.id)).toEqual([1, 2]);
   });
 });
+
+describe("aperçu overlay des masques locaux (flashMaskOverlay)", () => {
+  it("affiche l'aperçu puis le masque automatiquement après le délai", () => {
+    useStore.getState().flashMaskOverlay("loc-1");
+    expect(useStore.getState().flashLocalId).toBe("loc-1");
+    vi.advanceTimersByTime(899);
+    expect(useStore.getState().flashLocalId).toBe("loc-1");
+    vi.advanceTimersByTime(1);
+    expect(useStore.getState().flashLocalId).toBeNull();
+  });
+
+  it("un nouvel appel annule le délai du précédent (pas de fermeture prématurée)", () => {
+    useStore.getState().flashMaskOverlay("loc-1");
+    vi.advanceTimersByTime(800);
+    useStore.getState().flashMaskOverlay("loc-2"); // relance le délai sur un autre masque
+    vi.advanceTimersByTime(800);
+    expect(useStore.getState().flashLocalId).toBe("loc-2"); // pas encore expiré pour loc-2
+    vi.advanceTimersByTime(100);
+    expect(useStore.getState().flashLocalId).toBeNull();
+  });
+
+  it("n'est jamais affiché par défaut (pas d'état collant au démarrage)", () => {
+    expect(useStore.getState().hoveredLocalId).toBeNull();
+    expect(useStore.getState().flashLocalId).toBeNull();
+  });
+});

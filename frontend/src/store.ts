@@ -32,6 +32,12 @@ const removingIds = new Set<number>();
 let liveRaf: number | undefined;
 let liveFn: ((e: EditState) => void) | null = null;
 
+// Aperçu ponctuel de l'overlay d'un masque (flashMaskOverlay) : auto-masqué après ce délai, façon
+// Capture One (visible pendant/juste après la création, pas en continu — cf. TODO.md « Idées
+// annexes »). Un seul timer actif à la fois : une nouvelle demande annule la précédente.
+const FLASH_MASK_MS = 900;
+let flashTimer: number | undefined;
+
 // Découplage total GPU↔store pendant un drag de slider. Quand l'aperçu GPU est actif, il enregistre
 // ici une fonction de rendu IMPÉRATIF. Pendant un drag, on mute alors `edits` EN PLACE (zéro clone,
 // zéro setState → React reste figé) et on rend directement le canvas via ce callback. Hors aperçu
@@ -72,6 +78,7 @@ export const useStore = create<Store>((set, get) => ({
 
   gridSize: (() => { const v = Number(localStorage.getItem("rs.gridSize")); return v >= 120 && v <= 520 ? v : 260; })(),
   beforeAfter: false,
+  compareMode: "off",
   showClipping: false,
   showInfo: false,
   showHelp: false,
@@ -85,13 +92,15 @@ export const useStore = create<Store>((set, get) => ({
   relinkTargetId: null,
   activeTool: "none",
   selectedLocalId: null,
-  showMaskOverlay: true,
+  hoveredLocalId: null,
+  flashLocalId: null,
   brushSize: 0.08,
   brushErase: false,
   cropAspect: null,
   aiSubjectAvailable: false,
   aiSkyAvailable: false,
   aiPointAvailable: false,
+  aiDepthAvailable: false,
   aiDenoiseAvailable: false,
   aiInpaintAvailable: false,
   aiMaskBusy: false,
@@ -128,8 +137,8 @@ export const useStore = create<Store>((set, get) => ({
   async refreshAiAvailability() {
     const a = await api.autoMaskAvailable();
     set({ aiSubjectAvailable: a.subject, aiSkyAvailable: a.sky,
-          aiPointAvailable: a.point, aiDenoiseAvailable: a.denoise,
-          aiInpaintAvailable: a.inpaint });
+          aiPointAvailable: a.point, aiDepthAvailable: a.depth,
+          aiDenoiseAvailable: a.denoise, aiInpaintAvailable: a.inpaint });
   },
 
   async loadProjects() {
@@ -282,7 +291,7 @@ export const useStore = create<Store>((set, get) => ({
   setView(v) {
     // issue #43 : un masque local sélectionné (surimpression rouge, poignées) ne doit pas
     // rester actif quand on quitte le développement — il « prend le pas » sur la bibliothèque.
-    if (v !== "develop") set({ activeTool: "none", beforeAfter: false, selectedLocalId: null });
+    if (v !== "develop") set({ activeTool: "none", beforeAfter: false, compareMode: "off", selectedLocalId: null });
     if (v === "settings") set({ previousView: get().view });
     set({ view: v });
   },
@@ -340,7 +349,7 @@ export const useStore = create<Store>((set, get) => ({
     await get().saveNow();
     set({ currentId: id, view: "develop", edits: null,
           undoStack: [], redoStack: [], undoLabels: [], redoLabels: [], currentLabel: originLabel(),
-          activeTool: "none", selectedLocalId: null, beforeAfter: false });
+          activeTool: "none", selectedLocalId: null, beforeAfter: false, compareMode: "off" });
     try {
       const p = await api.getPhoto(id);
       if (get().currentId === id) {
@@ -450,6 +459,17 @@ export const useStore = create<Store>((set, get) => ({
     if (get().currentId === id && get().view === "develop") void get().openDevelop(id);
   },
 
+  // Aperçu ponctuel de l'overlay d'un masque (survol de la liste en continu, ceci pour les
+  // déclenchements programmatiques : création, touche O) — auto-masqué après FLASH_MASK_MS,
+  // jamais collant (cf. TODO.md « Idées annexes », inspiré de Lightroom/Capture One).
+  flashMaskOverlay(id) {
+    window.clearTimeout(flashTimer);
+    set({ flashLocalId: id });
+    flashTimer = window.setTimeout(() => {
+      if (get().flashLocalId === id) set({ flashLocalId: null });
+    }, FLASH_MASK_MS);
+  },
+
   // Masque IA : calcule côté serveur puis ajoute le masque retourné aux retouches locales.
   async createAutoMask(kind) {
     const { currentId, edits, aiMaskBusy } = get();
@@ -457,10 +477,11 @@ export const useStore = create<Store>((set, get) => ({
     set({ aiMaskBusy: true });
     try {
       const local = await api.autoMask(currentId, edits, kind);
-      const label = i18n.t(kind === "sky" ? "history.skyMask" : "history.subjectMask");
+      const label = i18n.t(kind === "sky" ? "history.skyMask" : kind === "depth" ? "history.depthMask" : "history.subjectMask");
       get().updateEdits((e) => { e.locals.push(local); }, true, label);
-      set({ selectedLocalId: local.id, activeTool: "none", showMaskOverlay: true });
-      get().notify(i18n.t(kind === "sky" ? "local.skyCreated" : "local.subjectCreated"), "success");
+      set({ selectedLocalId: local.id, activeTool: "none" });
+      get().flashMaskOverlay(local.id);
+      get().notify(i18n.t(kind === "sky" ? "local.skyCreated" : kind === "depth" ? "local.depthCreated" : "local.subjectCreated"), "success");
     } catch (err) {
       get().notify(i18n.t("notify.aiMaskFailed", { error: String(err) }), "error");
     } finally {
@@ -488,7 +509,8 @@ export const useStore = create<Store>((set, get) => ({
         get().notify(i18n.t("notify.maskElementAdded"));
       } else {
         get().updateEdits((e) => { e.locals.push(local); }, true, i18n.t("history.clickMask"));
-        set({ selectedLocalId: local.id, showMaskOverlay: true });
+        set({ selectedLocalId: local.id });
+        get().flashMaskOverlay(local.id);
         get().notify(i18n.t("notify.clickCreated"));
       }
       set({ activeTool: "pointmask" }); // reste actif pour enchaîner les ajouts
@@ -714,7 +736,8 @@ export const useStore = create<Store>((set, get) => ({
     if (!source) return;
     const clone = cloneLocalMask(source);
     get().updateEdits((e) => { e.locals.push(clone); }, true, i18n.t("history.localDuplicated"));
-    set({ selectedLocalId: clone.id, activeTool: "none", showMaskOverlay: true });
+    set({ selectedLocalId: clone.id, activeTool: "none" });
+    get().flashMaskOverlay(clone.id);
     get().notify(i18n.t("local.maskPasted"));
   },
 

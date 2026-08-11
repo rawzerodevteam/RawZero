@@ -5,7 +5,7 @@ import { useStore } from "../store";
 import { Modal } from "./Modal";
 import { IconCheck } from "../icons";
 
-const FEATURES = ["subject", "point", "denoise", "inpaint"] as const;
+const FEATURES = ["subject", "point", "denoise", "inpaint", "depth"] as const;
 
 /** Dialog « Modèles IA » : statut par feature + téléchargement à la demande avec progression. */
 export function ModelsDialog() {

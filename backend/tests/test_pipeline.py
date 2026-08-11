@@ -262,6 +262,29 @@ class TestMasks:
         assert m[50, 50] < 0.1
         assert m[2, 2] > 0.95
 
+    def test_light_center_hot_vs_edge(self):
+        m = build_mask({"type": "light",
+                        "params": {"cx": 0.5, "cy": 0.5, "rx": 0.25, "ry": 0.25, "falloff": 1.8}},
+                       100, 100)
+        assert m[50, 50] > 0.9
+        assert m[2, 2] < 0.05
+
+    def test_light_falloff_concentrates_energy(self):
+        # falloff plus élevé = pic plus concentré : à mi-rayon, l'énergie doit être plus faible
+        # qu'avec un falloff plus faible (source plus diffuse).
+        params_lo = {"cx": 0.5, "cy": 0.5, "rx": 0.3, "ry": 0.3, "falloff": 0.5, "feather": 1.0}
+        params_hi = {"cx": 0.5, "cy": 0.5, "rx": 0.3, "ry": 0.3, "falloff": 4.0, "feather": 1.0}
+        low = build_mask({"type": "light", "params": params_lo}, 100, 100)
+        high = build_mask({"type": "light", "params": params_hi}, 100, 100)
+        assert high[50, 65] < low[50, 65]
+
+    def test_light_handles_non_finite_params(self):
+        m = build_mask({"type": "light", "params": {
+            "cx": float("nan"), "cy": 0.5, "rx": 0.3, "ry": 0.3, "falloff": float("inf")}},
+                       50, 50)
+        assert m is not None
+        assert np.isfinite(m).all()
+
     def test_linear_gradient_direction(self):
         m = build_mask({"type": "linear",
                         "params": {"x0": 0.5, "y0": 0.0, "x1": 0.5, "y1": 1.0}}, 100, 100)
@@ -362,6 +385,43 @@ class TestMasks:
         # côté sombre plus proche de 0, côté clair plus proche de 1 quand on durcit
         assert hard[25, 8] < soft[25, 8]
         assert hard[25, 41] > soft[25, 41]
+
+    def test_depthrange_selects_band(self, tmp_path, monkeypatch):
+        import cv2
+        from app import config, masks
+        # dégradé horizontal 0 (lointain) → 1 (proche) stocké comme carte de profondeur
+        store = tmp_path / "masks"
+        (store / "9").mkdir(parents=True)
+        grad = (np.linspace(0, 255, 100).astype(np.uint8))[None].repeat(100, 0)
+        cv2.imwrite(str(store / "9" / "depth-x.png"), grad)
+        monkeypatch.setattr(config, "MASKS_DIR", store)
+        monkeypatch.setattr(masks.config, "MASKS_DIR", store)
+        m = build_mask({"type": "depthrange",
+                        "params": {"ref": "9/depth-x.png", "near": 0.6, "far": 1.0, "smooth": 0.05}},
+                       100, 100)
+        assert m is not None
+        assert m[50, 90] > 0.9   # proche (droite du dégradé) sélectionné
+        assert m[50, 10] < 0.05  # lointain (gauche) exclu
+
+    def test_depthrange_missing_ref(self):
+        assert build_mask({"type": "depthrange", "params": {"ref": "nope/none.png"}}, 10, 10) is None
+        assert build_mask({"type": "depthrange", "params": {}}, 10, 10) is None
+
+    def test_depthrange_swaps_inverted_near_far(self, tmp_path, monkeypatch):
+        import cv2
+        from app import config, masks
+        store = tmp_path / "masks"
+        (store / "9").mkdir(parents=True)
+        grad = (np.linspace(0, 255, 100).astype(np.uint8))[None].repeat(100, 0)
+        cv2.imwrite(str(store / "9" / "depth-x.png"), grad)
+        monkeypatch.setattr(config, "MASKS_DIR", store)
+        monkeypatch.setattr(masks.config, "MASKS_DIR", store)
+        # near > far : doit se comporter comme si on les avait échangés (comme lumrange)
+        m = build_mask({"type": "depthrange",
+                        "params": {"ref": "9/depth-x.png", "near": 1.0, "far": 0.6, "smooth": 0.05}},
+                       100, 100)
+        assert m is not None
+        assert m[50, 90] > 0.9
 
     def test_inpaint_mask_same_shape_as_brush(self):
         params = {"feather": 0.3, "strokes": [{"points": [[0.5, 0.5]], "size": 0.2}]}

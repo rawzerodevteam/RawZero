@@ -163,7 +163,7 @@ describe("raccourcis Ctrl", () => {
 });
 
 describe("bascules du mode développement", () => {
-  it("\\ , J, R, O n'agissent qu'en développement", () => {
+  it("\\ , J, R n'agissent qu'en développement", () => {
     press("\\");
     press("j");
     press("r");
@@ -180,6 +180,26 @@ describe("bascules du mode développement", () => {
     expect(useStore.getState().activeTool).toBe("crop");
     press("r"); // toggle
     expect(useStore.getState().activeTool).toBe("none");
+  });
+
+  it("O déclenche un aperçu ponctuel du masque sélectionné (pas une bascule collante)", () => {
+    vi.useFakeTimers();
+    try {
+      press("o"); // hors développement : aucun effet
+      expect(useStore.getState().flashLocalId).toBeNull();
+
+      useStore.setState({ view: "develop" });
+      press("o"); // aucun masque sélectionné : aucun effet
+      expect(useStore.getState().flashLocalId).toBeNull();
+
+      useStore.setState({ selectedLocalId: "loc-1" });
+      press("o");
+      expect(useStore.getState().flashLocalId).toBe("loc-1");
+      vi.advanceTimersByTime(900);
+      expect(useStore.getState().flashLocalId).toBeNull(); // disparaît tout seul, pas de bascule à refaire
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

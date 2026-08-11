@@ -5,12 +5,12 @@ import { useStore } from "../store";
  *  sous-composants autonomes (props uniquement, pas de fermeture sur l'état local du viewer). */
 
 export function ShapeOutline({ shape, params, w, h }: {
-  shape: { type: "linear" | "radial"; x0: number; y0: number; x1: number; y1: number } | null;
+  shape: { type: "linear" | "radial" | "light"; x0: number; y0: number; x1: number; y1: number } | null;
   params?: Record<string, any>;
   w: number; h: number;
 }) {
   if (!shape) return null;
-  if (shape.type === "radial") {
+  if (shape.type === "radial" || shape.type === "light") {
     const rx = (params?.rx ?? Math.max(Math.abs(shape.x1 - shape.x0), 0.04)) * w;
     const ry = (params?.ry ?? Math.max(Math.abs(shape.y1 - shape.y0), 0.04)) * h;
     return <ellipse className="mask-outline" cx={shape.x0 * w} cy={shape.y0 * h} rx={rx} ry={ry} />;
@@ -33,7 +33,7 @@ export function ShapeOutline({ shape, params, w, h }: {
  *  Rendu dans le <svg> d'overlay (pointer-events réactivés par .mask-handle en CSS). */
 export function MaskHandles({ localId, kind, params, w, h, toImg, updateEdits, startDrag, endDrag }: {
   localId: string;
-  kind: "linear" | "radial" | "inpaint";
+  kind: "linear" | "radial" | "light" | "inpaint";
   params: Record<string, any>;
   w: number; h: number;
   toImg: (cx: number, cy: number) => [number, number];

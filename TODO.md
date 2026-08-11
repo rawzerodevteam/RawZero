@@ -495,6 +495,125 @@ rien de restant ici.**
 absents de ce repo au 2026-08-05 (pas encore committés ou détenus ailleurs) — à récupérer avant de
 démarrer ce cluster.
 
+## UX des masques locaux (2026-08-10)
+
+- [x] **Overlay rouge des masques locaux, refondu** — l'utilisateur trouvait le lavis rouge
+  (`mix(img, red, m*0.6)`) présent en continu dès qu'un masque était sélectionné, obscurcissant
+  l'image l'essentiel du temps (il ne disparaissait que pendant le drag d'un slider + 350 ms).
+  Cause identifiée dans le code : `showMaskOverlay` était une bascule collante, remise à `true`
+  **de force** à chaque création de masque (IA, plage, dupliqué/collé), donc même le raccourci O
+  ne « tenait » pas dans la durée. Recherche rapide sur Lightroom Classic (touche O = bascule,
+  Maj+O = couleur, préférence « Automatically Toggle Overlay » = survol de l'icône du masque dans
+  le panneau) et Capture One (masque visible **seulement pendant qu'on le dessine**, rappelable
+  par M, + vue niveaux de gris séparée Alt+M) : aucun des deux ne laisse le lavis collé à la
+  sélection. Direction retenue avec l'utilisateur : **survol de la liste = aperçu, disparition
+  automatique**.
+  **Fait** : `showMaskOverlay` (booléen collant) remplacé par `hoveredLocalId` (survol d'une
+  ligne de `LocalPanel::local-list`, disparaît dès qu'on quitte la ligne — `onMouseEnter`/`Leave`
+  + `onFocus`/`Blur` pour le clavier) et `flashLocalId` (aperçu ponctuel auto-masqué après 900 ms,
+  `store.ts::flashMaskOverlay`, déclenché à la création/collage d'un masque et par la touche O
+  repensée en aperçu au lieu de bascule, `shortcuts.ts`). Le bouton « Aperçu (O) » du panneau Local
+  déclenche le même flash. `ImageViewer.tsx`/`DevelopView.tsx` calculent `maskOverlayId` à partir
+  de `hoveredLocalId ?? flashLocalId` (plus jamais un état qui reste affiché en continu). Le hook
+  `useMaskSuppressed` (suppression pendant le drag d'un slider) n'avait plus de raison d'être dans
+  ce nouveau modèle — supprimé (`frontend/src/lib/useMaskSuppressed.ts`). Indicateur visuel discret
+  (liseré rouge) sur la ligne survolée dans la liste (`styles.css::.local-list li.previewing`).
+  Tests : `frontend/tests/store.test.ts` (`flashMaskOverlay`), `frontend/tests/shortcuts.test.ts`
+  (touche O). Suites vertes (114 frontend, 106 backend + 1 skip), `tsc`/`vite build` OK.
+  **Pas fait, à discuter séparément si besoin** : la vue « masque seul en niveaux de gris »
+  façon Capture One (Alt+M) — utile pour vérifier la couverture exacte d'un masque IA/pinceau
+  complexe sans lavis coloré, mais nécessiterait un mode de rendu GPU dédié (pas juste un
+  changement d'état UI) ; non demandé explicitement, à envisager si le nouveau système d'aperçu
+  s'avère encore insuffisant pour ce cas d'usage précis.
+
+## Idées annexes
+
+### Masques additionnels & sources de lumière artificielle (recherche 2026-08-06)
+
+Piste demandée par l'utilisateur : enrichir les retouches locales (`backend/app/masks.py`,
+`frontend/src/panels/LocalPanel.tsx`, `frontend/src/gpu/pipeline.ts`) au-delà de l'existant
+(linéaire, radial, pinceau, IA sujet/ciel/clic, plages luminance/couleur, inpainting IA). **Phase
+recherche/planification seulement — rien à implémenter tant que non explicitement demandé.**
+
+**État de l'art (comparatif marché)** :
+- Lightroom Classic : en plus de l'existant RawZero, propose des masques **Personnes** détaillés
+  (sous-parties : peau visage/corps, sourcils, sclère, iris, lèvres, dents, cheveux) et un masque
+  par **plage de profondeur** (carte IA monoculaire type Sensei, exploitable même sans capteur de
+  profondeur natif).
+- DxO PhotoLab : **Control Points / U Point** (technologie Nik) — un clic pose un point, extension
+  de la sélection par similarité couleur/texture/luminance locale, pas de masque à dessiner
+  explicitement.
+- Luminar Neo : **Relight AI / Light Depth** — carte 3D de la scène, sliders *Brightness Near/Far*
+  + curseur de transition de profondeur (relighting basé profondeur, pas une vraie source
+  ponctuelle positionnable). Outil séparé **Sunrays** : effet génératif de rayons de soleil
+  100 % procédural (position cliquée, longueur/nombre de rayons, rayon du glow, chaleur en
+  kelvin, *pénétration* = occlusion par les objets de la scène).
+- Affinity Photo : dégradés multi-stops / mesh gradient (plutôt design vectoriel, faible valeur
+  pour du RAW photo).
+
+Sources : [Adobe – Masking Lightroom Classic](https://helpx.adobe.com/lightroom-classic/help/masking.html),
+[People masks](https://thelenslounge.com/how-to-mask-in-lightroom-classic/),
+[DxO U Point](https://www.dxo.com/dxo-photolab/u-point/),
+[Skylum Relight AI / Light Depth](https://manual.skylum.com/neo/en/topic/relight-ai-tool),
+[Skylum Sunrays](https://support.skylum.com/editing-tools/landscape-tools/sunrays),
+[Depth Anything V2 ONNX (benchmarks CPU)](https://github.com/fabio-sim/Depth-Anything-ONNX/issues/26),
+[Affinity mesh gradients](https://www.affinity.studio/help/clr-gradient-mesh/).
+
+**Pistes concrètes, classées par effort croissant** :
+
+1. [x] **Source de lumière artificielle « physique »** (nouveau type de masque `light`) — **fait
+   (2026-08-09)**, aucun nouveau modèle IA. `masks.py::_light_mask` réutilise la géométrie ellipse
+   du radial (`cx/cy/rx/ry/angle/feather`) mais avec un falloff photométrique
+   `1/(1+(falloff·distance)²)` au lieu d'un simple smoothstep (nouveau paramètre `falloff`,
+   défaut 1.8), pic d'intensité franc au centre façon vraie source ponctuelle. Équivalent GLSL
+   dans `gpu/shaders.ts` (`MASK_GLSL`, `u_kind==6`) + `gpu/pipeline.ts` (`maskKind`, uniform
+   `u_lightFalloff` sur `lblend`/`maskovl`). Outil dans `LocalPanel` (glisser comme le radial,
+   réutilise `MaskHandles`/`ShapeOutline` sans duplication), démarre avec un préréglage utile
+   (exposition +1 EV, température +20 = plus chaud) au lieu d'un masque neutre. Slider
+   « Concentration » (falloff, 0.2–5) ajouté au panneau. Tests : `backend/tests/test_pipeline.py`
+   (`TestMasks::test_light_*`, falloff/non-finite), `frontend/tests/types.test.ts` (normalisation
+   du type `light` par `mergeEdits`).
+2. [x] ~~Effet « rayons de soleil » cliquable~~ — **implémenté puis supprimé (2026-08-09)**, à la
+   demande explicite de l'utilisateur après essai (rendu jugé mauvais visuellement — « immonde »,
+   a dégoûté de l'idée). Tout le code a été retiré (`pipeline_detail.py::_apply_sunrays`,
+   `effects.sunrays` dans `EditState`/`DEFAULT_EDITS`, uniforms GPU dans `F_FINAL`, panneau
+   Effets, tests). **Ne pas réintroduire cette implémentation telle quelle** si l'idée revient un
+   jour — repartir d'un nouveau design (l'approximation d'occlusion par luminance seule, sans
+   vraie carte de profondeur, est probablement ce qui rendait le rendu peu convaincant).
+3. [x] **Masque par plage de profondeur** (`depthrange`) — **fait (2026-08-09)**, modèle poussé sur
+   `RawZeroModelsDownload` (commit `102d2cb`, https://github.com/rawzerodevteam/RawZeroModelsDownload)
+   après confirmation explicite de l'utilisateur — vérifié en ligne (taille + SHA-256 identiques au
+   fichier local). Utilisable dès que l'utilisateur le télécharge via `ModelsDialog`.
+   Modèle : Depth Anything V2 Small quantifié, licence Apache-2.0, ~26 Mo,
+   `onnx-community/depth-anything-v2-small` sur Hugging Face — téléchargé et vérifié en local
+   (charge + infère via `onnxruntime`/CPU, ~300-480 ms/image, testé sur une vraie photo du
+   catalogue avec un résultat de profondeur cohérent visuellement), SHA-256
+   `fcf51f1b230362b28690bb9d1809bf0431f29cad20534e3f589bd7285547f20d`.
+   Implémenté : `backend/app/depth.py` (mêmes conventions que `segment.py` : `available()`,
+   `model_path()`, dégrade proprement si le modèle est absent), `masks.py::_depthrange_mask`
+   (seuillage lissé near/far/smooth sur la carte cachée, même pattern que `_lumrange_mask` — bitmap
+   PNG rechargé via un nouveau helper partagé `_load_ref_png`, factorisé avec `_ai_mask`),
+   `routers/edits.py` (`automask?kind=depth`, `_store_depth_mask`, `_localize_ai_masks` étendu à
+   `depthrange` pour le copier/coller entre photos), `routers/models.py` (feature `depth` dans le
+   manifest de téléchargement). Frontend : bouton « Profondeur » dans `LocalPanel` (à côté de
+   Sujet/Ciel), sliders Proche/Lointain/Transition, masque GPU `u_kind==7` dans
+   `gpu/shaders.ts`/`pipeline.ts` (réutilise la texture IA + les uniforms `u_lr` de `lumrange`),
+   `ModelsDialog`, i18n complet. Tests : `backend/tests/test_pipeline.py`
+   (`test_depthrange_*`), `frontend/tests/types.test.ts`. Suites vertes : 106 tests backend + 1
+   skip, 110 frontend, `tsc`/`vite build` OK.
+4. [ ] **Relight par profondeur** façon Luminar Light Depth — effort faible maintenant que la
+   piste 3 est en place : un outil « Brightness proche/lointain » n'est jamais qu'un masque
+   `depthrange` avec `exposure` ajusté sur le mini-pipeline déjà existant des retouches locales
+   (`LocalAdjust.adjust`) — utilisable dès aujourd'hui sans code supplémentaire (créer un masque
+   profondeur, ajuster son exposition). Un vrai outil dédié à deux plages simultanées
+   (proche + lointain d'un coup, façon Luminar) resterait un **plus** mais n'est plus bloquant.
+5. [ ] **Masques « Personnes » détaillés** (peau, cheveux, vêtements par sous-partie) — effort le
+   plus élevé, pas commencé. Nécessite un modèle de human-parsing dédié (type SCHP/CIHP), plus
+   lourd et multi-classes que U²-Net (déjà utilisé pour le masque sujet générique). À réserver
+   pour une itération ultérieure si l'usage portrait le justifie clairement.
+6. [x] **Dégradé réfléchi / mesh gradient** (façon Affinity) — écarté, faible valeur pour un usage
+   RAW photo (surtout pertinent en design vectoriel). Décision finale, pas une tâche restante.
+
 ## Portage Rust — pas de todo actif
 
 `transfert_rust.md` (archivé, cf. `CLAUDE.md §12`) concluait à **ne pas réécrire le backend en

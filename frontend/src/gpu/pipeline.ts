@@ -473,7 +473,7 @@ export class GpuPipeline {
       let shBlur = mid;
       if (a.sharpness > 0) shBlur = this.blur(mid.tex, W, H, Math.max(1.2 * scale, 0.4), "lshA", "lshB", 1);
       const brush = loc.type === "brush" ? this.brushTexture(loc, W, H)
-        : loc.type === "ai" ? this.aiTexture(loc) : this.curveTex;
+        : (loc.type === "ai" || loc.type === "depthrange") ? this.aiTexture(loc) : this.curveTex;
       const out = this.rt(parity++ % 2 ? "lOutB" : "lOutA", W, H);
       const p = loc.params || {};
       const kind = maskKind(loc.type);
@@ -490,8 +490,9 @@ export class GpuPipeline {
         gl.uniform4f(this.u("lblend", "u_lin"), num(p.x0, 0.5), num(p.y0, 0.2), num(p.x1, 0.5), num(p.y1, 0.8));
         gl.uniform4f(this.u("lblend", "u_rad"), num(p.cx, 0.5), num(p.cy, 0.5), num(p.rx, 0.25), num(p.ry, 0.25));
         gl.uniform3f(this.u("lblend", "u_rad2"), num(p.angle, 0) * Math.PI / 180, num(p.feather, 0.5), W / Math.max(H, 1));
-        gl.uniform4f(this.u("lblend", "u_lr"), num(p.lo, 0.25), num(p.hi, 0.75), num(p.smooth, 0.1), 0);
+        gl.uniform4f(this.u("lblend", "u_lr"), num(p.lo ?? p.near, 0.25), num(p.hi ?? p.far, 0.75), num(p.smooth, 0.1), 0);
         gl.uniform4f(this.u("lblend", "u_cr"), num(p.hue, 0), num(p.range, 30), num(p.smooth, 15), num(p.sat_min, 0.15));
+        gl.uniform1f(this.u("lblend", "u_lightFalloff"), num(p.falloff, 1.8));
       });
       cur = out;
     }
@@ -504,7 +505,7 @@ export class GpuPipeline {
     const p = loc.params || {};
     const kind = maskKind(loc.type);
     const tex = (loc.type === "brush" || loc.type === "inpaint") ? this.brushTexture(loc, W, H)
-      : loc.type === "ai" ? this.aiTexture(loc) : this.curveTex;
+      : (loc.type === "ai" || loc.type === "depthrange") ? this.aiTexture(loc) : this.curveTex;
     this.pass("maskovl", [[0, img.tex], [3, tex]], null, W, H, () => {
       gl.uniform1i(this.u("maskovl", "u_tex"), 0);
       gl.uniform1i(this.u("maskovl", "u_brush"), 3);
@@ -514,8 +515,9 @@ export class GpuPipeline {
       gl.uniform4f(this.u("maskovl", "u_lin"), num(p.x0, 0.5), num(p.y0, 0.2), num(p.x1, 0.5), num(p.y1, 0.8));
       gl.uniform4f(this.u("maskovl", "u_rad"), num(p.cx, 0.5), num(p.cy, 0.5), num(p.rx, 0.25), num(p.ry, 0.25));
       gl.uniform3f(this.u("maskovl", "u_rad2"), num(p.angle, 0) * Math.PI / 180, num(p.feather, 0.5), W / Math.max(H, 1));
-      gl.uniform4f(this.u("maskovl", "u_lr"), num(p.lo, 0.25), num(p.hi, 0.75), num(p.smooth, 0.1), 0);
+      gl.uniform4f(this.u("maskovl", "u_lr"), num(p.lo ?? p.near, 0.25), num(p.hi ?? p.far, 0.75), num(p.smooth, 0.1), 0);
       gl.uniform4f(this.u("maskovl", "u_cr"), num(p.hue, 0), num(p.range, 30), num(p.smooth, 15), num(p.sat_min, 0.15));
+      gl.uniform1f(this.u("maskovl", "u_lightFalloff"), num(p.falloff, 1.8));
     });
   }
 
@@ -729,7 +731,7 @@ function num(v: any, def: number): number {
 
 function maskKind(type: string): number {
   return type === "linear" ? 0 : type === "radial" ? 1 : (type === "brush" || type === "inpaint") ? 2
-    : type === "ai" ? 3 : type === "lumrange" ? 4 : 5;
+    : type === "ai" ? 3 : type === "lumrange" ? 4 : type === "light" ? 6 : type === "depthrange" ? 7 : 5;
 }
 
 /** Plus grand rectangle de même aspect inscrit dans l'image redressée (port de _largest_rotated_rect). */

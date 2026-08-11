@@ -260,7 +260,9 @@
       "brush": "Brush",
       "brushHint": "Paint directly on the image",
       "inpaint": "AI spot removal",
-      "inpaintHint": "Paint over what to erase (AI regenerates it on release)"
+      "inpaintHint": "Paint over what to erase (AI regenerates it on release)",
+      "light": "Light",
+      "lightHint": "Drag to place a light source (physical falloff + warmth)"
     },
     "type": {
       "linear": "Linear gradient",
@@ -270,7 +272,9 @@
       "sky": "Sky (AI)",
       "lumrange": "Luminance range",
       "colorrange": "Color range",
-      "inpaint": "Spot removal (AI)"
+      "inpaint": "Spot removal (AI)",
+      "light": "Light source",
+      "depthrange": "Depth range"
     },
     "pointTitle": "Then click the element to select in the image",
     "computing": "Computing…",
@@ -281,6 +285,11 @@
     "skySelect": "Sky",
     "subjectCreated": "“Subject” mask created",
     "skyCreated": "“Sky” mask created",
+    "depthTitle": "Estimates scene depth and creates a range mask",
+    "depthSelect": "Depth",
+    "depthCreated": "“Depth” mask created",
+    "near": "Near",
+    "far": "Far",
     "lumRange": "Luminance range",
     "lumRangeTitle": "Targets a brightness range (shadows, midtones, highlights)",
     "colorRange": "Color range",
@@ -295,8 +304,9 @@
     "maskCut": "Mask cut",
     "maskPasted": "Mask pasted",
     "copyPasteHint": "Ctrl+C to copy this mask, Ctrl+X to cut it, Ctrl+V to paste it here or on another photo",
-    "showMaskTitle": "Show mask (O)",
-    "maskToggle": "Mask (O)",
+    "showMaskTitle": "Quick preview of the mask (O)",
+    "maskToggle": "Preview (O)",
+    "hoverPreviewHint": "Hover to preview the mask",
     "feather": "Feather",
     "hardness": "Hardness",
     "min": "Min",
@@ -307,7 +317,8 @@
     "sharpness": "Sharpness",
     "resetAdjust": "Reset adjustments",
     "opacity": "Opacity",
-    "regenerate": "Regenerate"
+    "regenerate": "Regenerate",
+    "falloff": "Concentration"
   },
   "presets": {
     "title": "Presets",
@@ -336,6 +347,7 @@
     "change": "Edit",
     "subjectMask": "Subject mask (AI)",
     "skyMask": "Sky mask (AI)",
+    "depthMask": "Depth mask (AI)",
     "localDuplicated": "Mask duplicated",
     "localCut": "Mask cut",
     "maskElementAdded": "Element added to mask",
@@ -470,6 +482,8 @@
     "beforeAfterTitle": "Before / after (\\)",
     "before": "Before",
     "after": "After",
+    "compareSideTitle": "Compare side by side",
+    "compareSplitTitle": "Compare with split slider",
     "clippingTitle": "Clipping warnings (J)",
     "copy": "Copy",
     "copyTitle": "Copy settings (Ctrl+Shift+C)",
@@ -556,6 +570,8 @@
     "denoiseDesc": "Neural-network noise reduction (FFDNet).",
     "inpaint": "AI spot removal",
     "inpaintDesc": "Neural-network inpainting (MI-GAN).",
+    "depth": "Depth mask",
+    "depthDesc": "Estimates scene depth (Depth Anything V2).",
     "installed": "Installed",
     "notConfigured": "Source not configured",
     "downloading": "Downloading… {{percent}}%",

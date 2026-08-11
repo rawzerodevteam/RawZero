@@ -63,7 +63,7 @@ export interface LocalAdjustValues {
 
 export interface LocalAdjust {
   id: string;
-  type: "linear" | "radial" | "brush" | "ai" | "lumrange" | "colorrange" | "inpaint";
+  type: "linear" | "radial" | "brush" | "ai" | "lumrange" | "colorrange" | "inpaint" | "light" | "depthrange";
   params: Record<string, any>;
   invert: boolean;
   adjust: LocalAdjustValues;

@@ -75,7 +75,9 @@ function dispatch(action: string, s: ReturnType<typeof useStore.getState>, ev: K
       if (s.view === "develop") s.setUI({ activeTool: s.activeTool === "crop" ? "none" : "crop" });
       return;
     case "mask-overlay":
-      if (s.view === "develop") s.setUI({ showMaskOverlay: !s.showMaskOverlay });
+      // Aperçu ponctuel du masque sélectionné (auto-masqué), pas une bascule collante — cohérent
+      // avec le survol de la liste (cf. LocalPanel). Pas d'effet sans masque sélectionné.
+      if (s.view === "develop" && s.selectedLocalId) s.flashMaskOverlay(s.selectedLocalId);
       return;
     case "info": s.setUI({ showInfo: !s.showInfo }); return;
     case "fullscreen":

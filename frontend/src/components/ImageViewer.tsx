@@ -4,7 +4,6 @@ import { api } from "../api";
 import { actionForEvent } from "../keybindings";
 import { useStore } from "../store";
 import { useGpuPreview } from "../gpu/useGpuPreview";
-import { useMaskSuppressed } from "../lib/useMaskSuppressed";
 import { defaultLocalAdjust, type LocalAdjust } from "../types";
 import { ClippingOverlay, CropOverlay, MaskHandles, ShapeOutline } from "./ImageViewerOverlays";
 
@@ -37,7 +36,7 @@ export function ImageViewer({ src, interactive = false, gpu = false, onGpuError 
   const [cont, setCont] = useState({ w: 0, h: 0 });
   const [zoomScale, setZoomScale] = useState(1); // 1 = ajusté ; >1 = agrandi (molette)
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [tempShape, setTempShape] = useState<{ type: "linear" | "radial"; x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [tempShape, setTempShape] = useState<{ type: "linear" | "radial" | "light"; x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [, setTick] = useState(0);
   const [spaceHeld, setSpaceHeld] = useState(false); // Espace maintenu → déplacement (Krita/Photoshop)
   const spaceRef = useRef(false);                     // lu dans les handlers pointeur (toujours à jour)
@@ -49,7 +48,8 @@ export function ImageViewer({ src, interactive = false, gpu = false, onGpuError 
   const brushSize = useStore((s) => s.brushSize);
   const brushErase = useStore((s) => s.brushErase);
   const selectedLocalId = useStore((s) => s.selectedLocalId);
-  const showMaskOverlay = useStore((s) => interactive && s.showMaskOverlay);
+  const hoveredLocalId = useStore((s) => (interactive ? s.hoveredLocalId : null));
+  const flashLocalId = useStore((s) => (interactive ? s.flashLocalId : null));
   // Ne PAS s'abonner au tableau `locals` (nouvelle référence à chaque structuredClone → re-render
   // du viewer à chaque tick de slider). On s'abonne uniquement à une SIGNATURE du masque
   // sélectionné (type + géométrie du contour/poignées) : le viewer ne se re-rend que quand ce
@@ -58,8 +58,8 @@ export function ImageViewer({ src, interactive = false, gpu = false, onGpuError 
     const l = s.edits?.locals.find((x) => x.id === s.selectedLocalId);
     if (!l) return "";
     const p = l.params;
-    return l.type === "linear" || l.type === "radial"
-      ? `${l.id}:${l.type}:${p.x0}:${p.y0}:${p.x1}:${p.y1}:${p.cx}:${p.cy}:${p.rx}:${p.ry}:${p.angle}`
+    return l.type === "linear" || l.type === "radial" || l.type === "light"
+      ? `${l.id}:${l.type}:${p.x0}:${p.y0}:${p.x1}:${p.y1}:${p.cx}:${p.cy}:${p.rx}:${p.ry}:${p.angle}:${p.falloff}`
       : l.type === "inpaint"
       ? `${l.id}:${l.type}:${p.strokes?.length ?? 0}:${p.ref}`
       : `${l.id}:${l.type}`;
@@ -69,15 +69,14 @@ export function ImageViewer({ src, interactive = false, gpu = false, onGpuError 
   const endDrag = useStore((s) => s.endDrag);
   const setUI = useStore((s) => s.setUI);
   const beforeAfter = useStore((s) => s.beforeAfter);
-  // Pendant le drag d'un slider (et un court instant après), on masque l'overlay rouge pour
-  // voir l'effet du réglage ; le « linger » couvre aussi les clics rapides.
-  const maskSuppressed = useMaskSuppressed();
-  // "inpaint" n'est pas un masque de réglage (pas de fondu de valeurs à visualiser, juste une
-  // zone remplacée) : la surimpression rouge n'a pas de sens dessus.
-  const selectedType = useStore((s) => s.edits?.locals.find((l) => l.id === s.selectedLocalId)?.type);
+  // Aperçu overlay = survol de la liste (transitoire) ou flash ponctuel (création, touche O) —
+  // jamais un état collant. "inpaint" n'a pas de sens ici (pas un fondu de réglages, juste une
+  // zone remplacée) ; déjà filtré en amont côté store (LocalPanel ne déclenche pas le survol dessus).
+  const previewLocalId = hoveredLocalId ?? flashLocalId;
+  const previewType = useStore((s) => s.edits?.locals.find((l) => l.id === previewLocalId)?.type);
 
   // Aperçu GPU : rend dans glCanvasRef ; outil crop actif → image entière (le cadre se dessine par-dessus)
-  const maskOverlayId = showMaskOverlay && selectedLocalId && !maskSuppressed && selectedType !== "inpaint" ? selectedLocalId : null;
+  const maskOverlayId = previewLocalId && previewType !== "inpaint" ? previewLocalId : null;
   const gpuState = useGpuPreview(glCanvasRef, gpu, activeTool === "crop", beforeAfter, showClipping, maskOverlayId);
   const nat = gpu ? gpuState.dims : natural;
 
@@ -262,7 +261,7 @@ export function ImageViewer({ src, interactive = false, gpu = false, onGpuError 
       void pickHslBand(nx, ny);
     } else if (activeTool === "pointmask") {
       void useStore.getState().createPointMask(nx, ny);
-    } else if (activeTool === "linear" || activeTool === "radial") {
+    } else if (activeTool === "linear" || activeTool === "radial" || activeTool === "light") {
       mode.current = "shape";
       setTempShape({ type: activeTool, x0: nx, y0: ny, x1: nx, y1: ny });
     } else if (activeTool === "brush" || activeTool === "inpaint") {
@@ -307,8 +306,14 @@ export function ImageViewer({ src, interactive = false, gpu = false, onGpuError 
         const id = "loc-" + Date.now().toString(36);
         const params = type === "linear"
           ? { x0, y0, x1, y1 }
-          : { cx: x0, cy: y0, rx: Math.max(Math.abs(x1 - x0), 0.04), ry: Math.max(Math.abs(y1 - y0), 0.04), angle: 0, feather: 0.5 };
-        createLocal({ id, type, params, invert: false, adjust: defaultLocalAdjust() });
+          : {
+              cx: x0, cy: y0, rx: Math.max(Math.abs(x1 - x0), 0.04), ry: Math.max(Math.abs(y1 - y0), 0.04),
+              angle: 0, feather: 0.5, ...(type === "light" ? { falloff: 1.8 } : {}),
+            };
+        // Une source de lumière démarre avec un préréglage utile (exposition + chaleur) au lieu
+        // d'un masque neutre — elle est immédiatement visible dès la création.
+        const adjust = type === "light" ? { ...defaultLocalAdjust(), exposure: 1.0, temp: 20 } : defaultLocalAdjust();
+        createLocal({ id, type, params, invert: false, adjust });
       }
       setTempShape(null);
     } else if (mode.current === "brush" && stroke.current.length) {
@@ -362,10 +367,10 @@ export function ImageViewer({ src, interactive = false, gpu = false, onGpuError 
           <svg className="viewer-overlay" viewBox={`0 0 ${box.w} ${box.h}`} preserveAspectRatio="none">
             <ShapeOutline shape={tempShape} w={box.w} h={box.h} />
             {!tempShape && selectedLocal &&
-              (selectedLocal.type === "linear" || selectedLocal.type === "radial") && (
+              (selectedLocal.type === "linear" || selectedLocal.type === "radial" || selectedLocal.type === "light") && (
               <ShapeOutline
                 shape={{
-                  type: selectedLocal.type === "linear" ? "linear" : "radial",
+                  type: selectedLocal.type,
                   x0: selectedLocal.params.x0 ?? selectedLocal.params.cx ?? 0.5,
                   y0: selectedLocal.params.y0 ?? selectedLocal.params.cy ?? 0.5,
                   x1: selectedLocal.params.x1 ?? 0,
@@ -379,7 +384,7 @@ export function ImageViewer({ src, interactive = false, gpu = false, onGpuError 
             {/* Poignées d'édition du masque sélectionné (déplacer / redimensionner) — pas pour
                 "brush"/"inpaint" (forme libre au pinceau, pas de géométrie paramétrique). */}
             {!tempShape && activeTool === "none" && selectedLocal &&
-              (selectedLocal.type === "linear" || selectedLocal.type === "radial") && (
+              (selectedLocal.type === "linear" || selectedLocal.type === "radial" || selectedLocal.type === "light") && (
               <MaskHandles
                 key={selectedLocal.id}
                 localId={selectedLocal.id}

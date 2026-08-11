@@ -299,7 +299,7 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
 }
 .viewer:active { cursor: grabbing; }
 .viewer.tool-crop { cursor: default; }
-.viewer.tool-linear, .viewer.tool-radial { cursor: crosshair; }
+.viewer.tool-linear, .viewer.tool-radial, .viewer.tool-light { cursor: crosshair; }
 .viewer.tool-brush, .viewer.tool-inpaint { cursor: crosshair; }
 .viewer.tool-wb { cursor: crosshair; }
 .viewer.tool-pointmask { cursor: crosshair; }
@@ -517,6 +517,93 @@ select:focus, input[type="text"]:focus { border-color: var(--accent); }
   font-size: 11px;
   pointer-events: none;
 }
+
+/* ---------- Comparaison avant/après (côte à côte / curseur) ---------- */
+.compare-viewer {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+/* « side » : les deux slots côte à côte (flex) ; « split » : superposés (absolute + clip-path).
+ * Mêmes éléments <canvas>/<img> dans les deux cas (cf. commentaire du composant) — seule la mise
+ * en page change, pour ne jamais démonter/remonter le nœud canvas que le pipeline GPU cible. */
+.compare-side {
+  display: flex;
+}
+.compare-side .compare-slot {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.compare-side .compare-slot-after { border-left: 1px solid var(--border); }
+.compare-split .compare-slot {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.compare-img {
+  max-width: 100%;
+  max-height: 100%;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+}
+.compare-split-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 32px;
+  margin-left: -16px;
+  cursor: ew-resize;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.compare-split-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.compare-split-grip {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+.compare-label {
+  position: absolute;
+  top: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #e8c84b;
+  padding: 3px 10px;
+  border-radius: 4px;
+  letter-spacing: 1.5px;
+  font-size: 11px;
+  pointer-events: none;
+  z-index: 1;
+}
+.compare-label-left { left: 12px; }
+.compare-label-right { right: 12px; }
 
 /* Barre de ratios de recadrage (flottante, en haut du visualiseur) */
 .crop-toolbar {
@@ -771,6 +858,8 @@ input[type="range"]:hover::-moz-range-thumb { background: var(--accent); }
 .local-list li + li { border-top: 1px solid var(--border); }
 .local-list li:hover { background: var(--bg-raised); }
 .local-list li.selected { background: var(--accent-soft); color: var(--accent); }
+/* Aperçu overlay en cours (survol) : liseré discret, sans se confondre avec .selected. */
+.local-list li.previewing { box-shadow: inset 3px 0 0 var(--danger); }
 .local-list .tag {
   font-size: 10px;
   color: var(--text-dim);

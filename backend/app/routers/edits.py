@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 
 from pydantic import BaseModel
 
-from .. import config, db, denoise, inpaint, pipeline, previews, segment
+from .. import config, db, denoise, depth, inpaint, pipeline, previews, segment
 from .photos import get_photo_row, require_original
 
 router = APIRouter()
@@ -31,7 +31,7 @@ def _localize_ai_masks(photo_id: int, edits: dict[str, Any]) -> None:
     est supprimée. On copie le bitmap sous cette photo et on réécrit `ref` au moment du collage
     (donc du prochain save), pour que le masque ne dépende plus que de sa propre photo."""
     for local in edits.get("locals") or []:
-        if not isinstance(local, dict) or local.get("type") not in ("ai", "inpaint"):
+        if not isinstance(local, dict) or local.get("type") not in ("ai", "inpaint", "depthrange"):
             continue
         params = local.get("params")
         if not isinstance(params, dict):
@@ -106,6 +106,7 @@ def automask_available():
     """Indique au client quelles fonctions IA sont utilisables (modèles présents)."""
     return {"subject": segment.available(), "point": segment.point_available(),
             "sky": True,  # détection de ciel heuristique : toujours disponible (sans modèle)
+            "depth": depth.available(),
             "denoise": denoise.available(), "inpaint": inpaint.available()}
 
 
@@ -119,15 +120,23 @@ def automask(photo_id: int, body: AutoMaskBody):
 
     Le masque est calculé sur l'image *géométrie appliquée* (recadrée) pour s'aligner sur
     l'espace des autres masques, puis stocké normalisé sous MASKS_DIR/{photo}/{id}.png."""
-    if body.kind not in ("subject", "sky"):
+    if body.kind not in ("subject", "sky", "depth"):
         raise HTTPException(422, "Type de masque IA non pris en charge")
     if body.kind == "subject" and not segment.available():
         raise HTTPException(503, "Masque IA indisponible (onnxruntime ou modèle absent)")
+    if body.kind == "depth" and not depth.available():
+        raise HTTPException(503, "Estimation de profondeur indisponible (onnxruntime ou modèle absent)")
     row = get_photo_row(photo_id)
     base = previews.get_base(photo_id, require_original(row))
     e = pipeline.merge_edits(body.edits)
     img = pipeline.apply_geometry(base.astype(np.float32, copy=True), e["geometry"])
     small = _resize_long_edge(img, _MASK_STORE_SIZE)
+    if body.kind == "depth":
+        try:
+            dmap = depth.depth_map(small)
+        except depth.DepthUnavailable as ex:
+            raise HTTPException(503, str(ex))
+        return _store_depth_mask(photo_id, dmap)
     try:
         mask = segment.sky_mask(small) if body.kind == "sky" else segment.subject_mask(small)
     except segment.SegmentationUnavailable as ex:
@@ -260,16 +269,34 @@ def _load_mask_ref(photo_id: int, ref: str):
     return None if raw is None else raw.astype(np.float32) / 255.0
 
 
-def _store_mask(photo_id: int, mask: np.ndarray, kind: str) -> dict:
-    """Écrit le bitmap du masque et renvoie le descripteur `local` (type 'ai')."""
-    mask_id = "ai-" + uuid.uuid4().hex[:8]
+def _write_mask_png(photo_id: int, mask: np.ndarray, prefix: str) -> str:
+    """Écrit un bitmap mono-canal (0..1) sous MASKS_DIR/{photo}/{id}.png, renvoie la référence
+    relative (« {photo_id}/{mask_id}.png »). Partagé par tous les masques précalculés (IA, profondeur)."""
+    mask_id = f"{prefix}-{uuid.uuid4().hex[:8]}"
     ref = f"{photo_id}/{mask_id}.png"
     out = config.MASKS_DIR / ref
     out.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(out), (np.clip(mask, 0.0, 1.0) * 255).astype(np.uint8))
+    return ref
+
+
+def _store_mask(photo_id: int, mask: np.ndarray, kind: str) -> dict:
+    """Écrit le bitmap du masque et renvoie le descripteur `local` (type 'ai')."""
+    ref = _write_mask_png(photo_id, mask, "ai")
     return {
-        "id": mask_id, "type": "ai",
+        "id": ref.rsplit("/", 1)[-1].removesuffix(".png"), "type": "ai",
         "params": {"ref": ref, "kind": kind, "hardness": 0.0},
+        "invert": False, "adjust": dict(pipeline.LOCAL_ADJUST_DEFAULTS),
+    }
+
+
+def _store_depth_mask(photo_id: int, dmap: np.ndarray) -> dict:
+    """Écrit la carte de profondeur et renvoie le descripteur `local` (type 'depthrange').
+    Plage par défaut [0, 1] (aucune sélection tant que l'utilisateur n'ajuste pas near/far)."""
+    ref = _write_mask_png(photo_id, dmap, "depth")
+    return {
+        "id": ref.rsplit("/", 1)[-1].removesuffix(".png"), "type": "depthrange",
+        "params": {"ref": ref, "near": 0.0, "far": 1.0, "smooth": 0.15},
         "invert": False, "adjust": dict(pipeline.LOCAL_ADJUST_DEFAULTS),
     }
 
