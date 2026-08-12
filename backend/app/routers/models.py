@@ -13,6 +13,7 @@ import hashlib
 import logging
 import os
 import threading
+import time
 import urllib.request
 from dataclasses import dataclass
 
@@ -49,6 +50,12 @@ def _url(name: str) -> str:
 # bloque le thread daemon à vie, laisse `downloading: true` en permanence et interdit tout
 # re-téléchargement (garde 409). Surchargeable par env. Cf. S3 de l'audit.
 DOWNLOAD_TIMEOUT = float(os.environ.get("RAWZERO_DOWNLOAD_TIMEOUT", "30"))
+
+# `DOWNLOAD_TIMEOUT` ne borne qu'un read() individuel : une source qui dribble quelques octets
+# juste avant chaque échéance peut faire traîner le téléchargement indéfiniment (remplissage disque
+# temporaire non borné, audit1108.md L2). Ce plafond couvre la durée TOTALE du téléchargement d'un
+# seul fichier, quel que soit le débit.
+DOWNLOAD_TOTAL_TIMEOUT = float(os.environ.get("RAWZERO_DOWNLOAD_TOTAL_TIMEOUT", "600"))
 
 
 # Manifest en dur (3 features). Les noms de fichiers viennent de segment.py / denoise.py (source
@@ -105,12 +112,21 @@ def _download_feature(feature: str, files: list[ModelFile]) -> None:
             dest = config.MODELS_DIR / f.name
             part = dest.with_name(dest.name + ".part")
             digest = hashlib.sha256()
+            started = time.monotonic()
+            # Marge sur la taille attendue (source légèrement différente/compression) : au-delà, on
+            # abandonne plutôt que de continuer à écrire un flux visiblement anormal sur disque.
+            max_bytes = int(f.size * 1.05) if f.size else None
             with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT) as r, \
                     open(part, "wb") as out:  # noqa: S310 (https only)
                 while chunk := r.read(262144):
+                    if time.monotonic() - started > DOWNLOAD_TOTAL_TIMEOUT:
+                        raise RuntimeError(f"Téléchargement de {f.name} trop long "
+                                           f"(> {DOWNLOAD_TOTAL_TIMEOUT:g} s)")
                     out.write(chunk)
                     digest.update(chunk)
                     received += len(chunk)
+                    if max_bytes and received > max_bytes:
+                        raise RuntimeError(f"Réponse plus volumineuse que prévu pour {f.name}")
                     with _lock:
                         _progress[feature]["received"] = received
             actual = part.stat().st_size
@@ -126,6 +142,12 @@ def _download_feature(feature: str, files: list[ModelFile]) -> None:
             _progress[feature]["downloading"] = False
     except Exception as e:  # noqa: BLE001 — on remonte l'erreur au client via le statut
         log.exception("Téléchargement du modèle '%s' échoué", feature)
+        # Ne laisse pas de `.part` partiel derrière un abandon anticipé (durée/taille excessive,
+        # cf. ci-dessus) — les cas déjà explicitement nettoyés (taille/hash finaux invalides)
+        # font juste un unlink redondant, sans risque.
+        part = locals().get("part")
+        if part is not None:
+            part.unlink(missing_ok=True)
         with _lock:
             _progress[feature].update(downloading=False, error=str(e))
 

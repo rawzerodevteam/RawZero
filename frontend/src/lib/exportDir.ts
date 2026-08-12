@@ -60,15 +60,24 @@ export async function ensureWritable(dir: any): Promise<boolean> {
   return (await dir.requestPermission(opts)) === "granted";
 }
 
-/** Écrit un blob dans le dossier, sans écraser un homonyme déjà écrit dans le même lot. */
+/** Vrai si `name` existe déjà dans `dir` sur disque (indépendamment du lot d'export en cours) —
+ *  `getFileHandle` sans `{create:true}` lève si absent, c'est le seul moyen de sonder l'API. */
+async function existsOnDisk(dir: any, name: string): Promise<boolean> {
+  try { await dir.getFileHandle(name); return true; } catch { return false; }
+}
+
+/** Écrit un blob dans le dossier, sans écraser un homonyme déjà écrit dans le même lot NI un
+ *  fichier déjà présent sur disque (dossier mémorisé d'une session précédente, cf. audit1108.md
+ *  M8 — auparavant `getFileHandle(name, {create:true})` écrasait silencieusement ces derniers). */
 export async function writeFile(dir: any, name: string, blob: Blob, used: Set<string>): Promise<void> {
+  const collides = async (n: string) => used.has(n) || (await existsOnDisk(dir, n));
   let final = name;
-  if (used.has(final)) {
+  if (await collides(final)) {
     const dot = name.lastIndexOf(".");
     const stem = dot > 0 ? name.slice(0, dot) : name;
     const ext = dot > 0 ? name.slice(dot) : "";
     let i = 1;
-    while (used.has(final)) { final = `${stem}-${i}${ext}`; i++; }
+    while (await collides(final)) { final = `${stem}-${i}${ext}`; i++; }
   }
   used.add(final);
   const fh = await dir.getFileHandle(final, { create: true });

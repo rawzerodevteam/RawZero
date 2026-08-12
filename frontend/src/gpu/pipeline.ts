@@ -124,11 +124,41 @@ export class GpuPipeline {
     // brushTex.tex n'est pas toujours possédé ici : avec feather>0 c'est la texture d'une RT du pool
     // `this.rts` (nettoyée par `dispose` via ce pool) — ne la supprimer que via brushRawTex, sinon la
     // RT partagerait un handle supprimé et casserait la réutilisation par clé au prochain flou.
+    for (const id of this.brushTex.keys()) this.releaseBrushBlurRts(id);
     this.brushTex.clear();
     for (const tex of this.brushRawTex.values()) gl.deleteTexture(tex);
     this.brushRawTex.clear();
     for (const { tex } of this.aiTex.values()) gl.deleteTexture(tex);
     this.aiTex.clear();
+  }
+
+  /** Libère les render targets du flou d'un masque pinceau/inpaint donné (clés `brushA_<id>`/
+   *  `brushB_<id>` dans le pool `this.rts`) — sinon elles y restent indéfiniment : `rt()` ne les
+   *  réévince que si la MÊME clé est redemandée avec une taille différente, ce qui n'arrive jamais
+   *  pour un masque supprimé ou une photo quittée. */
+  private releaseBrushBlurRts(id: string): void {
+    const gl = this.gl;
+    for (const prefix of [`brushA_${id}:`, `brushB_${id}:`]) {
+      for (const [k, v] of this.rts) {
+        if (k.startsWith(prefix)) { gl.deleteTexture(v.tex); gl.deleteFramebuffer(v.fbo); this.rts.delete(k); }
+      }
+    }
+  }
+
+  /** Purge les caches par masque (pinceau/IA) dont l'id n'apparaît plus dans les réglages courants —
+   *  évite l'accumulation de textures/render-targets orphelines quand un masque est supprimé sans
+   *  changer de photo (`clearMaskTextures` ne couvre que le changement de photo/dispose). */
+  private pruneMaskCaches(e: EditState): void {
+    if (!this.brushTex.size && !this.brushRawTex.size && !this.aiTex.size) return;
+    const gl = this.gl;
+    const liveIds = new Set(e.locals.map((l) => l.id));
+    for (const id of this.brushTex.keys()) if (!liveIds.has(id)) this.brushTex.delete(id);
+    for (const [id, tex] of this.brushRawTex) {
+      if (!liveIds.has(id)) { gl.deleteTexture(tex); this.brushRawTex.delete(id); this.releaseBrushBlurRts(id); }
+    }
+    for (const [id, { tex }] of this.aiTex) {
+      if (!liveIds.has(id)) { gl.deleteTexture(tex); this.aiTex.delete(id); }
+    }
   }
 
   private link(vsrc: string, fsrc: string): WebGLProgram {
@@ -524,6 +554,7 @@ export class GpuPipeline {
   render(e: EditState, skipCrop = false, showClip = false, maskOverlayId: string | null = null, quality = 1, seed = 0) {
     const gl = this.gl;
     if (!this.workW) return;
+    this.pruneMaskCaches(e);
     const ovlLoc = maskOverlayId ? e.locals.find((l) => l.id === maskOverlayId) ?? null : null;
 
     // 0) géométrie (pré-pass mis en cache, plein résolution) : le reste tourne sur l'image recadrée.

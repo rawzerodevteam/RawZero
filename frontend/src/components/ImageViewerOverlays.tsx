@@ -113,8 +113,13 @@ export function MaskHandles({ localId, kind, params, w, h, toImg, updateEdits, s
 export function ClippingOverlay({ src }: { src: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
+    // Un `src` qui change vite (drag de slider en repli serveur) peut laisser un ancien onload se
+    // déclencher APRÈS qu'un rendu plus récent a déjà été demandé — sans garde, il peindrait une
+    // carte d'écrêtage obsolète par-dessus l'aperçu courant (clignotement trompeur, audit1108.md L9).
+    let cancelled = false;
     const img = new Image();
     img.onload = () => {
+      if (cancelled) return;
       const cv = ref.current;
       if (!cv) return;
       cv.width = img.width;
@@ -142,6 +147,7 @@ export function ClippingOverlay({ src }: { src: string }) {
       ctx.putImageData(id, 0, 0);
     };
     img.src = src;
+    return () => { cancelled = true; };
   }, [src]);
   return <canvas ref={ref} className="clip-canvas" />;
 }

@@ -65,9 +65,6 @@ function dispatch(action: string, s: ReturnType<typeof useStore.getState>, ev: K
       if (t !== null) void s.openDevelop(t);
       return;
     }
-    case "before-after":
-      if (s.view === "develop") { ev.preventDefault(); s.setUI({ beforeAfter: !s.beforeAfter }); }
-      return;
     case "clipping":
       if (s.view === "develop") s.setUI({ showClipping: !s.showClipping });
       return;

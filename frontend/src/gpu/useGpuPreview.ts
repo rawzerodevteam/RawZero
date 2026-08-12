@@ -29,6 +29,10 @@ function loadImage(url: string): Promise<HTMLImageElement> {
  *
  * @param skipCrop  outil de recadrage actif → rendre l'image entière (le cadre est dessiné par-dessus)
  * @param beforeAfter  afficher la base neutre (réglages par défaut) au lieu de l'image éditée
+ * @param baseMaxSize  résolution max (côté long) de la base chargée, en px — 1600 par défaut.
+ *   Réduit pour les instances secondaires (ex. CompareViewer, qui fait tourner deux pipelines
+ *   GPU indépendants en parallèle) : chaque RT interne du pipeline scale avec cette taille, donc
+ *   une base plus petite réduit directement l'empreinte VRAM cumulée (audit1108.md, M5).
  */
 export function useGpuPreview(
   canvasRef: RefObject<HTMLCanvasElement>,
@@ -37,6 +41,7 @@ export function useGpuPreview(
   beforeAfter: boolean,
   showClip: boolean,
   maskOverlayId: string | null,
+  baseMaxSize = 1600,
 ): GpuState {
   const pipeRef = useRef<GpuPipeline | null>(null);
   const ctxFailed = useRef(false);
@@ -67,7 +72,22 @@ export function useGpuPreview(
     } catch (e) {
       ctxFailed.current = true; setError(String(e));
     }
-    return () => { pipeRef.current?.dispose(); pipeRef.current = null; };
+    // Perte de contexte (reset pilote/TDR, bascule GPU, épuisement VRAM) : sans ce listener, les
+    // appels gl.* deviennent des no-ops silencieux selon la spec WebGL — le canevas reste figé
+    // indéfiniment sans erreur ni repli. On bascule ici sur le même chemin d'erreur que les autres
+    // échecs GPU (le composant appelant retombe alors sur le rendu serveur, cf. `onGpuError`).
+    const onLost = (ev: Event) => {
+      ev.preventDefault();
+      ctxFailed.current = true;
+      pipeRef.current = null; // le contexte est déjà invalide : pas de dispose() dessus
+      setError("Contexte WebGL perdu (pilote graphique).");
+    };
+    canvas.addEventListener("webglcontextlost", onLost);
+    return () => {
+      canvas.removeEventListener("webglcontextlost", onLost);
+      pipeRef.current?.dispose();
+      pipeRef.current = null;
+    };
   }, [active, canvasRef]);
 
   // (Re)chargement de la base neutre (annulable) à l'activation / au changement de photo
@@ -77,7 +97,7 @@ export function useGpuPreview(
     let url: string | null = null;
     setReady(false);
     api.render(currentId, useStore.getState().edits ?? ({} as any),
-               { before: true, maxSize: 1600, signal: ctrl.signal })
+               { before: true, maxSize: baseMaxSize, signal: ctrl.signal })
       .then((u) => { url = u; return loadImage(u); })
       .then((img) => {
         if (ctrl.signal.aborted || !pipeRef.current) return;
@@ -86,14 +106,14 @@ export function useGpuPreview(
       })
       .catch((e) => { if ((e as Error).name !== "AbortError") setError(String(e)); });
     return () => { ctrl.abort(); if (url) URL.revokeObjectURL(url); };
-  }, [active, currentId]);
+  }, [active, currentId, baseMaxSize]);
 
   // Base débruitée IA : chargée à la demande (réseau) quand le réglage NR IA devient actif,
   // une seule fois par photo. Le slider ne fait ensuite qu'un mélange GPU temps réel.
   const nrAi = edits?.detail?.nr_ai ?? 0;
   const dnLoadedFor = useRef<number | null>(null);
   useEffect(() => {
-    if (!active || !ready || currentId === null || ctxFailed.current) return;
+    if (!active || !ready || currentId === null || ctxFailed.current || beforeAfter) return;
     if (nrAi <= 0 || dnLoadedFor.current === currentId) return;
     const ctrl = new AbortController();
     let url: string | null = null;
@@ -107,7 +127,7 @@ export function useGpuPreview(
       })
       .catch((e) => { if ((e as Error).name !== "AbortError") setError(String(e)); });
     return () => { ctrl.abort(); if (url) URL.revokeObjectURL(url); };
-  }, [active, ready, currentId, nrAi]);
+  }, [active, ready, currentId, nrAi, beforeAfter]);
 
   // Fonction de rendu impérative, réassignée à chaque rendu pour capturer les derniers paramètres
   // (active/ready/skipCrop/beforeAfter/showClip/maskOverlayId). Appelée par le store PENDANT un drag
@@ -139,11 +159,14 @@ export function useGpuPreview(
   };
   // Branché UNIQUEMENT quand l'aperçu GPU est actif : c'est la présence de ce callback qui dit au
   // store d'emprunter le chemin découplé (en place) plutôt que clone+setState (cf. flushLiveEdit).
+  // `registerLiveRender` est un slot global unique : une instance figée sur les réglages neutres
+  // (beforeAfter=true, cf. CompareViewer) n'a rien à y gagner — son rendu ne dépend pas des edits
+  // en cours — donc elle ne s'y inscrit pas, pour ne pas écraser l'inscription de l'instance vive.
   useEffect(() => {
-    if (!active) return;
+    if (!active || beforeAfter) return;
     registerLiveRender((e) => renderImperative.current?.(e));
     return () => { registerLiveRender(null); if (settleRef.current) clearTimeout(settleRef.current); };
-  }, [active]);
+  }, [active, beforeAfter]);
 
   // Rendu à chaque changement de réglage / d'état (sans réseau). En useLayoutEffect SYNCHRONE :
   // le canvas se peint dans LA MÊME frame que le commit React. Pendant un drag, le store ne passe

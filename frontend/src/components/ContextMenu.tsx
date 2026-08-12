@@ -54,7 +54,18 @@ export function ContextMenu() {
         <div className="ctx-head">{t("home.photoCount", { count })}</div>
         <button onClick={act(() => { setExportIds(ids); setUI({ showExport: true }); })}><IconExport size={13} /> {t("export.title")}{count > 1 ? ` (${count})` : ""}</button>
         <button disabled={target === null} onClick={act(() => { if (target !== null) void openDevelop(target); })}><IconEdit size={13} /> {t("ctx.develop")}</button>
-        <button disabled={!clipboard} onClick={act(() => void pasteEditsToSelection(ids))}><IconPaste size={13} /> {t("ctx.pasteSettings")}</button>
+        <button disabled={!clipboard} onClick={act(() => {
+          // Écrase les réglages de développement de toute la cible en un clic — sans confirmation
+          // pour une seule photo (geste courant, undo par photo dispo), mais avec pour un lot : pas
+          // d'annulation groupée dans l'UI (audit1108.md, H7).
+          if (count > 1) {
+            void confirmDialog(t("ctx.confirmPasteSettings", { count }), { danger: true }).then((ok) => {
+              if (ok) void pasteEditsToSelection(ids);
+            });
+          } else {
+            void pasteEditsToSelection(ids);
+          }
+        })}><IconPaste size={13} /> {t("ctx.pasteSettings")}</button>
         <div className="ctx-sep" />
         <button onClick={() => setSub(sub === "album" ? null : "album")}><IconAlbum size={13} /> {t("ctx.addToAlbum")} <IconChevron size={9} className={"chev" + (sub === "album" ? " open" : "")} /></button>
         {sub === "album" && (

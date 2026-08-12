@@ -33,7 +33,6 @@ export const ACTION_DEFS: ActionDef[] = [
   { id: "color-blue", label: "kb.action.colorBlue", category: "kb.cat.rating", defaultKey: "9" },
   { id: "zoom-toggle", label: "kb.action.zoomToggle", category: "kb.cat.develop", defaultKey: "z" },
   { id: "pan", label: "kb.action.pan", category: "kb.cat.develop", defaultKey: "space" },
-  { id: "before-after", label: "kb.action.beforeAfter", category: "kb.cat.develop", defaultKey: "\\" },
   { id: "clipping", label: "kb.action.clipping", category: "kb.cat.develop", defaultKey: "j" },
   { id: "crop", label: "kb.action.crop", category: "kb.cat.develop", defaultKey: "r" },
   { id: "mask-overlay", label: "kb.action.maskOverlay", category: "kb.cat.develop", defaultKey: "o" },

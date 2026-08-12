@@ -130,7 +130,7 @@ def _light_mask(params: dict, h: int, w: int) -> np.ndarray:
 def _brush_mask(params: dict, h: int, w: int) -> np.ndarray:
     mask = np.zeros((h, w), np.float32)
     long_edge = max(h, w)
-    feather = float(np.clip(params.get("feather", 0.5), 0.0, 1.0))
+    feather = _finite_clip(params.get("feather"), 0.5, 0.0, 1.0)
     max_radius = 1.0
     for stroke in params.get("strokes", []):
         pts = stroke.get("points") or []
@@ -179,7 +179,7 @@ def _ai_mask(params: dict, h: int, w: int) -> Optional[np.ndarray]:
         return None
     # Dureté : contraste autour de 0.5 (identité à 0, quasi binaire à 100) — durcit les bords
     # et écarte les zones de faible confiance (cf. dureté côté GPU, shader lblend).
-    hardness = float(np.clip(params.get("hardness", 0.0), 0.0, 100.0))
+    hardness = _finite_clip(params.get("hardness"), 0.0, 0.0, 100.0)
     if hardness > 0:
         k = 1.0 + (hardness / 100.0) * 12.0
         mask = np.clip((mask - 0.5) * k + 0.5, 0.0, 1.0)

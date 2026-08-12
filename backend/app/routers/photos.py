@@ -129,7 +129,10 @@ def require_original(row) -> Path:
     avoir été déplacé/supprimé hors de RawZero depuis l'import."""
     path = Path(row["path"])
     if not path.is_file():
-        raise HTTPException(409, f"Fichier original introuvable : {path}")
+        # Nom seul, pas le chemin absolu complet : évite d'exposer l'arborescence disque de
+        # l'utilisateur (dossiers personnels, lecteurs réseau) dans un message d'erreur qui peut
+        # finir copié/partagé (capture d'écran, ticket support) — audit1108.md, L1.
+        raise HTTPException(409, f"Fichier original introuvable : {path.name}")
     return path
 
 

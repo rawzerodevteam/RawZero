@@ -39,6 +39,11 @@ _sam_lock = threading.Lock()
 _sam_failed = False
 _emb_cache: "OrderedDict[str, tuple]" = OrderedDict()   # embedding par (photo, géométrie)
 _EMB_CACHE_MAX = 4
+# `_sam_lock` ne protège que le chargement (unique) du modèle — la séquence get/encode/insert/
+# eviction sur `_emb_cache` (un OrderedDict, non thread-safe) n'était protégée par rien : deux clics
+# rapprochés sur la même photo pouvaient encoder deux fois en parallèle et entrelacer leurs mutations
+# du dict, jusqu'à un `KeyError` sur `popitem` (audit1108.md, M9).
+_emb_cache_lock = threading.Lock()
 
 
 class SegmentationUnavailable(RuntimeError):
@@ -221,14 +226,15 @@ def point_mask(img: np.ndarray, x: float, y: float, cache_key: str = "") -> np.n
     """Masque EdgeSAM pour le point (x, y) normalisé. Renvoie float32 (h, w) dans 0..1.
     `cache_key` (photo+géométrie) évite de ré-encoder l'image à chaque clic."""
     _, dec = _get_sam()
-    cached = _emb_cache.get(cache_key) if cache_key else None
-    if cached is None:
-        cached = _encode(img)
-        if cache_key:
-            _emb_cache[cache_key] = cached
-            _emb_cache.move_to_end(cache_key)
-            while len(_emb_cache) > _EMB_CACHE_MAX:
-                _emb_cache.popitem(last=False)
+    with _emb_cache_lock:
+        cached = _emb_cache.get(cache_key) if cache_key else None
+        if cached is None:
+            cached = _encode(img)
+            if cache_key:
+                _emb_cache[cache_key] = cached
+                _emb_cache.move_to_end(cache_key)
+                while len(_emb_cache) > _EMB_CACHE_MAX:
+                    _emb_cache.popitem(last=False)
     emb, scale, nh, nw, h, w = cached
 
     px = float(np.clip(x, 0.0, 1.0)) * (w - 1) * scale

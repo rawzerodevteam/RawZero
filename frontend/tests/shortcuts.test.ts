@@ -163,19 +163,15 @@ describe("raccourcis Ctrl", () => {
 });
 
 describe("bascules du mode développement", () => {
-  it("\\ , J, R n'agissent qu'en développement", () => {
-    press("\\");
+  it("J, R n'agissent qu'en développement", () => {
     press("j");
     press("r");
-    expect(useStore.getState().beforeAfter).toBe(false);
     expect(useStore.getState().showClipping).toBe(false);
     expect(useStore.getState().activeTool).toBe("none");
 
     useStore.setState({ view: "develop" });
-    press("\\");
     press("j");
     press("r");
-    expect(useStore.getState().beforeAfter).toBe(true);
     expect(useStore.getState().showClipping).toBe(true);
     expect(useStore.getState().activeTool).toBe("crop");
     press("r"); // toggle

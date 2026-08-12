@@ -4,6 +4,10 @@ import { api } from "../api";
 import { useStore } from "../store";
 import { useGpuPreview } from "../gpu/useGpuPreview";
 
+function revokeBlobUrl(url: string | null) {
+  if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
+}
+
 interface Props {
   mode: "side" | "split";
   gpu: boolean;
@@ -32,7 +36,11 @@ export function CompareViewer({ mode, gpu, srcAfter, onGpuError }: Props) {
   const [splitPos, setSplitPos] = useState(0.5); // 0..1, position du curseur
   const draggingSplit = useRef(false);
 
-  const beforeGpu = useGpuPreview(beforeCanvasRef, gpu, false, true, false, null);
+  // Deux pipelines GPU indépendants tournent ici en parallèle (cf. commentaire de composant) : la
+  // base "avant" (réglages neutres, purement une référence visuelle statique) est chargée à une
+  // résolution réduite pour limiter la VRAM cumulée des deux pipelines (audit1108.md, M5) — la
+  // base "après" garde la pleine résolution habituelle, c'est elle qui reflète les retouches.
+  const beforeGpu = useGpuPreview(beforeCanvasRef, gpu, false, true, false, null, 1024);
   const afterGpu = useGpuPreview(afterCanvasRef, gpu, false, false, false, null);
 
   useEffect(() => {
@@ -41,18 +49,20 @@ export function CompareViewer({ mode, gpu, srcAfter, onGpuError }: Props) {
   }, [gpu, beforeGpu.error, afterGpu.error]);
 
   // Repli serveur : l'image « après » est déjà fournie par le viewer normal (`srcAfter`) ; il ne
-  // manque que l'image « avant » (réglages par défaut), chargée ici quand la comparaison est active.
+  // manque que l'image « avant » (réglages par défaut par serveur, indépendante des edits — pas
+  // besoin de la refaire à chaque réglage), chargée ici quand la comparaison est active.
   const [srcBefore, setSrcBefore] = useState<string | null>(null);
   useEffect(() => {
     if (gpu || currentId === null || !edits) return;
     const ctrl = new AbortController();
     let url: string | null = null;
     api.render(currentId, edits, { maxSize: 2048, before: true, signal: ctrl.signal })
-      .then((u) => { url = u; setSrcBefore((old) => { if (old?.startsWith("blob:")) URL.revokeObjectURL(old); return u; }); })
+      .then((u) => { url = u; setSrcBefore((old) => { revokeBlobUrl(old); return u; }); })
       .catch((e) => { if ((e as Error).name !== "AbortError") console.error(e); });
     return () => { ctrl.abort(); if (url) URL.revokeObjectURL(url); };
-  }, [gpu, currentId, edits]);
-  useEffect(() => () => { setSrcBefore((old) => { if (old?.startsWith("blob:")) URL.revokeObjectURL(old); return null; }); }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rendu "avant" indépendant des edits (before:true)
+  }, [gpu, currentId]);
+  useEffect(() => () => setSrcBefore((old) => { revokeBlobUrl(old); return null; }), []);
 
   const onSplitDown = (ev: React.PointerEvent) => {
     draggingSplit.current = true;
@@ -64,6 +74,22 @@ export function CompareViewer({ mode, gpu, srcAfter, onGpuError }: Props) {
     setSplitPos(Math.min(Math.max((ev.clientX - r.left) / Math.max(r.width, 1), 0.02), 0.98));
   };
   const onSplitUp = () => { draggingSplit.current = false; };
+  // Curseur jusque-là uniquement pilotable à la souris/tactile (audit1108.md, L8) : flèches
+  // gauche/droite (pas fin), Home/End pour aller aux extrémités — usage clavier standard d'un slider.
+  const onSplitKeyDown = (ev: React.KeyboardEvent) => {
+    const step = ev.shiftKey ? 0.1 : 0.02;
+    if (ev.key === "ArrowLeft") setSplitPos((p) => Math.max(p - step, 0.02));
+    else if (ev.key === "ArrowRight") setSplitPos((p) => Math.min(p + step, 0.98));
+    else if (ev.key === "Home") setSplitPos(0.02);
+    else if (ev.key === "End") setSplitPos(0.98);
+    else return;
+    ev.preventDefault();
+    // Le raccourci global de navigation photo (shortcuts.ts) écoute aussi ArrowLeft/ArrowRight sur
+    // `window`, indépendamment de l'élément focalisé — sans stopPropagation, l'événement continue
+    // de bouillonner et changeait de photo EN PLUS de déplacer le curseur (ce qui quitte le mode
+    // comparaison, cf. `openDevelop`). Repéré en testant le fix L8 lui-même.
+    ev.stopPropagation();
+  };
 
   const ready = gpu ? beforeGpu.ready && afterGpu.ready : !!(srcBefore && srcAfter);
   const split = mode === "split";
@@ -72,12 +98,8 @@ export function CompareViewer({ mode, gpu, srcAfter, onGpuError }: Props) {
     <div
       className={"compare-viewer " + (split ? "compare-split" : "compare-side")}
       ref={stageRef}
-      onPointerMove={split ? onSplitMove : undefined}
-      onPointerUp={split ? onSplitUp : undefined}
-      onPointerLeave={split ? onSplitUp : undefined}
     >
       <div className="compare-slot compare-slot-before">
-        <span className="compare-label compare-label-left">{t("develop.before")}</span>
         {gpu
           ? <canvas ref={beforeCanvasRef} className="compare-img" />
           : (srcBefore && <img className="compare-img" src={srcBefore} alt="" draggable={false} />)}
@@ -86,18 +108,30 @@ export function CompareViewer({ mode, gpu, srcAfter, onGpuError }: Props) {
         className="compare-slot compare-slot-after"
         style={split ? { clipPath: `inset(0 0 0 ${splitPos * 100}%)` } : undefined}
       >
-        <span className="compare-label compare-label-right">{t("develop.after")}</span>
         {gpu
           ? <canvas ref={afterCanvasRef} className="compare-img" />
           : (srcAfter && <img className="compare-img" src={srcAfter} alt="" draggable={false} />)}
       </div>
+      {/* Étiquettes en enfants directs du conteneur (pas des slots) : peintes APRÈS les deux slots
+          dans l'ordre du DOM, donc toujours au-dessus — en mode split, le slot "après" (opaque)
+          recouvrait sinon l'étiquette "avant" dès que le curseur approchait du bord gauche
+          (audit1108.md, L7). */}
+      <span className="compare-label compare-label-left">{t("develop.before")}</span>
+      <span className="compare-label compare-label-right">{t("develop.after")}</span>
       {split && (
         <div
           className="compare-split-handle"
           style={{ left: `${splitPos * 100}%` }}
+          role="slider"
+          tabIndex={0}
+          aria-label={t("develop.compareSplitTitle")}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(splitPos * 100)}
           onPointerDown={onSplitDown}
           onPointerMove={onSplitMove}
           onPointerUp={onSplitUp}
+          onKeyDown={onSplitKeyDown}
         >
           <span className="compare-split-line" />
           <span className="compare-split-grip" />

@@ -14,6 +14,7 @@ export function HSLPanel() {
   const activeTool = useStore((s) => s.activeTool);
   const setUI = useStore((s) => s.setUI);
   const pickedBand = useStore((s) => s.hslPickedBand);
+  const pickSeq = useStore((s) => s.hslPickSeq);
   const [mode, setMode] = useState<"h" | "s" | "l">("s");
   const rowRefs = useRef<Partial<Record<string, HTMLDivElement>>>({});
 
@@ -24,7 +25,11 @@ export function HSLPanel() {
     rowRefs.current[pickedBand]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     const timer = window.setTimeout(() => setUI({ hslPickedBand: null }), 2000);
     return () => window.clearTimeout(timer);
-  }, [pickedBand, setUI]);
+    // `pickSeq` (pas seulement `pickedBand`) dans les deps : deux pipettes rapprochées sur la MÊME
+    // bande avant l'expiration du timer précédent ne changent pas `pickedBand`, donc ne
+    // redéclencheraient pas cet effet sans `pickSeq` — le surlignage pourrait disparaître avant que
+    // l'utilisateur n'ait vu le second clic (audit1108.md, L11).
+  }, [pickedBand, pickSeq, setUI]);
 
   if (!hasEdits) return null;
 

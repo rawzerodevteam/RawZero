@@ -13,6 +13,11 @@ export function ModelsDialog() {
   const setUI = useStore((s) => s.setUI);
   const refreshAi = useStore((s) => s.refreshAiAvailability);
   const [status, setStatus] = useState<Record<string, ModelStatus>>({});
+  // La requête POST elle-même peut échouer avant même que le serveur ne commence à télécharger
+  // (réseau coupé, backend indisponible) : ce cas n'est couvert par aucun `status[f].error` (qui ne
+  // vient que du polling serveur) — sans état local dédié, l'échec passait inaperçu, le bouton
+  // reprenant juste son état initial sans explication (audit1108.md, L10).
+  const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
 
   const refresh = useCallback(() => { void api.modelsStatus().then(setStatus).catch(() => {}); }, []);
   useEffect(() => { refresh(); }, [refresh]);  // statut initial à l'ouverture
@@ -30,7 +35,12 @@ export function ModelsDialog() {
     if (wasDownloading.current) { wasDownloading.current = false; void refreshAi(); }
   }, [anyDownloading, refresh, refreshAi]);
 
-  const download = (f: string) => { void api.modelsDownload(f).then(refresh).catch(() => {}); };
+  const download = (f: string) => {
+    setLocalErrors((e) => { const { [f]: _drop, ...rest } = e; return rest; });
+    void api.modelsDownload(f).then(refresh).catch((err) => {
+      setLocalErrors((e) => ({ ...e, [f]: String(err) }));
+    });
+  };
 
   const close = () => setUI({ showModels: false });
   const titleId = useId();
@@ -51,7 +61,9 @@ export function ModelsDialog() {
                 <div className="model-info">
                   <span className="model-name">{t(`models.${f}`)}</span>
                   <span className="model-desc">{t(`models.${f}Desc`)}</span>
-                  {s?.error && <span className="model-err">{t("models.downloadFailed", { error: s.error })}</span>}
+                  {(s?.error || localErrors[f]) && (
+                    <span className="model-err">{t("models.downloadFailed", { error: s?.error ?? localErrors[f] })}</span>
+                  )}
                 </div>
                 <div className="model-action">
                   {s?.available ? (

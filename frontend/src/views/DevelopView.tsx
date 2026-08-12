@@ -44,7 +44,6 @@ const RENDER_IDLE_SIZE = 2048;
 function useRenderedImage(gpuActive: boolean): string | null {
   const currentId = useStore((s) => s.currentId);
   const edits = useStore((s) => s.edits);
-  const beforeAfter = useStore((s) => s.beforeAfter);
   const hoveredLocalId = useStore((s) => s.hoveredLocalId);
   const flashLocalId = useStore((s) => s.flashLocalId);
   const previewLocalId = hoveredLocalId ?? flashLocalId;
@@ -84,7 +83,6 @@ function useRenderedImage(gpuActive: boolean): string | null {
       abortRef.current = ctrl;
       api.render(currentId, edits, {
         maxSize,
-        before: beforeAfter,
         showMask: previewLocalId && previewType !== "inpaint" ? previewLocalId : undefined,
         cropEdit, // en mode recadrage : on affiche l'image entière, l'overlay dessine le cadre
         signal: ctrl.signal,
@@ -93,7 +91,7 @@ function useRenderedImage(gpuActive: boolean): string | null {
         .catch((e) => { if ((e as Error).name !== "AbortError") console.error(e); });
     }, delay);
     return () => window.clearTimeout(timerRef.current);
-  }, [currentId, edits, beforeAfter, previewLocalId, previewType, isDragging, cropEdit, gpuActive]);
+  }, [currentId, edits, previewLocalId, previewType, isDragging, cropEdit, gpuActive]);
 
   // libération de la dernière URL au démontage
   useEffect(() => () => {
@@ -109,11 +107,11 @@ export function DevelopView() {
   const photo = useStore((s) => s.photos.find((p) => p.id === s.currentId));
   const edits = useStore((s) => s.edits);
   const dirty = useStore((s) => s.dirty);
-  const beforeAfter = useStore((s) => s.beforeAfter);
   const compareMode = useStore((s) => s.compareMode);
   const showClipping = useStore((s) => s.showClipping);
   const showInfo = useStore((s) => s.showInfo);
   const setUI = useStore((s) => s.setUI);
+  const toggleCompareMode = useStore((s) => s.toggleCompareMode);
   const setView = useStore((s) => s.setView);
   const setRating = useStore((s) => s.setRating);
   const copyEdits = useStore((s) => s.copyEdits);
@@ -122,6 +120,11 @@ export function DevelopView() {
   const openRelink = useStore((s) => s.openRelink);
   const notify = useStore((s) => s.notify);
   const panelsCollapsed = useStore((s) => s.panelsCollapsed);
+  // Un mode de comparaison actif (côte à côte, curseur) ne laisse pas les réglages visibles à
+  // l'écran pendant qu'il l'est — les panneaux de droite (sliders, courbe, HSL…) sont donc inutiles
+  // tant qu'on ne le quitte pas : masqués sans toucher à la préférence manuelle de l'utilisateur
+  // (`panelsCollapsed`), qui réapparaît telle quelle à la sortie.
+  const panelsHidden = panelsCollapsed || compareMode !== "off";
   const fullScreen = useStore((s) => s.fullScreen);
   const panelOrder = useStore((s) => s.panelOrder);
   const reorderPanels = useStore((s) => s.reorderPanels);
@@ -169,19 +172,14 @@ export function DevelopView() {
             <span className="name-index">{photoIndex >= 0 ? t("develop.positionOf", { n: photoIndex + 1, total: photoTotal }) : ""}</span>
             <span className="spacer" />
             <StarRating small value={photo.rating} onChange={setRating} />
-            <button className={"btn small" + (beforeAfter ? " active" : "")}
-              title={t("develop.beforeAfterTitle")}
-              onClick={() => setUI({ beforeAfter: !beforeAfter, compareMode: "off" })}>
-              {beforeAfter ? t("develop.before") : t("develop.after")}
-            </button>
             <button className={"btn small" + (compareMode === "side" ? " active" : "")}
               title={t("develop.compareSideTitle")} aria-label={t("develop.compareSideTitle")}
-              onClick={() => setUI({ compareMode: compareMode === "side" ? "off" : "side", beforeAfter: false })}>
+              onClick={() => toggleCompareMode("side")}>
               <IconCompareSide size={14} />
             </button>
             <button className={"btn small" + (compareMode === "split" ? " active" : "")}
               title={t("develop.compareSplitTitle")} aria-label={t("develop.compareSplitTitle")}
-              onClick={() => setUI({ compareMode: compareMode === "split" ? "off" : "split", beforeAfter: false })}>
+              onClick={() => toggleCompareMode("split")}>
               <IconCompareSplit size={14} />
             </button>
             <button className={"btn small clip-toggle" + (showClipping ? " active" : "")}
@@ -223,7 +221,6 @@ export function DevelopView() {
                 : <ImageViewer src={src} interactive gpu={gpuPreview}
                     onGpuError={(msg) => { setGpuPreview(false); notify(t("develop.gpuFailed", { error: msg }), "error"); }} />)
             : <div className="viewer-empty">{t("common.loading")}</div>}
-          {beforeAfter && <div className="before-badge">{t("develop.beforeBadge")}</div>}
           {showInfo && <ExifOverlay />}
           <CropBar />
           {!fullScreen && (
@@ -240,7 +237,7 @@ export function DevelopView() {
       </div>
       {showDiff && <GpuDiffDialog onClose={() => setShowDiff(false)} />}
       {!fullScreen && (
-        <aside className={"develop-panels" + (panelsCollapsed ? " collapsed" : "")}
+        <aside className={"develop-panels" + (panelsHidden ? " collapsed" : "")}
           onDragOver={onPanelDragOver} onDrop={onPanelDrop}>
           <Histogram src={src} />
           {panelDefs.map(({ key, Component }) => <Component key={key} />)}

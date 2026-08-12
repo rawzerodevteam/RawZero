@@ -56,7 +56,11 @@ def gauss(img: np.ndarray, sigma: float) -> np.ndarray:
 
 
 def _smoothstep(e0: float, e1: float, x: np.ndarray) -> np.ndarray:
-    t = np.clip((x - e0) / (e1 - e0), 0.0, 1.0)
+    # Garde contre e1==e0 (latent aujourd'hui : tous les appels actuels utilisent des bornes
+    # constantes non nulles — mais l'équivalent dans masks.py/segment.py se protège déjà, cf.
+    # audit1108.md L5 : toute future utilisation avec des bornes dérivées de réglages utilisateur
+    # sinon un inf/nan silencieux propagé dans le rendu).
+    t = np.clip((x - e0) / max(e1 - e0, 1e-6), 0.0, 1.0)
     return t * t * (3.0 - 2.0 * t)
 
 

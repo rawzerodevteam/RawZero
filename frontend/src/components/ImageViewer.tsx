@@ -68,7 +68,6 @@ export function ImageViewer({ src, interactive = false, gpu = false, onGpuError 
   const startDrag = useStore((s) => s.startDrag);
   const endDrag = useStore((s) => s.endDrag);
   const setUI = useStore((s) => s.setUI);
-  const beforeAfter = useStore((s) => s.beforeAfter);
   // Aperçu overlay = survol de la liste (transitoire) ou flash ponctuel (création, touche O) —
   // jamais un état collant. "inpaint" n'a pas de sens ici (pas un fondu de réglages, juste une
   // zone remplacée) ; déjà filtré en amont côté store (LocalPanel ne déclenche pas le survol dessus).
@@ -77,7 +76,9 @@ export function ImageViewer({ src, interactive = false, gpu = false, onGpuError 
 
   // Aperçu GPU : rend dans glCanvasRef ; outil crop actif → image entière (le cadre se dessine par-dessus)
   const maskOverlayId = previewLocalId && previewType !== "inpaint" ? previewLocalId : null;
-  const gpuState = useGpuPreview(glCanvasRef, gpu, activeTool === "crop", beforeAfter, showClipping, maskOverlayId);
+  // ImageViewer n'affiche plus jamais que la vue "après" (le comparatif avant/après vit désormais
+  // exclusivement dans CompareViewer, seul consommateur du mode "avant" du pipeline GPU).
+  const gpuState = useGpuPreview(glCanvasRef, gpu, activeTool === "crop", false, showClipping, maskOverlayId);
   const nat = gpu ? gpuState.dims : natural;
 
   // Repli automatique vers le rendu serveur si le contexte GPU échoue à l'exécution (rare, mais
@@ -240,7 +241,7 @@ export function ImageViewer({ src, interactive = false, gpu = false, onGpuError 
     setUI({ activeTool: "none" });
     try {
       const { band } = await api.pickHslBand(currentId, edits, nx, ny);
-      setUI({ hslPickedBand: band });
+      setUI({ hslPickedBand: band, hslPickSeq: useStore.getState().hslPickSeq + 1 });
       notify(t("viewer.hslPickDone", { band: t(`hsl.band.${band}`) }), "success");
     } catch (err) {
       notify(t("viewer.wbFailed", { error: String(err) }), "error");

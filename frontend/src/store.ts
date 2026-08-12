@@ -19,6 +19,13 @@ const DEFAULT_PROJECT_NAME = "Projet par défaut";
 
 let saveTimer: number | undefined;
 
+// Compteur d'appels à `openDevelop` : navigation rapide (flèches maintenues en répétition
+// accélérée, cf. shortcuts.ts) peut chevaucher deux appels dont le premier `await saveNow()` se
+// résout APRÈS celui du second — sans garde, son `set({currentId, edits:null, ...})` non ordonné
+// écraserait l'état déjà posé par la navigation la plus récente (audit1108.md, H6). Seul l'appel
+// dont le `seq` est encore le plus récent au réveil de chaque `await` a le droit d'écrire l'état.
+let openDevelopSeq = 0;
+
 // Suppressions en cours (par id) : empêche une double confirmation rapprochée (deux Suppr avant
 // que la 1ʳᵉ boîte de dialogue ne se ferme, cf. la file de `dialog.tsx`) de déclencher un second
 // DELETE pour la même photo, ou — pire — de supprimer la photo suivante si `currentId` a déjà
@@ -77,7 +84,6 @@ export const useStore = create<Store>((set, get) => ({
   editsVersion: {},
 
   gridSize: (() => { const v = Number(localStorage.getItem("rs.gridSize")); return v >= 120 && v <= 520 ? v : 260; })(),
-  beforeAfter: false,
   compareMode: "off",
   showClipping: false,
   showInfo: false,
@@ -89,6 +95,7 @@ export const useStore = create<Store>((set, get) => ({
   panelsCollapsed: localStorage.getItem("rs.panelsCollapsed") === "1",
   fullScreen: false,
   hslPickedBand: null,
+  hslPickSeq: 0,
   relinkTargetId: null,
   activeTool: "none",
   selectedLocalId: null,
@@ -291,7 +298,7 @@ export const useStore = create<Store>((set, get) => ({
   setView(v) {
     // issue #43 : un masque local sélectionné (surimpression rouge, poignées) ne doit pas
     // rester actif quand on quitte le développement — il « prend le pas » sur la bibliothèque.
-    if (v !== "develop") set({ activeTool: "none", beforeAfter: false, compareMode: "off", selectedLocalId: null });
+    if (v !== "develop") set({ activeTool: "none", compareMode: "off", selectedLocalId: null });
     if (v === "settings") set({ previousView: get().view });
     set({ view: v });
   },
@@ -346,13 +353,21 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   async openDevelop(id) {
+    const seq = ++openDevelopSeq;
     await get().saveNow();
-    set({ currentId: id, view: "develop", edits: null,
+    if (seq !== openDevelopSeq) return; // une navigation plus récente a déjà pris le relais
+    // Un drag de slider/poignée resté en vol (pointer maintenu pendant une navigation clavier, cf.
+    // audit1108.md M3) laisserait `dragBaseline`/le rAF de mise à jour live pointer vers l'ancienne
+    // photo : un `flushLiveEdit`/`endDrag` tardif muterait alors silencieusement les `edits` de LA
+    // NOUVELLE photo avec la valeur du slider de l'ancienne, puis la marquerait `dirty` (perte de
+    // données persistée). On neutralise tout ça avant de basculer sur la nouvelle photo.
+    cancelPendingDrag();
+    set({ currentId: id, view: "develop", edits: null, dragBaseline: null,
           undoStack: [], redoStack: [], undoLabels: [], redoLabels: [], currentLabel: originLabel(),
-          activeTool: "none", selectedLocalId: null, beforeAfter: false, compareMode: "off" });
+          activeTool: "none", selectedLocalId: null, compareMode: "off" });
     try {
       const p = await api.getPhoto(id);
-      if (get().currentId === id) {
+      if (seq === openDevelopSeq && get().currentId === id) {
         const h = loadHistory((p as any).history, mergeEdits(p.edits));
         set({ edits: h.edits, currentLabel: h.currentLabel, dirty: false,
               undoStack: h.undoStack, undoLabels: h.undoLabels, redoStack: h.redoStack, redoLabels: h.redoLabels });
@@ -406,14 +421,29 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   async removeSelection(deleteFile) {
-    const { selection, currentId, photos } = get();
+    const { selection, currentId, photos, view } = get();
     const ids = selection.length ? selection : (currentId !== null ? [currentId] : []);
     if (!ids.length) return;
     const idSet = new Set(ids);
+    const currentDeleted = currentId !== null && idSet.has(currentId);
+    // Les `edits`/`dirty` en mémoire appartiennent à la photo courante : si elle est supprimée, une
+    // sauvegarde différée déjà programmée (`scheduleSave`) écrirait plus tard ces edits sous l'id de
+    // la PROCHAINE photo sélectionnée — perte de données silencieuse. `dirty:false` neutralise ce
+    // timer (`saveNow` retourne tôt sans rien écrire) avant même de lancer la suppression.
+    if (currentDeleted) set({ dirty: false });
     await Promise.all(ids.map((id) => api.deletePhoto(id, deleteFile).catch(() => {})));
     const rest = photos.filter((p) => !idSet.has(p.id));
     const nextCur = rest.length ? (rest.find((p) => p.id === currentId)?.id ?? rest[0].id) : null;
-    set({ photos: rest, currentId: nextCur, selection: nextCur !== null ? [nextCur] : [] });
+    set({ photos: rest });
+    if (currentDeleted && view === "develop" && nextCur !== null) {
+      await get().openDevelop(nextCur);       // recharge proprement edits/undo-redo pour la nouvelle photo
+      set({ selection: [nextCur] });
+    } else {
+      set({
+        currentId: nextCur, selection: nextCur !== null ? [nextCur] : [],
+        ...(currentDeleted ? { edits: null, undoStack: [], redoStack: [], undoLabels: [], redoLabels: [] } : {}),
+      });
+    }
     if (!rest.length) set({ view: "grid" });
     void get().loadAlbums();   // les photos retirées quittent aussi leurs albums (cascade)
   },
@@ -426,19 +456,30 @@ export const useStore = create<Store>((set, get) => ({
     const id = targetId ?? get().currentId;
     if (id === null) return;
     if (removingIds.has(id)) return; // déjà en cours (double confirmation) : no-op
-    const { photos } = get();
+    const { photos, view } = get();
     if (!photos.some((p) => p.id === id)) return; // déjà supprimée entre-temps
     removingIds.add(id);
+    // cf. removeSelection : neutralise toute sauvegarde différée en attente pour `id` AVANT l'appel
+    // réseau, sinon elle écrirait plus tard les edits de la photo supprimée sous la photo suivante.
+    const currentDeleted = get().currentId === id;
+    if (currentDeleted) set({ dirty: false });
     try {
       const idx = photos.findIndex((p) => p.id === id);
       await api.deletePhoto(id, deleteFile);
       const rest = get().photos.filter((p) => p.id !== id);
-      const patch: Partial<Store> = { photos: rest };
+      set({ photos: rest });
       if (get().currentId === id) {
-        patch.currentId = rest.length ? rest[Math.min(idx, rest.length - 1)].id : null;
-        if (!rest.length) patch.view = "grid";
+        const nextId = rest.length ? rest[Math.min(idx, rest.length - 1)].id : null;
+        if (currentDeleted && view === "develop" && nextId !== null) {
+          await get().openDevelop(nextId);
+        } else {
+          set({
+            currentId: nextId,
+            ...(currentDeleted ? { edits: null, undoStack: [], redoStack: [], undoLabels: [], redoLabels: [] } : {}),
+          });
+        }
+        if (!rest.length) set({ view: "grid" });
       }
-      set(patch);
     } catch (e) {
       get().notify(i18n.t("notify.deleteFailed", { error: String(e) }), "error");
     } finally {
@@ -477,6 +518,10 @@ export const useStore = create<Store>((set, get) => ({
     set({ aiMaskBusy: true });
     try {
       const local = await api.autoMask(currentId, edits, kind);
+      // La photo a changé pendant le calcul (navigation) : `edits` en mémoire n'est plus la bonne
+      // photo — appliquer le masque calculé pour l'ancienne l'ajouterait à la nouvelle en silence
+      // (audit1108.md, H5). Le résultat est simplement jeté ; l'utilisateur peut relancer sur place.
+      if (get().currentId !== currentId) return;
       const label = i18n.t(kind === "sky" ? "history.skyMask" : kind === "depth" ? "history.depthMask" : "history.subjectMask");
       get().updateEdits((e) => { e.locals.push(local); }, true, label);
       set({ selectedLocalId: local.id, activeTool: "none" });
@@ -500,6 +545,7 @@ export const useStore = create<Store>((set, get) => ({
     try {
       const addRef = target ? String(target.params.ref ?? "") : "";
       const local = await api.clickMask(currentId, edits, x, y, addRef);
+      if (get().currentId !== currentId) return; // photo changée pendant le calcul (cf. H5)
       if (target) {
         // Fusion : on garde le masque sélectionné (id, réglages) et on bascule sur le nouveau bitmap.
         get().updateEdits((e) => {
@@ -537,6 +583,7 @@ export const useStore = create<Store>((set, get) => ({
         strokes: strokes.map((s: any) => ({ points: s.points, size: s.size, erase: !!s.erase })),
         feather: feather ?? 0.4,
       });
+      if (get().currentId !== currentId) return; // photo changée pendant le calcul (cf. H5)
       get().updateEdits((e) => {
         const l = e.locals.find((x) => x.id === localId);
         if (l) l.params = { ...l.params, ref: result.params.ref, rect: result.params.rect };
@@ -681,6 +728,13 @@ export const useStore = create<Store>((set, get) => ({
   async pasteEditsToSelection(ids) {
     const c = get().clipboard;
     if (!c || !ids.length) return;
+    // Si la photo actuellement ouverte en développement fait partie de la cible, neutralise toute
+    // sauvegarde différée en attente AVANT de coller : sinon, une fois son délai écoulé, elle
+    // écrirait par-dessus le collage avec l'état local antérieur (edits en mémoire, potentiellement
+    // dirty) — annulant silencieusement le collage sur cette photo (audit1108.md, M7).
+    const { currentId } = get();
+    const currentTargeted = currentId !== null && ids.includes(currentId);
+    if (currentTargeted) set({ dirty: false });
     let ok = 0;
     await Promise.all(ids.map(async (id) => {
       try {
@@ -704,6 +758,9 @@ export const useStore = create<Store>((set, get) => ({
       } catch { /* on continue les autres photos malgré un échec isolé */ }
     }));
     set({ photos: get().photos.map((p) => (ids.includes(p.id) ? { ...p, edited: true } : p)) });
+    // Recharge l'état local depuis le serveur pour refléter le collage (plutôt que de laisser
+    // `edits` en mémoire pointer sur l'ancien état de la photo courante).
+    if (currentTargeted && get().currentId === currentId) void get().openDevelop(currentId);
     get().notify(i18n.t("ctx.pastedToN", { count: ok }), ok === ids.length ? "success" : "error");
   },
 
@@ -764,6 +821,10 @@ export const useStore = create<Store>((set, get) => ({
         w: cw, h: ch,
       };
     });
+  },
+
+  toggleCompareMode(mode) {
+    set({ compareMode: get().compareMode === mode ? "off" : mode });
   },
 
   async saveNow() {
@@ -845,6 +906,14 @@ function flushLiveEdit() {
   }
 }
 
+/** Annule un drag de slider/poignée en vol sans l'appliquer : la mutation en attente (`liveFn`)
+ *  décrit un changement pensé pour la photo qu'on est en train de quitter, elle n'a plus de sens
+ *  une fois `currentId`/`edits` basculés sur une autre photo (cf. `openDevelop`, audit1108.md M3). */
+function cancelPendingDrag(): void {
+  if (liveRaf !== undefined) { cancelAnimationFrame(liveRaf); liveRaf = undefined; }
+  liveFn = null;
+}
+
 // Mémorise projet/photo/vue à chaque changement pour rouvrir l'app dans le même état.
 useStore.subscribe((s, prev) => {
   if (s.currentProjectId !== prev.currentProjectId || s.currentId !== prev.currentId || s.view !== prev.view) {
@@ -854,8 +923,14 @@ useStore.subscribe((s, prev) => {
 
 /** Sauvegarde de secours à la fermeture de l'onglet. */
 window.addEventListener("pagehide", () => {
+  // Un drag de slider en vol (chemin GPU découplé) mute `edits` en place SANS jamais poser
+  // `dirty:true` avant `endDrag()` (relâchement du pointeur) — fermer l'onglet pendant ce drag
+  // perdrait donc la dernière valeur sans que `s.dirty` ci-dessous ne la détecte (audit1108.md,
+  // M6). On applique d'abord la mutation en attente, puis on traite « drag en cours » comme dirty.
+  const wasDragging = useStore.getState().dragBaseline !== null;
+  flushLiveEdit();
   const s = useStore.getState();
-  if (s.dirty && s.edits && s.currentId !== null) {
+  if ((s.dirty || wasDragging) && s.edits && s.currentId !== null) {
     void fetch(`/api/photos/${s.currentId}/edits`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

@@ -267,19 +267,27 @@ def get_export_denoised_base(photo_id: int, base: np.ndarray) -> "np.ndarray | N
 
 
 def invalidate(photo_id: int) -> None:
-    with _base_lock:
-        _base_cache.pop(photo_id, None)
-        _base_hot.pop(photo_id, None)
-    with _dn_lock:
-        _dn_cache.pop(photo_id, None)
-        _dn_hot.pop(photo_id, None)
-    for p in (thumb_path(photo_id), preview_path(photo_id), base_path(photo_id),
-              denoised_base_path(photo_id), export_denoised_path(photo_id)):
-        p.unlink(missing_ok=True)
-    mask_dir = config.MASKS_DIR / str(photo_id)
-    if mask_dir.exists():
-        shutil.rmtree(mask_dir, ignore_errors=True)
-    segment.invalidate(photo_id)
+    # Prend les MÊMES verrous de décodage que `get_base`/`get_denoised_base` autour de leur section
+    # critique : sans ça, un décodage déjà en vol (relink/suppression pendant qu'un rendu de fond
+    # décode encore l'ancien original) peut se terminer APRÈS l'invalidation et réécrire le cache
+    # mémoire/disque avec une base issue du fichier remplacé (audit1108.md, M2). En attendant ces
+    # verrous, on garantit que l'invalidation s'exécute strictement après tout décodage déjà engagé.
+    # Ordre d'acquisition aligné sur `get_denoised_base` (denoise_lock englobe un appel interne à
+    # get_base, donc decode_lock) : l'inverse créerait un risque d'interblocage croisé.
+    with _photo_denoise_lock(photo_id), _photo_decode_lock(photo_id):
+        with _base_lock:
+            _base_cache.pop(photo_id, None)
+            _base_hot.pop(photo_id, None)
+        with _dn_lock:
+            _dn_cache.pop(photo_id, None)
+            _dn_hot.pop(photo_id, None)
+        for p in (thumb_path(photo_id), preview_path(photo_id), base_path(photo_id),
+                  denoised_base_path(photo_id), export_denoised_path(photo_id)):
+            p.unlink(missing_ok=True)
+        mask_dir = config.MASKS_DIR / str(photo_id)
+        if mask_dir.exists():
+            shutil.rmtree(mask_dir, ignore_errors=True)
+        segment.invalidate(photo_id)
 
 
 def full_long_edge(row: dict) -> int:

@@ -10,6 +10,7 @@ Deux endpoints :
 import json
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -23,7 +24,7 @@ import tifffile
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from PIL import Image, ImageCms
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .. import config, db, denoise, pipeline, previews, raw_loader
 from .photos import require_original
@@ -117,10 +118,14 @@ def purge_old_exports() -> int:
 
 
 class ExportRequest(BaseModel):
-    ids: list[int]
+    # Bornes larges mais réelles : sans elles, une requête malformée (des milliers d'ids, ou un
+    # max_size négatif/démesuré) peut lancer autant de décodages RAW pleine résolution en parallèle
+    # que de workers disponibles, chacun gardant une image pleine résolution en mémoire — épuisement
+    # mémoire accidentel (app locale : auto-DoS, pas un risque tiers). audit1108.md, L3.
+    ids: list[int] = Field(max_length=2000)
     format: str = "jpeg"
     quality: int = 92
-    max_size: int = 0          # 0 = pleine résolution
+    max_size: int = Field(0, ge=0, le=8000)          # 0 = pleine résolution
     suffix: str = ""
     # Modèle de nommage optionnel (jetons {name}/{seq}/{date}/{id}). Vide → comportement historique
     # (nom du fichier original + suffix). Non vide → remplace entièrement stem+suffix (voir _render_name).
@@ -137,6 +142,18 @@ def _render_name(template: str, stem: str, seq: int, captured_at: str, photo_id:
     for k, v in tokens.items():
         out = out.replace(k, v)
     return out or stem
+
+
+# `suffix`/`name_template` viennent tels quels du corps JSON de la requête : sans neutralisation,
+# une valeur contenant des séparateurs de chemin (`/`, `\`) ou `..` ferait sortir `dest` du dossier
+# d'export prévu (`out_dir`), écrivant potentiellement un fichier arbitraire ailleurs sur le disque
+# de l'utilisateur (audit1108.md, H1). On neutralise le nom rendu ET on revérifie le chemin final.
+_UNSAFE_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+
+
+def _sanitize_stem(name: str) -> str:
+    cleaned = _UNSAFE_NAME_CHARS.sub("_", name).strip(" .")
+    return cleaned or "export"
 
 
 def _new_export_dir() -> tuple[Path, str]:
@@ -230,15 +247,21 @@ def _export_one(row: dict, out_dir: Path, req: ExportRequest, seq: int) -> dict:
     orig_stem = Path(row["filename"]).stem
     stem = (_render_name(req.name_template, orig_stem, seq, row.get("captured_at") or "", row["id"])
             if req.name_template else orig_stem + (req.suffix or ""))
+    stem = _sanitize_stem(stem)
     ext = FORMATS[req.format]
     # Réservation atomique du nom (l'export parallèle peut viser des noms identiques) :
     # on choisit un nom libre ET on le réserve par un fichier vide, sous verrou.
+    out_dir_resolved = out_dir.resolve()
     with _name_lock:
         dest = out_dir / f"{stem}{ext}"
         i = 1
         while dest.exists():
             dest = out_dir / f"{stem}-{i}{ext}"
             i += 1
+        # Défense en profondeur : même après neutralisation, s'assure que la destination reste
+        # bien confinée à `out_dir` avant de réserver/écrire le fichier.
+        if not dest.resolve().is_relative_to(out_dir_resolved):
+            raise HTTPException(422, "Nom de fichier d'export invalide")
         dest.touch()
     if req.format == "jpeg":
         Image.fromarray(arr, "RGB").save(

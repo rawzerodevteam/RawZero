@@ -40,7 +40,6 @@ export interface Store {
   editsVersion: Record<number, number>; // cache-busting des thumbs/previews
 
   gridSize: number;               // taille des vignettes de la grille (px), réglable
-  beforeAfter: boolean;
   compareMode: "off" | "side" | "split"; // comparaison avant/après : côte à côte, ou curseur superposé
   showClipping: boolean;
   showInfo: boolean;
@@ -52,6 +51,10 @@ export interface Store {
   panelsCollapsed: boolean;       // colonne de panneaux droite masquée (développement, écrans étroits)
   fullScreen: boolean;            // mode plein écran développement (masque toolbar/panneaux/filmstrip)
   hslPickedBand: string | null;   // dernière bande HSL désignée par la pipette (surlignage HSLPanel)
+  hslPickSeq: number;             // incrémenté à chaque pipette HSL, même bande répétée incluse : force
+                                   // le re-déclenchement du surlignage (scrollIntoView + timer) même si
+                                   // `hslPickedBand` ne change pas de valeur (deux clics rapprochés sur
+                                   // la même bande avant l'expiration du timer précédent)
   relinkTargetId: number | null;  // id de la photo en cours de reliage (dialog « Relier »)
   activeTool: Tool;
   selectedLocalId: string | null;
@@ -131,12 +134,13 @@ export interface Store {
   cutLocalMask(): void;
   pasteLocalMask(): void;
   setCropAspect(ratio: number | null): void;
+  toggleCompareMode(mode: "side" | "split"): void;
   saveNow(): Promise<void>;
   bumpVersion(id: number): void;
 
-  setUI(p: Partial<Pick<Store, "beforeAfter" | "compareMode" | "showClipping" | "showInfo" | "showHelp" |
+  setUI(p: Partial<Pick<Store, "compareMode" | "showClipping" | "showInfo" | "showHelp" |
     "showImport" | "showExport" | "showModels" | "showAlbums" | "activeTool" | "selectedLocalId" | "hoveredLocalId" |
-    "brushSize" | "brushErase" | "cropAspect" | "gridSize" | "panelsCollapsed" | "fullScreen" | "hslPickedBand">>): void;
+    "brushSize" | "brushErase" | "cropAspect" | "gridSize" | "panelsCollapsed" | "fullScreen" | "hslPickedBand" | "hslPickSeq">>): void;
   notify(msg: string, type?: ToastType, action?: { label: string; onClick: () => void }): void;
   dismissToast(id: number): void;
   markHintSeen(key: string): void;

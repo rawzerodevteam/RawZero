@@ -4,6 +4,7 @@
 `pipeline.py`, qui réexpose ces fonctions (`pipeline._apply_clarity` etc., utilisées par les tests
 de parité)."""
 import math
+from collections import OrderedDict
 from typing import Optional
 
 import cv2
@@ -97,7 +98,11 @@ def _apply_sharpen(img: np.ndarray, amount: float, radius: float, scale: float) 
     return img + (amount / 100.0) * detail[..., None]
 
 
-_vignette_r_cache: dict[tuple[int, int], np.ndarray] = {}
+# Borné en LRU (même motif que les caches de previews.py) : sans ça, chaque couple (h, w) de rendu
+# rencontré (catalogue aux résolutions/orientations variées) ajoutait une entrée jamais évincée,
+# accumulée pour toute la durée du process serveur (audit1108.md, M1).
+_VIGNETTE_CACHE_MAX = 16
+_vignette_r_cache: "OrderedDict[tuple[int, int], np.ndarray]" = OrderedDict()
 
 def _apply_vignette(img: np.ndarray, vignette: float) -> np.ndarray:
     if not vignette:
@@ -106,11 +111,15 @@ def _apply_vignette(img: np.ndarray, vignette: float) -> np.ndarray:
         return rsfast.vignette(img, vignette / 100.0)
     h, w = img.shape[:2]
     key = (h, w)
-    if key not in _vignette_r_cache:
+    if key in _vignette_r_cache:
+        _vignette_r_cache.move_to_end(key)
+    else:
         ny, nx = np.mgrid[0:h, 0:w].astype(np.float32)
         nx = nx / max(w - 1, 1) * 2.0 - 1.0
         ny = ny / max(h - 1, 1) * 2.0 - 1.0
         _vignette_r_cache[key] = np.sqrt(nx * nx + ny * ny) / math.sqrt(2.0)
+        while len(_vignette_r_cache) > _VIGNETTE_CACHE_MAX:
+            _vignette_r_cache.popitem(last=False)
     r = _vignette_r_cache[key]
     v = vignette / 100.0
     gain = 2.0 ** (v * 1.3 * _smoothstep(0.3, 1.0, r))
